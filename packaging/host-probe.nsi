@@ -23,10 +23,10 @@ Section "Install Read-Only Host Probe"
   MessageBox MB_OK|MB_ICONSTOP "CartoRig Host Probe is already installed. Uninstall the previous probe before reinstalling. No files were overwritten."
   Abort
   SetOutPath "$INSTDIR\Comp"
-  File "host\CartoRig Host Probe.lua"
+  File "..\host\CartoRig Host Probe.lua"
   SetOutPath "$LOCALAPPDATA\CartoRig\HostProbe"
-  File "/oname=README.txt" "docs\HOST_PROBE.md"
-  File "/oname=LICENSE.txt" "..\\LICENSE"
+  File "/oname=README.txt" "..\docs\HOST_PROBE.md"
+  File "/oname=LICENSE.txt" "..\LICENSE"
   WriteUninstaller "$LOCALAPPDATA\CartoRig\HostProbe\Uninstall-HostProbe.exe"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigHostProbe" "DisplayName" "CartoRig Host Probe (not product)"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigHostProbe" "UninstallString" '"$LOCALAPPDATA\CartoRig\HostProbe\Uninstall-HostProbe.exe"'
