@@ -26,7 +26,7 @@ Section "Install Read-Only Host Probe"
   File "host\CartoRig Host Probe.lua"
   SetOutPath "$LOCALAPPDATA\CartoRig\HostProbe"
   File "/oname=README.txt" "docs\HOST_PROBE.md"
-  File "/oname=LICENSE.txt" "LICENSE"
+  File "/oname=LICENSE.txt" "..\\LICENSE"
   WriteUninstaller "$LOCALAPPDATA\CartoRig\HostProbe\Uninstall-HostProbe.exe"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigHostProbe" "DisplayName" "CartoRig Host Probe (not product)"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigHostProbe" "UninstallString" '"$LOCALAPPDATA\CartoRig\HostProbe\Uninstall-HostProbe.exe"'

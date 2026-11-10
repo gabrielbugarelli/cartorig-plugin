@@ -24,7 +24,8 @@ jobs:
           New-Item -ItemType Directory -Force dist | Out-Null
           $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
           if (-not (Test-Path $nsis)) { throw "NSIS compiler not found." }
-          & $nsis '/V3' '/DOUTPUTFILE=dist\CartoRig-HostProbe-0.1-win64.exe' 'packaging\host-probe.nsi'
+          $outfile = Join-Path (Get-Location).Path "dist\CartoRig-HostProbe-0.1-win64.exe"
+          & $nsis '/V3' "/DOUTPUTFILE=$outfile" 'packaging\host-probe.nsi'
           if ($LASTEXITCODE -ne 0) { throw "NSIS build failed." }
           $file = "dist\CartoRig-HostProbe-0.1-win64.exe"
           if (-not (Test-Path $file)) { throw "No GUI installer generated." }
