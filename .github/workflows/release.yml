@@ -1,0 +1,84 @@
+name: V1 stable release gate
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preflight:
+    name: release / public-main-preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Reject nonpublic or non-main release
+        env:
+          PRIVATE_REPO: ${{ github.event.repository.private }}
+        run: |
+          test "$PRIVATE_REPO" = "false" || { echo "::error::BLOCKED: public repository required"; exit 1; }
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "::error::BLOCKED: main only"; exit 1; }
+  ci:
+    needs: preflight
+    uses: ./.github/workflows/ci.yml
+  integration:
+    needs: ci
+    uses: ./.github/workflows/integration.yml
+  build:
+    needs: integration
+    uses: ./.github/workflows/build-windows.yml
+  package:
+    needs: build
+    uses: ./.github/workflows/package-validation.yml
+  host:
+    needs: package
+    uses: ./.github/workflows/fusion-host-tests.yml
+  gate:
+    needs: host
+    name: release / 40-acceptance-and-exact-installer
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cartorig-candidate-${{ github.run_attempt }}
+          path: candidate
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cartorig-host-evidence-${{ github.run_attempt }}
+          path: host-evidence
+      - name: Reject missing, altered, skipped, untested or different candidate
+        run: python3 scripts/release_gate.py --package candidate --host-evidence host-evidence --sha "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT"
+  publish:
+    needs: gate
+    name: release / publish-approved-bytes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    environment: release-public
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cartorig-candidate-${{ github.run_attempt }}
+          path: candidate
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cartorig-host-evidence-${{ github.run_attempt }}
+          path: host-evidence
+      - name: Repeat gate on publisher runner before creating tag/release
+        run: python3 scripts/release_gate.py --package candidate --host-evidence host-evidence --sha "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT"
+      - name: Publish unchanged approved installer with checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          test -f docs/RELEASE_NOTES.md || { echo "BLOCKED: missing verified release notes"; exit 1; }
+          test ! -e .git/refs/tags/v1.0.0 || { echo "BLOCKED: release tag exists"; exit 1; }
+          gh release view v1.0.0 >/dev/null 2>&1 && { echo "BLOCKED: release already exists"; exit 1; }
+          APPROVED_INSTALLER="$(python3 -c 'import json; from pathlib import Path; m=json.loads(Path("candidate/manifest.json").read_text()); print(Path("candidate") / m["installer_path"])')"
+          test -f "$APPROVED_INSTALLER" || { echo "BLOCKED: approved installer not found"; exit 1; }
+          gh release create v1.0.0 "$APPROVED_INSTALLER" candidate/SHA256SUMS.txt candidate/manifest.json --target "$GITHUB_SHA" --title "CartoRig V1.0" --notes-file docs/RELEASE_NOTES.md

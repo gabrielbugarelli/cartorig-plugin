@@ -1,0 +1,9 @@
+CartoRig V1.0 — third-party notices inventory
+
+No third-party code, datasets, Fusion binaries or installers are currently vendored or distributed in this repository. This is not the notice manifest for a finished product.
+
+Release requirements:
+- Identify every Natural Earth package actually included (Admin 0, available Admin 1, Populated Places, land/ocean/borders) and its source version, scale, SHA-256, license/attribution and permitted redistribution.
+- List the licenses, attribution, versions and hashes of every redistributable runtime, dependency, font, library and installer tool actually bundled.
+- Do not redistribute DaVinci Resolve Studio or proprietary SDK binaries unless separately authorized by the rightsholder.
+- Keep this file aligned with the actual installer contents and dataset manifest; fail the release gate if unfinished.
