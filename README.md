@@ -15,6 +15,7 @@ The nine required physical authoring nodes are Scene, WorldMap, Camera, Continen
 This branch contains the normative specification, CI/release-control groundwork and initial **tested Lua domain/geographic modules** (identity, offline search index reader and equirectangular camera math). A **separate read-only Windows host diagnostic** can be installed using the Actions-generated GUI package; it is not the CartoRig product or a render test. **No physical CartoRig Fusion nodes, Natural Earth package, map renderer, integrated Scene window or host-tested product features have been delivered.** Do not treat this repository as an installable V1 plugin. The release gate is intentionally closed until the actual implementation and all 40 A/B host tests pass on the exact candidate build.
 
 - [Read-only Windows host probe (not an editor plugin)](docs/HOST_PROBE.md)
+- [Milestone A native Fusion graph integration diagnostic 0.2 (not V1)](docs/NATIVE_INTEGRATION_TEST.md)
 - [Engineering plan](docs/IMPLEMENTATION_PLAN.md)
 - [40-test traceability](docs/TRACEABILITY.md)
 - [CI, release and zero-cost policy](docs/CI_AND_RELEASE.md)

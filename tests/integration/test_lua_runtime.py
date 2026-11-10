@@ -27,5 +27,9 @@ class LuaRuntimeIntegration(unittest.TestCase):
     def test_offline_catalog_search_and_disambiguation(self):
         self.invoke("tests/lua/test_catalog.lua")
 
+    def test_defensive_fusion_bridge_mock_unit(self):
+        # Only application logic is simulated; this is NOT host acceptance.
+        self.invoke("tests/lua/test_native_probe.lua")
+
 if __name__ == "__main__":
     unittest.main()

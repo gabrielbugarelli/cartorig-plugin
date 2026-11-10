@@ -22,6 +22,7 @@ jobs:
         run: |
           for source in src/CartoRig/*.lua; do luac5.1 -p "$source"; done
           luac5.1 -p "host/CartoRig Host Probe.lua"
+          luac5.1 -p "host/CartoRig Native Integration Probe.lua"
       - name: Verify exact normative file and 40-test inventory
         run: python3 scripts/verify_repository.py
       - name: Test Python release gate and integrated Lua module tests

@@ -52,7 +52,7 @@ jobs:
           $library = Join-Path $env:APPDATA "Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\CartoRigProbe\native_probe.lua"
           if ((Test-Path $script) -or (Test-Path $library)) { throw "Runner already contains probe files." }
           $p = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
-          if ($p.ExitCode -ne 0 -or -not (Test-Path $script) -or -not (Test-Path $remove)) { throw "Probe installation failed." }
+          if ($p.ExitCode -ne 0 -or -not (Test-Path $script) -or -not (Test-Path $library) -or -not (Test-Path $remove)) { throw "Probe installation failed." }
           $p = Start-Process -FilePath $remove -ArgumentList '/S' -Wait -PassThru
           if ($p.ExitCode -ne 0 -or (Test-Path $script) -or (Test-Path $library) -or (Test-Path $remove)) { throw "Probe uninstallation failed." }
           "Windows diagnostic install/uninstall PASS (Resolve Studio 20 execution NOT RUN)" | Set-Content "dist\package-validation.txt"
