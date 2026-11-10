@@ -16,7 +16,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - name: Run actual non-host integration suite
+      - name: Install Lua 5.1 test interpreter
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lua5.1
+      - name: Run real (non-host) source integration suite
         run: python3 scripts/run_integration.py
-      - name: No host substitution
-        run: echo "This job cannot approve Windows + licensed Fusion Studio 20 tests."
+      - name: Distinguish host validation
+        run: echo "Fusion Studio 20 native nodes/render/Inspector are still NOT RUN."

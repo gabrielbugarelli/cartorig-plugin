@@ -1,6 +1,8 @@
 CartoRig V1.0 — third-party notices inventory
 
-No third-party code, datasets, Fusion binaries or installers are currently vendored or distributed in this repository. This is not the notice manifest for a finished product.
+No third-party code, Natural Earth datasets or proprietary Fusion binaries are vendored as product runtime resources in this source repository. This is not the notice manifest for a finished product.
+
+**Diagnostic packaging dependency (not the CartoRig V1 runtime):** NSIS 3.13, via the free Chocolatey community package at Windows build time. The Windows host-probe EXE uses the NSIS self-extracting installer/uninstaller runtime with zlib compression. NSIS: Copyright (C) 1999–2026 Contributors, licensed under zlib/libpng for the core runtime and zlib compression. See https://nsis.sourceforge.io/Docs/AppendixI.html . No Resolve or paid software binaries are bundled. The diagnostic Lua code itself is MIT (see LICENSE).
 
 Release requirements:
 - Identify every Natural Earth package actually included (Admin 0, available Admin 1, Populated Places, land/ocean/borders) and its source version, scale, SHA-256, license/attribution and permitted redistribution.
