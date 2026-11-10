@@ -11,14 +11,16 @@ jobs:
     name: ci / audit-and-unit
     if: ${{ github.event.repository.private == false }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      - name: Install free Lua 5.1 interpreter for source tests (maintainer only)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lua5.1
       - name: Verify exact normative file and 40-test inventory
         run: python3 scripts/verify_repository.py
-      - name: Test release gate and repository-independent unit code
+      - name: Test Python release gate and integrated Lua module tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
-      - name: Note actual scope
-        run: echo "Only structural and validator unit checks. No Fusion acceptance approval."
+      - name: State evidence scope
+        run: echo "Pure-source unit/integration checks only; no host acceptance approval."
