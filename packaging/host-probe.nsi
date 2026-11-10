@@ -37,6 +37,9 @@ Section "Install Read-Only Host Probe"
 SectionEnd
 
 Section "Uninstall"
+  ; In an uninstaller, $INSTDIR defaults to the uninstaller directory.
+  ; Restore the Fusion Scripts target explicitly before touching any file.
+  StrCpy $INSTDIR "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts"
   Delete "$INSTDIR\Comp\CartoRig Host Probe.lua"
   Delete "$LOCALAPPDATA\CartoRig\HostProbe\README.txt"
   Delete "$LOCALAPPDATA\CartoRig\HostProbe\LICENSE.txt"
