@@ -12,10 +12,9 @@ The nine required physical authoring nodes are Scene, WorldMap, Camera, Continen
 
 ## Current implementation state
 
-This branch contains the normative specification, CI/release-control groundwork and initial **tested Lua domain/geographic modules** (identity, offline search index reader and equirectangular camera math). A **separate read-only Windows host diagnostic** can be installed using the Actions-generated GUI package; it is not the CartoRig product or a render test. **No physical CartoRig Fusion nodes, Natural Earth package, map renderer, integrated Scene window or host-tested product features have been delivered.** Do not treat this repository as an installable V1 plugin. The release gate is intentionally closed until the actual implementation and all 40 A/B host tests pass on the exact candidate build.
+This branch contains the normative specification, CI/release-control infrastructure, tested Lua identity/geographic/search modules, and a **single CartoRig development preview** for Windows. The preview provides read-only compatibility checks and an explicitly authorized test-node exercise in a disposable composition. Updating the preview **replaces** the same `Workspace → Scripts → Comp → CartoRig` entry; the installer automatically uninstalls the project's former diagnostic entries. The Windows Actions workflow tests legacy migration, repeated upgrades, uninstall, and preservation of unrelated scripts. **No geographic CartoRig V1 Fusion nodes, Natural Earth bundle, map renderer, finished Scene UI, or product host-acceptance functionality have been delivered.** The 40 A/B cases remain NOT RUN and the stable release gate stays closed.
 
-- [Read-only Windows host probe (not an editor plugin)](docs/HOST_PROBE.md)
-- [Milestone A native Fusion graph integration diagnostic 0.2 (not V1)](docs/NATIVE_INTEGRATION_TEST.md)
+- [Single-entry Windows preview, upgrade and editor test](docs/CARTORIG_PREVIEW_TEST.md)
 - [Engineering plan](docs/IMPLEMENTATION_PLAN.md)
 - [40-test traceability](docs/TRACEABILITY.md)
 - [CI, release and zero-cost policy](docs/CI_AND_RELEASE.md)
