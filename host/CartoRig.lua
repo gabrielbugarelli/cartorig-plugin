@@ -111,7 +111,7 @@ function window.On.Compatibility.Clicked(ev)
  else begin("Compatibility",false,"API call failed: "..tostring(val)) end
 end
 function window.On.Create.Clicked(ev)
- if items.Scratch.Checked~=true then
+ if not items.Scratch.Checked then
   begin("Create Test Nodes",false,"Confirm that this is a disposable test project")
   return
  end
