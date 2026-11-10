@@ -1,0 +1,93 @@
+name: CartoRig Preview Windows
+on:
+  push:
+    branches: ['feat/milestone-a-native-graph-validation']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    name: windows / single-script-upgrade-install-uninstall
+    if: ${{ github.event.repository.private == false }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install NSIS (free standard Windows runner)
+        shell: pwsh
+        run: choco install nsis --yes --no-progress --limit-output
+      - name: Compile legacy fixtures and current preview GUI installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist, fixture | Out-Null
+          $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (-not (Test-Path $nsis)) { throw "NSIS compiler not found" }
+          $root = (Get-Location).Path
+          $legacyHost = Join-Path $root 'fixture\OldHost.exe'
+          $legacyGraph = Join-Path $root 'fixture\OldGraph.exe'
+          $candidate = Join-Path $root 'dist\CartoRig-Preview-0.3-win64.exe'
+          & $nsis '/V2' "/DOUTPUTFILE=$legacyHost" 'packaging\host-probe.nsi'
+          if ($LASTEXITCODE -ne 0) { throw "Legacy host fixture compile failed" }
+          & $nsis '/V2' "/DOUTPUTFILE=$legacyGraph" 'packaging\native-integration.nsi'
+          if ($LASTEXITCODE -ne 0) { throw "Legacy graph fixture compile failed" }
+          & $nsis '/V3' "/DOUTPUTFILE=$candidate" 'packaging\cartorig-preview.nsi'
+          if ($LASTEXITCODE -ne 0) { throw "CartoRig preview installer compile failed" }
+          if (-not (Test-Path $candidate)) { throw "Missing GUI installer" }
+          $size = (Get-Item $candidate).Length
+          if ($size -le 0 -or $size -gt 5MB) { throw "Preview package exceeds conservative free budget" }
+          $hash = (Get-FileHash -Algorithm SHA256 $candidate).Hash.ToLowerInvariant()
+          "$hash  CartoRig-Preview-0.3-win64.exe" | Set-Content -Encoding ascii 'dist\SHA256SUMS.txt'
+          @{
+            kind = 'cartorig-development-preview-not-v1'
+            version = '0.3.0'
+            commit_sha = "$env:GITHUB_SHA"
+            run_id = "$env:GITHUB_RUN_ID"
+            run_attempt = "$env:GITHUB_RUN_ATTEMPT"
+            installer = 'CartoRig-Preview-0.3-win64.exe'
+            sha256 = $hash
+          } | ConvertTo-Json | Set-Content -Encoding utf8 'dist\manifest.json'
+      - name: Test migration of both old menus, repeated upgrade, other scripts, and uninstall
+        shell: pwsh
+        run: |
+          $scripts = Join-Path $env:APPDATA 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp'
+          New-Item -ItemType Directory -Force $scripts | Out-Null
+          $other = Join-Path $scripts 'Other Editor Script.lua'
+          $otherContent = 'External, do not touch'
+          [IO.File]::WriteAllText($other, $otherContent)
+          $old1 = Join-Path $scripts 'CartoRig Host Probe.lua'
+          $old2 = Join-Path $scripts 'CartoRig Native Integration Probe.lua'
+          $oldLib = Join-Path $scripts 'CartoRigProbe\native_probe.lua'
+          $single = Join-Path $scripts 'CartoRig.lua'
+          $module = Join-Path $env:LOCALAPPDATA 'CartoRig\App\graph_test.lua'
+          $remove = Join-Path $env:LOCALAPPDATA 'CartoRig\App\Uninstall-CartoRig.exe'
+          $setup = (Resolve-Path 'dist\CartoRig-Preview-0.3-win64.exe').Path
+          foreach ($legacy in @('fixture\OldHost.exe', 'fixture\OldGraph.exe')) {
+            $process = Start-Process -FilePath (Resolve-Path $legacy).Path -ArgumentList '/S' -Wait -PassThru
+            if ($process.ExitCode -ne 0) { throw "Legacy diagnostic fixture installation failed" }
+          }
+          if (-not (Test-Path $old1) -or -not (Test-Path $old2) -or -not (Test-Path $oldLib)) { throw "Legacy fixtures not installed" }
+          for ($i = 0; $i -lt 2; $i++) {
+            $p = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
+            if ($p.ExitCode -ne 0) { throw "Preview installation/upgrade failed" }
+            if (-not (Test-Path $single) -or -not (Test-Path $module) -or -not (Test-Path $remove)) { throw "Missing CartoRig program after upgrade" }
+            if ((Test-Path $old1) -or (Test-Path $old2) -or (Test-Path $oldLib)) { throw "Old Scripts menu entries were not removed" }
+            $installed = @(Get-ChildItem $scripts -File -Filter 'CartoRig*.lua')
+            if ($installed.Count -ne 1 -or $installed[0].Name -ne 'CartoRig.lua') { throw "CartoRig Scripts menu has multiple entries" }
+            if (-not (Test-Path $other) -or [IO.File]::ReadAllText($other) -ne $otherContent) { throw "Foreign script changed" }
+            if ((Test-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigHostProbe') -or (Test-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigNativeIntegrationProbe')) { throw "Legacy Installed Apps registrations remain" }
+          }
+          $p = Start-Process -FilePath $remove -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or (Test-Path $single) -or (Test-Path $module)) { throw "Uninstaller failed" }
+          if (-not (Test-Path $other) -or [IO.File]::ReadAllText($other) -ne $otherContent) { throw "External script damaged after uninstall" }
+          if (Test-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRig') { throw "Preview Installed Apps entry not removed" }
+          "PASS: Windows legacy migration, single menu, second install, uninstall, and foreign-script protection. Resolve host still NOT RUN." | Set-Content 'dist\package-validation.txt'
+      - name: Upload approved preview package (not a stable release)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cartorig-preview-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
