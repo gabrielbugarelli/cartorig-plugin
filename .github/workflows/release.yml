@@ -79,11 +79,6 @@ jobs:
           test -f docs/RELEASE_NOTES.md || { echo "BLOCKED: missing verified release notes"; exit 1; }
           test ! -e .git/refs/tags/v1.0.0 || { echo "BLOCKED: release tag exists"; exit 1; }
           gh release view v1.0.0 >/dev/null 2>&1 && { echo "BLOCKED: release already exists"; exit 1; }
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          m=json.loads(Path('candidate/manifest.json').read_text())
-          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
-              f.write('APPROVED_INSTALLER=' + str(Path('candidate') / m['installer_path']) + '\n')
-          PY
-          gh release create v1.0.0 "$APPROVED_INSTALLER" candidate/SHA256SUMS.txt candidate/manifest.json --target "$GITHUB_SHA" --title "CartoRig V1.0" --notes-file docs/RELEASE_NOTES.md --verify-tag=false
+          APPROVED_INSTALLER="$(python3 -c 'import json; from pathlib import Path; m=json.loads(Path("candidate/manifest.json").read_text()); print(Path("candidate") / m["installer_path"])')"
+          test -f "$APPROVED_INSTALLER" || { echo "BLOCKED: approved installer not found"; exit 1; }
+          gh release create v1.0.0 "$APPROVED_INSTALLER" candidate/SHA256SUMS.txt candidate/manifest.json --target "$GITHUB_SHA" --title "CartoRig V1.0" --notes-file docs/RELEASE_NOTES.md
