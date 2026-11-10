@@ -41,10 +41,14 @@ class GateTests(unittest.TestCase):
         for p in "AB":
             for i in range(1, 21):
                 tid = f"{p}{i:02d}"
-                proof = f"{tid}.txt"
-                (self.host / proof).write_text("synthetic schema validation fixture\n", encoding="utf-8")
+                proof = f"{tid}.png"
+                (self.host / proof).write_bytes(b"\x89PNG\r\n\x1a\n synthetic fixture only")
                 self.report["tests"].append({
-                    "test_id": tid, "status": "PASS", "observed": "synthetic verifier fixture",
+                    "test_id": tid, "status": "PASS",
+                    "precondition": "synthetic gate fixture", "steps": ["schema check"],
+                    "expected": "matching schema", "observed": "synthetic verifier fixture",
+                    "responsible": "unit-test fixture", "defect_id": None,
+                    "dataset_version": "synthetic", "build_version": "1.0.0",
                     "commit_sha": SHA, "installer_sha256": self.hash, "evidence": [proof]
                 })
         self.save()
@@ -81,7 +85,7 @@ class GateTests(unittest.TestCase):
             verify(self.package, self.host, SHA, "101", "2")
 
     def test_missing_evidence_fails(self):
-        (self.host / "A01.txt").unlink()
+        (self.host / "A01.png").unlink()
         with self.assertRaisesRegex(ValueError, "missing/empty"):
             verify(self.package, self.host, SHA, "101", "1")
 
