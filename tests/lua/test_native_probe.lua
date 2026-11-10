@@ -27,11 +27,23 @@ local function fake(with_external)
  return c
 end
 local e=fake(true)
-assert(m.preflight(e)==nil and m.create(e,true)==nil and e.adds==0)
+local external=e.items[1]
+local beforeMeta=external.meta
+assert(m.preflight(e).external_nodes_preserved==1)
+local existing=assert(m.create(e,true))
+assert(existing.existing_nodes_preserved==1 and e.adds==5)
+assert(e.items[1]==external and external.meta==beforeMeta and external.id=="Transform")
+assert(m.verify(e).nodes_with_native_metadata==5)
+local collision=fake()
+local other=collision:AddTool("Background")
+other:GetAttrs=function(self) return {TOOLS_RegID=self.id,TOOLS_Name="CRTEST_Source"} end
+collision.adds=0
+assert(m.preflight(collision)==nil)
+assert(m.create(collision,true)==nil and collision.adds==0)
 local c=fake()
 assert(m.create(c,false)==nil and c.adds==0)
 local r=assert(m.create(c,true))
-assert(r.native_nodes_created==5 and c.adds==5 and c.links==4 and c.undo==0)
+assert(r.test_nodes_created==5 and c.adds==5 and c.links==4 and c.undo==0)
 assert(m.create(c,true)==nil)
 assert(m.verify(c).nodes_with_native_metadata==5)
 local reopened=fake()
@@ -47,4 +59,4 @@ function broken:AddTool(...) if self.adds==2 then error("native failure injected
 local result,msg=m.create(broken,true)
 assert(result==nil and msg:match("FAILED"))
 assert(#broken.items==0 and broken.deletes==2 and broken.undo==0)
-print("native_probe: PASS (mock unit tests only; native host not tested)")
+print("graph_test: PASS (isolated logic tests; Fusion host NOT RUN)")

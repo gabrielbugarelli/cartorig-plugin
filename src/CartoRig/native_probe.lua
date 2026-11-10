@@ -41,22 +41,30 @@ function M.preflight(comp)
  end
  local ok,existing=pcall(function() return comp:GetData(COMP) end)
  if not ok then return nil,"BLOCKED: composition metadata cannot be read" end
- if existing~=nil then return nil,"BLOCKED: this comp already has a native probe" end
+ if existing~=nil then return nil,"BLOCKED: a CartoRig test graph already exists; use Verify" end
+ local reserved,external_count={},0
+ for _,s in ipairs(SPEC) do reserved[s.name]=true end
  for _,tool in pairs(list) do
-  if data(tool,ID)~=nil then return nil,"BLOCKED: previous probe found" end
-  if attr(tool,"TOOLS_RegID")~="MediaOut" then
-   return nil,"BLOCKED: use NEW disposable Fusion Composition without editorial nodes"
+  external_count=external_count+1
+  if data(tool,ID)~=nil then
+   return nil,"BLOCKED: previous CartoRig test nodes found; use Verify"
+  end
+  local name=attr(tool,"TOOLS_Name")
+  if type(name)=="string" and reserved[name] then
+   return nil,"BLOCKED: test node name already used by an existing tool: "..name
   end
  end
- return true
+ -- An editor composition can contain any number/type of existing nodes.
+ -- Never select, delete, rename, connect to, or change those tools.
+ return {external_nodes_preserved=external_count}
 end
 function M.create(comp,confirmed)
  if confirmed~=true then return nil,"BLOCKED: disposable composition confirmation required" end
- local valid,err=M.preflight(comp)
- if not valid then return nil,err end
+ local context,err=M.preflight(comp)
+ if not context then return nil,err end
  local created,nodes={},{}
  local id="probe-"..os.date("!%Y%m%dT%H%M%SZ").."-"..tostring(math.random(100000,999999))
- local begun,msg=pcall(function() comp:StartUndo("CartoRig - native integration diagnostic") end)
+ local begun,msg=pcall(function() comp:StartUndo("CartoRig - test graph") end)
  if not begun then return nil,"BLOCKED: StartUndo: "..tostring(msg) end
  local ok,why=pcall(function()
   for _,s in ipairs(SPEC) do
@@ -103,9 +111,9 @@ function M.create(comp,confirmed)
  end
  local ended,e=pcall(function() comp:EndUndo(true) end)
  if not ended then
-  return nil,"BLOCKED: EndUndo error: "..tostring(e).."; discard disposable comp"
+  return nil,"FAILED: EndUndo error: "..tostring(e).."; discard the test project"
  end
- return {native_nodes_created=5,native_links_created=4,probe_id=id,
+ return {test_nodes_created=5,test_links_created=4,existing_nodes_preserved=context.external_nodes_preserved,probe_id=id,
   node_metadata_roundtrip=true,save_reopen="NOT RUN",viewer="NOT RUN",motion="NOT RUN",
   instructions="Save, close and reopen disposable project, then Verify."}
 end
