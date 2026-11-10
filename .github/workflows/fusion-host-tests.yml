@@ -1,0 +1,45 @@
+name: Fusion Studio 20 host acceptance
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  host:
+    name: host / A01-B20-real
+    # Never run public PR code on a self-hosted machine. Must be called from
+    # trusted main workflow_dispatch and protected environment approval.
+    if: ${{ github.event.repository.private == false && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' }}
+    environment: fusion-host
+    runs-on: [self-hosted, windows, cartorig-fusion-studio20]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Download immutable candidate from this Actions run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cartorig-candidate-${{ github.run_attempt }}
+          path: candidate
+      - name: Run A01-A20 and B01-B20 on real licensed host
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "host/run-acceptance.ps1")) {
+            throw "BLOCKED: no real Resolve Studio 20 acceptance harness exists."
+          }
+          & ./host/run-acceptance.ps1 -PackageRoot "candidate" -OutputDirectory "host-evidence"
+          if ($LASTEXITCODE -ne 0) { throw "Fusion acceptance failed." }
+      - name: Validate host evidence before upload
+        shell: pwsh
+        run: |
+          python scripts/release_gate.py --package candidate --host-evidence host-evidence --sha "${{ github.sha }}" --run-id "${{ github.run_id }}" --attempt "${{ github.run_attempt }}"
+          if ($LASTEXITCODE -ne 0) { throw "Host evidence incomplete or not PASS." }
+          $total = (Get-ChildItem "host-evidence" -File -Recurse | Measure-Object -Property Length -Sum).Sum
+          if ($total -gt 20MB) { throw "BLOCKED: host evidence exceeds storage budget." }
+      - name: Upload real host reports and evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cartorig-host-evidence-${{ github.run_attempt }}
+          path: host-evidence/
+          if-no-files-found: error
+          retention-days: 7
