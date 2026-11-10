@@ -1,0 +1,32 @@
+# CartoRig — Windows development preview 0.3
+
+**Only one Scripts menu entry is installed: `Workspace → Scripts → Comp → CartoRig`.** All future preview upgrades use the same entry, installer identity and Windows Installed Apps entry. This is a development diagnostic, **not** the stable CartoRig V1 plugin.
+
+## Install or update
+
+1. Close DaVinci Resolve Studio 20.
+2. In the [GitHub Actions Windows preview build](https://github.com/gabrielbugarelli/cartorig-plugin/actions/workflows/cartorig-preview-windows.yml), open a **successful run** associated with the intended commit. Download the **cartorig-preview-...** artifact ZIP; extract the ZIP.
+3. Run `CartoRig-Preview-0.3-win64.exe` and complete the Windows installer wizard. No terminal, Python, SDK, compiler, geodata or manual file copying is required.
+4. Restart Resolve. Only **CartoRig** should appear under `Workspace → Scripts → Comp`.
+5. If `CartoRig Host Probe` or `CartoRig Native Integration Probe` were previously installed by our 0.1/0.2 installers, the 0.3 installer calls **their own uninstallers** to remove the old scripts and obsolete Installed Apps registrations. It does not remove scripts, projects or folders belonging to other software.
+6. Subsequent CartoRig preview installations replace the existing CartoRig installation in place. If an unmanaged script already exists at `Comp/CartoRig.lua`, installation stops rather than overwriting it.
+
+## Run a controlled test
+
+1. Create a **disposable project** and open a Fusion Composition, then choose **Workspace → Scripts → Comp → CartoRig**.
+2. Click **Check Compatibility**. This only reads the Fusion environment and node count; it does not change the composition.
+3. Tick **I confirm this is a disposable test project** and click **Create Test Nodes**. The test attempts to create five separately identifiable Fusion tools (`CRTEST_Source`, `CRTEST_Backdrop`, `CRTEST_Transform`, `CRTEST_Composite`, `CRTEST_Output`) connected **only to one another**.
+4. **The composition can already contain other nodes.** The test preserves them without reconnecting, renaming, removing, selecting or editing them. Name collisions with the five reserved `CRTEST_` names and a previous CartoRig test graph are reported explicitly; repeated clicks will not create duplicates.
+5. Check whether all five test tools appear in the Node Editor. Select `CRTEST_Composite` and send it to the Viewer; verify output and the native Inspector parameters when selecting `CRTEST_Transform`.
+6. Save the **disposable project**, close it, reopen it, open CartoRig again, and select **Verify Test Nodes**. This checks that five tools retained their persistent CartoRig test identifiers; project save/reopen and Viewer appearance still require **your manual confirmation**.
+7. Click **Save Report**, then send the generated `CartoRig-Test-*.txt` from your Windows temporary directory, together with a screenshot of the Node Editor if an unexpected result occurred.
+
+Do not run experimental node creation on important project files. The diagnostic does not promise to undo nodes that have already been saved. Its failure recovery attempts to remove **only the nodes it created during that invocation**.
+
+## Uninstall
+
+Open **Windows → Installed Apps → CartoRig (Development Preview) → Uninstall**. The uninstaller removes only the `CartoRig.lua` entry and its own local runtime/docs; it leaves external scripts, Fusion projects and Resolve untouched.
+
+## Verification boundaries
+
+This version does **not** implement real CartoRig Scene/WorldMap/Camera nodes, Natural Earth maps, native Inspector Control/Motion for authorial nodes, render, or the acceptance matrix. A/B tests remain **40 NOT RUN** until the real Studio 20 acceptance workflow executes. CI validates tests of reusable Lua modules and this Windows installation/update/removal package; it cannot validate Fusion running on the editor's computer. There is no stable release.
