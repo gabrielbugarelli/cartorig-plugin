@@ -36,7 +36,7 @@ assert(e.items[1]==external and external.meta==beforeMeta and external.id=="Tran
 assert(m.verify(e).nodes_with_native_metadata==5)
 local collision=fake()
 local other=collision:AddTool("Background")
-other:GetAttrs=function(self) return {TOOLS_RegID=self.id,TOOLS_Name="CRTEST_Source"} end
+other.GetAttrs=function(self) return {TOOLS_RegID=self.id,TOOLS_Name="CRTEST_Source"} end
 collision.adds=0
 assert(m.preflight(collision)==nil)
 assert(m.create(collision,true)==nil and collision.adds==0)
