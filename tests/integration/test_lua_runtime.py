@@ -1,4 +1,4 @@
-"""Exercise the actual Lua runtime modules, not reimplemented Python logic."""
+"""Exercise actual Lua core modules on a free Linux runner, no Resolve mock."""
 from __future__ import annotations
 import os
 from pathlib import Path
@@ -23,6 +23,9 @@ class LuaRuntimeIntegration(unittest.TestCase):
 
     def test_shared_projection_geoanchor_and_dateline(self):
         self.invoke("tests/lua/test_geo.lua")
+
+    def test_offline_catalog_search_and_disambiguation(self):
+        self.invoke("tests/lua/test_catalog.lua")
 
 if __name__ == "__main__":
     unittest.main()
