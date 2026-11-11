@@ -153,7 +153,7 @@ jobs:
           }
           if ((Get-FileHash $utility -Algorithm SHA256).Hash -ne $preUpgradeUtilityHash -or
               (Get-FileHash $module -Algorithm SHA256).Hash -ne $preUpgradeServiceHash) {
-            throw 'Blocked duplicate-entry upgrade modified the installed 0.6.2 runtime'
+            throw 'Blocked duplicate-entry upgrade modified the installed 0.6.3 runtime'
           }
           Remove-Item -LiteralPath $conflictComp -Force
           for ($i=0; $i -lt 2; $i++) {
