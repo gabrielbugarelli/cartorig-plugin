@@ -7,6 +7,7 @@ local function api_member(o,key)
   if kind~="table" and kind~="userdata" then return nil end
   local ok,v=pcall(function() return o[key] end)
   if ok then return v end
+  return nil
 end
 local function api_method(o,name)
   return type(api_member(o,name))=="function"
