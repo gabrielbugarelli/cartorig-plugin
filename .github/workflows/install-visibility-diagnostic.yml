@@ -1,0 +1,81 @@
+name: CartoRig install visibility diagnostic
+on:
+  push:
+    branches: ['fix/cartorig-dev-install-visibility-audit']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    name: windows / diagnostic-classification-tests
+    if: ${{ github.event.repository.private == false }}
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Test missing, partial, present, and wrong-path installation states
+        shell: pwsh
+        run: |
+          $root=Join-Path $env:RUNNER_TEMP 'cartorig-install-diagnostics'
+          $roaming=Join-Path $root 'Roaming'
+          $local=Join-Path $root 'Local'
+          $shared=Join-Path $root 'Shared'
+          $output=Join-Path $root 'state.txt'
+          foreach($folder in @($roaming,$local,$shared)){New-Item -ItemType Directory -Force $folder | Out-Null}
+          function Run-Diagnostic {
+            & ./support/cartorig-dev-diagnose.ps1 -RoamingRoot $roaming -LocalRoot $local -SharedRoot $shared -OutputPath $output -SkipProcessCheck
+            if (-not (Test-Path -LiteralPath $output)) {throw "Diagnostic failed to write a report"}
+          }
+          function Assert-Result($status) {
+            if (-not (Select-String -LiteralPath $output -Pattern "DIAGNOSIS: $status" -Quiet)) {throw "Expected diagnosis: $status"}
+            if (-not (Select-String -LiteralPath $output -Pattern "LIVE_RESOLVE_MENU: NOT_RUN" -Quiet)) {throw "False Fusion host approval"}
+          }
+          Run-Diagnostic
+          Assert-Result 'SCRIPT_MISSING_IN_DEFAULT_DIRECTORIES'
+          $script=Join-Path $roaming 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\cartorig-dev.lua'
+          New-Item -ItemType Directory -Force (Split-Path -Parent $script) | Out-Null
+          [IO.File]::WriteAllText($script,'-- fake Windows filesystem test fixture, not a Fusion script')
+          Run-Diagnostic
+          Assert-Result 'LAUNCHER_PRESENT_UI_MISSING'
+          $ui=Join-Path $local 'CartoRig\App\lua\cartorig_scene_ui.lua'
+          New-Item -ItemType Directory -Force (Split-Path -Parent $ui) | Out-Null
+          [IO.File]::WriteAllText($ui,'-- fake UI file for filesystem diagnosis only')
+          Run-Diagnostic
+          Assert-Result 'FILES_PRESENT_MENU_VISIBILITY_NOT_VERIFIED'
+          Remove-Item -LiteralPath $script -Force
+          $other=Join-Path $shared 'Blackmagic Design\DaVinci Resolve\Fusion\Scripts\Comp\cartorig-dev.lua'
+          New-Item -ItemType Directory -Force (Split-Path -Parent $other) | Out-Null
+          [IO.File]::WriteAllText($other,'-- synthetic alternate-location fixture')
+          Run-Diagnostic
+          Assert-Result 'OTHER_DEFAULT_SCRIPTS_LOCATION'
+          Remove-Item -LiteralPath $other -Force
+          $legacy=Join-Path $roaming 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\CartoRig Host Probe.lua'
+          [IO.File]::WriteAllText($legacy,'-- synthetic legacy script fixture')
+          Run-Diagnostic
+          Assert-Result 'MISSING_LAUNCHER_LEGACY_FILES_CAN_BLOCK_INSTALLER'
+          Remove-Item -LiteralPath $legacy -Force
+          $pending="$script.pending"
+          [IO.File]::WriteAllText($pending,'-- synthetic pending launcher fixture')
+          Run-Diagnostic
+          Assert-Result 'MISSING_LAUNCHER_STAGING_RESIDUE'
+          Write-Output "PASS: diagnostic identifies six filesystem states. Real Resolve UI/menu NOT RUN."
+      - name: Prepare standalone diagnostic kit without Fusion menu installation
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item -LiteralPath support/cartorig-dev-diagnose.ps1,support/verificar-cartorig-dev.cmd,support/README.md -Destination dist
+          Get-ChildItem -Path dist -File | ForEach-Object {
+            if ($_.Length -gt 100KB) {throw "Diagnostic artifact unexpectedly large"}
+          }
+          Get-ChildItem -Path dist -File | Get-FileHash -Algorithm SHA256 | ForEach-Object {
+            "$($_.Hash.ToLowerInvariant())  $($_.Path | Split-Path -Leaf)"
+          } | Set-Content -Encoding ascii dist/SHA256SUMS.txt
+      - name: Upload read-only diagnostic kit (not a plugin build)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cartorig-dev-install-diagnostic-${{ github.sha }}
+          path: dist/
+          retention-days: 7
+          if-no-files-found: error
