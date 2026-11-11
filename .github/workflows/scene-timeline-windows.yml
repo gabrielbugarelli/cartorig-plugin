@@ -1,7 +1,7 @@
 name: cartorig-dev Scene Timeline Windows
 on:
   push:
-    branches: ['feat/scene-per-timeline-composition', 'fix/resolve-context-type-guard-061', 'fix/reviewed-timeline-safety-063', 'fix/foundation-063-final', 'fix/blackmagic-api-contracts-064']
+    branches: ['feat/scene-per-timeline-composition', 'fix/resolve-context-type-guard-061', 'fix/reviewed-timeline-safety-063', 'fix/foundation-063-final', 'fix/blackmagic-api-contracts-064', 'fix/blackmagic-api-contracts-064-final']
   workflow_dispatch:
 permissions:
   contents: read
