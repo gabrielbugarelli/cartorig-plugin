@@ -1,48 +1,100 @@
 -- cartorig-dev: Scene UI Manager only. One Create Scene = one timeline Fusion clip.
 -- No prior Fusion Composition or manual wiring; scene listing is automatic.
+-- Resolve/Fusion handles are validated through the same Blackmagic API boundary
+-- used by TimelineService. Do not accept globals solely by Lua truthiness.
+local localapp=os.getenv("LOCALAPPDATA")
+if localapp and localapp~="" then
+  package.path=localapp.."\\CartoRig\\App\\lua\\?.lua;"..
+    localapp.."\\CartoRig\\App\\lua\\?\\init.lua;"..package.path
+end
+local api_ok,api=pcall(require,"CartoRig.blackmagic_api")
+if not api_ok or type(api)~="table" then
+  local err="BLACKMAGIC_API_BOUNDARY_MISSING: "..tostring(api)
+  print(err);return false,err
+end
+
 local bmd=rawget(_G,"bmd")
-local resolve=rawget(_G,"resolve")
-if not resolve and bmd and type(bmd.scriptapp)=="function" then
-  local ok,result=pcall(bmd.scriptapp,"Resolve")
-  if ok then resolve=result end
+local supplied_resolve=rawget(_G,"resolve")
+local resolve=nil
+local _,globalResolveErr=api.method(supplied_resolve,"GetProjectManager")
+if not globalResolveErr then resolve=supplied_resolve end
+
+local fallback_type="not attempted"
+local fallback_error=nil
+if not resolve then
+  local _,scriptappErr=api.method(bmd,"scriptapp")
+  if not scriptappErr then
+    local result,callErr=api.call_function(bmd,"scriptapp","Resolve")
+    fallback_type=type(result)
+    fallback_error=callErr
+    local _,resultErr=api.method(result,"GetProjectManager")
+    if not resultErr then resolve=result end
+  else
+    fallback_error=scriptappErr
+  end
 end
 if not resolve then
-  local err="RESOLVE_UNAVAILABLE: open a Resolve project (not standalone Fusion)"
+  local err="RESOLVE_CONTEXT_INVALID: global resolve type "..type(supplied_resolve)..
+    "; bmd.scriptapp('Resolve') returned "..fallback_type..
+    (fallback_error and ("; "..tostring(fallback_error)) or "")..
+    ". Resolve scripting handle unavailable."
   print(err);return false,err
 end
-local fusion=rawget(_G,"fusion") or rawget(_G,"fu")
-if not fusion and type(resolve.Fusion)=="function" then
-  local ok,result=pcall(function() return resolve:Fusion() end)
-  if ok then fusion=result end
+
+local fusion=rawget(_G,"fusion")
+local uiValue=api.get(fusion,"UIManager","fusion.UIManager")
+if uiValue==nil then
+  fusion=rawget(_G,"fu")
+  uiValue=api.get(fusion,"UIManager","fu.UIManager")
 end
-if not bmd or type(bmd.UIDispatcher)~="function" or not fusion then
-  local err="UI_UNAVAILABLE: Resolve Fusion UIManager and UIDispatcher are required"
+if uiValue==nil then
+  local _,fusionMethodErr=api.method(resolve,"Fusion")
+  if not fusionMethodErr then
+    local result,callErr=api.call(resolve,"Fusion")
+    if result then
+      local candidate=api.get(result,"UIManager","Resolve.Fusion.UIManager")
+      if candidate~=nil then
+        fusion=result
+        uiValue=candidate
+      elseif callErr then
+        fallback_error=callErr
+      end
+    end
+  end
+end
+
+local _,dispatcherErr=api.method(bmd,"UIDispatcher")
+if dispatcherErr or uiValue==nil then
+  local err="UI_UNAVAILABLE: Resolve Fusion UIManager or UIDispatcher is missing"
   print(err);return false,err
 end
-local localapp=os.getenv("LOCALAPPDATA")
+
 if not localapp or localapp=="" then
   local err="LOCALAPPDATA_UNAVAILABLE: runtime folder missing"
   print(err);return false,err
 end
-package.path=localapp.."\\CartoRig\\App\\lua\\?.lua;"..
-  localapp.."\\CartoRig\\App\\lua\\?\\init.lua;"..package.path
+
 local ok,service=pcall(require,"CartoRig.timeline_service")
 if not ok or type(service)~="table" then
   local err="TIMELINE_SERVICE_MISSING: "..tostring(service)
   print(err);return false,err
 end
-local ui=fusion.UIManager
+local ui=uiValue
 if type(ui)=="function" then
-  local worked,result=pcall(function() return fusion:UIManager() end)
-  if worked then ui=result end
+  local result,uiErr=api.call(fusion,"UIManager")
+  if not result then
+    local err="UI_MANAGER_UNAVAILABLE: "..tostring(uiErr)
+    print(err);return false,err
+  end
+  ui=result
 end
-if not ui then
-  local err="UI_MANAGER_UNAVAILABLE: Fusion UIManager is unavailable"
+if type(ui)~="table" and type(ui)~="userdata" then
+  local err="UI_MANAGER_UNAVAILABLE: expected UIManager object; got "..type(ui)
   print(err);return false,err
 end
-local okd,disp=pcall(function() return bmd.UIDispatcher(ui) end)
-if not okd or not disp then
-  local err="DISPATCHER_FAILED: cannot start Scene UI"
+local disp,dispErr=api.call_function(bmd,"UIDispatcher",ui)
+if not disp then
+  local err="DISPATCHER_FAILED: "..tostring(dispErr or "cannot start Scene UI")
   print(err);return false,err
 end
 local window=disp:AddWindow({
@@ -70,10 +122,24 @@ if not window then
 end
 local items=window:GetItems()
 local report=""
+local function read_build_info()
+  local info={version="unknown",commit="unknown"}
+  local stream=io.open(localapp.."\\CartoRig\\App\\build-info.txt","rb")
+  if not stream then return info end
+  for line in stream:lines() do
+    local key,value=line:match("^([%w_]+)=(.+)$")
+    if key and value then info[key]=value end
+  end
+  stream:close()
+  return info
+end
 local function record(action,success,details)
   local text=tostring(details or "")
+  local build=read_build_info()
   report=table.concat({
     "cartorig-dev | Timeline Scene service",
+    "Version: "..tostring(build.version),
+    "Build commit: "..tostring(build.commit),
     "UTC: "..os.date("!%Y-%m-%dT%H:%M:%SZ"),
     "Action: "..tostring(action),
     "Status: "..(success and "COMMAND_COMPLETED" or "BLOCKED/FAILED"),
@@ -90,10 +156,12 @@ local function refresh()
     return
   end
   if #scenes==0 then
-    items.SceneList.PlainText="No CartoRig scenes in the active timeline."
+    items.SceneList.PlainText=(err and ("No readable CartoRig scenes. Warning: "..tostring(err))
+      or "No CartoRig scenes in the active timeline.")
     return
   end
   local lines={}
+  if err then lines[#lines+1]="Warning: "..tostring(err) end
   for n,scene in ipairs(scenes) do
     lines[#lines+1]=string.format("%d. %s  |  Track V%d  |  Frame %s",
       n,tostring(scene.name),scene.track,tostring(scene.start_frame))
@@ -120,9 +188,13 @@ function window.On.CreateScene.Clicked(ev)
     refresh()
     return
   end
-  record("Create Scene",true,"Scene "..tostring(value.scene_id)..
+  local detail="Scene "..tostring(value.scene_id)..
     ", individual Fusion Composition frames "..tostring(value.start_frame)..
-    "–"..tostring(value.end_frame).."; Fusion page opened: "..tostring(value.fusion_page_opened))
+    "–"..tostring(value.end_frame).."; Fusion page opened: "..tostring(value.fusion_page_opened)
+  if type(value.warnings)=="table" and #value.warnings>0 then
+    detail=detail.."; warnings: "..table.concat(value.warnings," | ")
+  end
+  record("Create Scene",true,detail)
   refresh()
 end
 function window.On.SaveReport.Clicked(ev)

@@ -6,6 +6,10 @@ Fonte normativa: `docs/CartoRig_Especificacao_de_Produto_e_Implementacao_V1.md` 
 
 Critério `DONE`: node real, UI na superfície contratada, render e persistência, segurança de dependências, teste no host real e evidência aprovada pelo GitHub Actions **do mesmo commit/build**.
 
+**Histórico da fundação:** a 0.6.3 foi executada no Resolve Studio 20.3.1 e falhou antes da criação da Scene: o binding Lua incluiu `__flags` no retorno documentado como lista de `GetItemListInTrack()`, e a implementação antiga percorreu a tabela completa com `pairs()`. Esse resultado é evidência de regressão do candidato, não PASS de qualquer A/B.
+
+**Fundação 0.6.4 (candidata, host ainda NOT RUN):** a integração Resolve/Fusion foi refatorada para contratos centralizados em `blackmagic_api.lua` e `fusion_contract.lua`; listas, dicionários e tabelas de tools seguem formatos distintos da documentação Blackmagic e o único metadado de binding observado (`__flags`) é removido na fronteira. A transação fail-closed, Scene/WorldMap/Camera físicos, MediaOut existente obrigatório, persistência de `scene_id`/título, identidade de build e instalação/migração com ownership por hash permanecem. Isso é cobertura de implementação e testes não-host; **não altera nenhum A/B para PASS**.
+
 | Teste | Marco | Ação normativa | Resultado normativo | Implementação | Teste executável | Evidência Actions | Commit / PR | Status |
 |---|---|---|---|---|---|---|---|---|
 | A01 | A | Abrir CartoRig sem composição preparada; Create Scene 5 vezes | Cinco Fusion Compositions próprias com UUIDs independentes e pipeline WorldMap→Camera→Scene→MediaOut funcional, sem wiring manual | PENDING | PENDING | PENDING | PENDING | NOT RUN |

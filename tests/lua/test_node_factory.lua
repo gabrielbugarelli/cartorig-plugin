@@ -1,15 +1,25 @@
 -- Isolated unit fakes: verifies safety and domain logic, NOT Fusion host acceptance.
 local factory=require("CartoRig.node_factory")
+local domain=require("CartoRig.domain")
 local dataPath="tests/fixtures/local-data-test\\CartoRig\\App\\data\\ne_50m_land.lua"
 local f=assert(io.open(dataPath,"wb"))
-f:write(string.rep("x",510000));f:close()
+f:write("local t={}\nfor i=1,1422 do t[i]={0,0,1,0,1,1,0,1} end\nreturn t\n")
+f:close()
 local function fake()
- local comp={tools={},data={},added={},deleted=0,undo=0}
- function comp:GetToolList() return self.tools end
+ local comp={tools={},data={},added={},deleted=0,undo=0,undo_keeps={}}
+ function comp:GetToolList()
+  local out={__flags=1048576}
+  for i,tool in ipairs(self.tools) do out["Tool"..i]=tool end
+  return out
+ end
  function comp:GetData(key) return self.data[key] end
  function comp:SetData(key,v) self.data[key]=v end
  function comp:StartUndo() self.undo=self.undo+1 end
- function comp:EndUndo() self.undo=self.undo-1 end
+ function comp:EndUndo(keep)
+  self.undo=self.undo-1
+  self.undo_keeps[#self.undo_keeps+1]=keep
+  if self.fail_end_undo and keep==true then error("synthetic EndUndo failure") end
+ end
  function comp:AddTool(regid,x,y)
   if type(x)~="number" or type(y)~="number" then error("AddTool 3-arg expected") end
   if self.fail==regid then return nil end
@@ -20,7 +30,11 @@ local function fake()
   function tool:GetData(k) return self.data[k] end
   function tool:FindInput(port)
    local parent=self
-   return {GetConnectedOutput=function() return parent.links[port] end}
+   return {GetConnectedOutput=function()
+    local source=parent.links[port]
+    if not source then return nil end
+    return {GetTool=function() return source end}
+   end}
   end
   function tool:ConnectInput(port,other)
    if comp.fail_link==port and self.regid=="MediaOut" then return false end
@@ -28,10 +42,12 @@ local function fake()
    return true
   end
   function tool:Delete()
+   if comp.fail_delete_for==self.regid then return false end
    for i,v in ipairs(comp.tools) do
     if v==self then table.remove(comp.tools,i);break end
    end
    comp.deleted=comp.deleted+1
+   return true
   end
   self.tools[#self.tools+1]=tool
   self.added[#self.added+1]=tool
@@ -40,6 +56,25 @@ local function fake()
  local media=comp:AddTool("MediaOut",0,0)
  return comp,media
 end
+local corruptPath="tests/fixtures/corrupt-data-test\\CartoRig\\App\\data\\ne_50m_land.lua"
+local corruptFile=assert(io.open(corruptPath,"wb"))
+corruptFile:write("return {{0,0,999,0,1,1,0,1}}\n")
+corruptFile:close()
+local corruptComp,corruptMedia=fake()
+local corruptResult,corruptReason=factory.create_scene(corruptComp,"Corrupt data",{localappdata="tests/fixtures/corrupt-data-test"})
+assert(corruptResult==nil and corruptReason:match("DATA_INCOMPATIBLE"))
+assert(#corruptComp.tools==1 and corruptComp.tools[1]==corruptMedia,
+ "invalid Natural Earth data must block before graph mutation")
+os.remove(corruptPath)
+
+local throwingComp=setmetatable({},{
+ __index=function() error("synthetic Fusion proxy lookup failure") end
+})
+local inspectOk,inspectResult,inspectReason=pcall(factory.inspect,throwingComp)
+assert(inspectOk and inspectResult==nil and tostring(inspectReason):match("NO_COMPOSITION"),
+ "Fusion proxy lookup failure must become a diagnostic, not escape as Lua exception; pcall="..
+ tostring(inspectOk).." result="..tostring(inspectResult).." reason="..tostring(inspectReason))
+
 local ROOT="tests/fixtures/local-data-test"
 local broken,bmedia=fake()
 assert(factory.create_scene(broken,"X",{localappdata="nonexistent"})==nil)
@@ -58,12 +93,50 @@ for _,node in pairs(comp.tools) do
  if node.name=="CR_WorldMap_Main" then world=node end
 end
 assert(camera and world and camera.links.Input==world)
-assert(factory.inspect(comp).has_scene)
-assert(#factory.inspect(comp).objects==3)
+local persisted=assert(factory.inspect(comp))
+assert(persisted.has_scene and persisted.title=="Brazil Map")
+assert(#persisted.objects==3)
+local sceneDisplay
+for _,o in ipairs(persisted.objects) do
+ if o.type=="Scene" then sceneDisplay=o.display_name end
+end
+assert(sceneDisplay=="Brazil Map","Scene display name must persist independently of timeline clip name")
+comp:SetData("CartoRig.V1.Title",nil)
+local legacyReadable=assert(factory.inspect(comp))
+assert(legacyReadable.has_scene and legacyReadable.legacy_title_missing==true and legacyReadable.title==nil,
+ "pre-0.6.3 Scene without persisted title must remain readable")
+comp:SetData("CartoRig.V1.Title","Brazil Map")
+assert(assert(factory.inspect(comp)).legacy_title_missing==false)
+-- Additional authoring nodes must not invalidate the three singleton structural
+-- nodes. Multiple Countries/States/Markers/etc. are expected by the product.
+local countries={}
+for n=1,2 do
+ local country=comp:AddTool("Fuse.CartoRigCountry",10+n,4)
+ country:SetAttrs({TOOLS_Name="CR_Country_Test_"..n})
+ country:SetData("CartoRig.V1.Owned",true)
+ country:SetData("CartoRig.V1.ObjectId",domain.uuid())
+ country:SetData("CartoRig.V1.ObjectType","Country")
+ country:SetData("CartoRig.V1.SceneId",made.scene_id)
+ country:SetData("CartoRig.V1.SchemaVersion","1.0.0")
+ countries[n]=country
+end
+local expanded=assert(factory.inspect(comp))
+assert(expanded.has_scene and #expanded.objects==5,
+ "Two extra Country nodes must coexist with the structural Scene/WorldMap/Camera")
+local originalCountry2Id=countries[2]:GetData("CartoRig.V1.ObjectId")
+countries[2]:SetData("CartoRig.V1.ObjectId",countries[1]:GetData("CartoRig.V1.ObjectId"))
+local duplicateId,duplicateIdErr=factory.inspect(comp)
+assert(duplicateId==nil and duplicateIdErr:match("duplicated object UUID"))
+countries[2]:SetData("CartoRig.V1.ObjectId",originalCountry2Id)
+countries[2]:SetAttrs({TOOLS_Name="CR_Country_Test_1"})
+local duplicateName,duplicateNameErr=factory.inspect(comp)
+assert(duplicateName==nil and duplicateNameErr:match("duplicated CartoRig node name"))
+countries[2]:SetAttrs({TOOLS_Name="CR_Country_Test_2"})
+assert(#assert(factory.inspect(comp)).objects==5)
 local sid=made.scene_id
 assert(sid==comp:GetData("CartoRig.V1.SceneId"))
 assert(factory.create_scene(comp,"Do not duplicate",{localappdata=ROOT})==nil)
-assert(#comp.tools==5)
+assert(#comp.tools==7)
 local rejected,rm=fake()
 rejected.fail_link="Input"
 local result2,reason2=factory.create_scene(rejected,"Connection failure",{localappdata=ROOT})
@@ -71,6 +144,17 @@ assert(not result2 and type(reason2)=="string" and reason2:match("SCENE_CREATE_F
  "Expected transactional failure, got result="..tostring(result2).." / "..tostring(reason2))
 assert(#rejected.tools==1 and rm.links.Input==nil)
 assert(rejected:GetData("CartoRig.V1.SceneId")==nil)
+local incomplete,im=fake()
+incomplete.fail_link="Input"
+incomplete.fail_delete_for="Fuse.CartoRigCamera"
+local incompleteResult,incompleteReason=factory.create_scene(incomplete,"Incomplete rollback",{localappdata=ROOT})
+assert(incompleteResult==nil and incompleteReason:match("ROLLBACK_INCOMPLETE"))
+local leakedCamera=false
+for _,tool in pairs(incomplete.tools) do
+ if tool.regid=="Fuse.CartoRigCamera" then leakedCamera=true end
+end
+assert(leakedCamera,"fixture must actually leave a created tool behind")
+
 local failed,c=fake()
 failed.fail="Fuse.CartoRigCamera"
 local result,error=factory.create_scene(failed,"Failure",{localappdata=ROOT})
@@ -78,6 +162,18 @@ assert(not result and error:match("SCENE_CREATE_FAILED"))
 assert(#failed.tools==1 and failed.deleted==1)
 assert(c.links.Input==nil)
 assert(failed:GetData("CartoRig.V1.SceneId")==nil and failed.undo==0)
+local undo_failed,undo_media=fake()
+undo_failed.fail_end_undo=true
+local undoResult,undoReason=factory.create_scene(undo_failed,"Undo failure",{localappdata=ROOT})
+assert(undoResult==nil and undoReason:match("UNDO_ERROR"))
+assert(#undo_failed.tools==1 and undo_failed.tools[1]==undo_media,
+ "Undo-finalization failure must remove all CartoRig nodes")
+assert(undo_media.links.Input==nil)
+assert(undo_failed:GetData("CartoRig.V1.SceneId")==nil)
+assert(undo_failed:GetData("CartoRig.V1.Title")==nil)
+assert(undo_failed.undo_keeps[#undo_failed.undo_keeps]==false,
+ "failed transaction must close/discard its Undo record with EndUndo(false)")
+
 local busy,foreign_media=fake()
 local external=busy:AddTool("Loader",9,9)
 foreign_media:ConnectInput("Input",external)
@@ -85,8 +181,11 @@ local from_new,reason=factory.create_scene(busy,"Avoid touching external",{local
 assert(from_new==nil and reason:match("MEDIAOUT_ALREADY_CONNECTED"))
 assert(#busy.tools==2 and foreign_media.links.Input==external)
 local no_new,d=fake()
-d:ConnectInput("Input",no_new:AddTool("Loader",3,3))
-assert(factory.create_scene(no_new,"No managed output",{localappdata=ROOT,disallow_new_mediaout=true})==nil)
-assert(#no_new.tools==2)
+d:Delete()
+local noOutput,outputReason=factory.create_scene(no_new,"No managed output",
+ {localappdata=ROOT,disallow_new_mediaout=true})
+assert(noOutput==nil and outputReason:match("MEDIAOUT_UNAVAILABLE"))
+assert(#no_new.tools==0,
+ "disallow_new_mediaout must fail before creating any author node or replacement MediaOut")
 os.remove(dataPath)
 print("node_factory: PASS (mocked host only; creation, isolation, UUIDs, rollback, output links)")

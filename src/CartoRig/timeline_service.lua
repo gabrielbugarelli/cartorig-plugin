@@ -1,27 +1,36 @@
--- CartoRig: one Scene == one independent Fusion Composition TimelineItem.
--- The Resolve timeline API owns clip creation; NodeFactory only edits the NEW comp.
--- No pre-existing timeline clip, foreign node or media is deliberately modified.
+-- CartoRig | one Scene == one independent Fusion Composition TimelineItem.
+-- Resolve timeline edits are fail-closed: snapshot all tracks, append after the
+-- global end, verify the new item, and rollback only resources created here.
 local factory=require("CartoRig.node_factory")
+local api=require("CartoRig.blackmagic_api")
 local M={}
-local function method(o,name)
-  return o and type(o[name])=="function"
-end
-local function call(o,name,...)
-  if not method(o,name) then return nil,"API_MISSING: "..name end
-  local ok,value=pcall(o[name],o,...)
-  if not ok then return nil,"API_FAILURE: "..name..": "..tostring(value) end
-  return value
-end
-local function strict(o,name,...)
-  local val,err=call(o,name,...)
-  if val==nil or val==false then return nil,err or "API_REJECTED: "..name end
-  return val
+
+local TRACK_TYPES={"video","audio","subtitle"}
+local MARKER_FIELDS={color=true,duration=true,note=true,name=true,customData=true}
+
+local call=api.call
+local strict=api.strict
+local require_handle=api.require_object
+local function method(o,name) return api.method(o,name)~=nil end
+
+local function track_items(timeline,trackType,trackIndex)
+  local raw,err=call(timeline,"GetItemListInTrack",trackType,trackIndex)
+  if raw==nil and err then
+    return nil,"TRACK_READ_FAILED: "..tostring(err)
+  end
+  local items,listErr=api.sequence(raw or {},
+    "GetItemListInTrack("..tostring(trackType)..","..tostring(trackIndex)..")")
+  if not items then return nil,listErr end
+  return items
 end
 
--- Positioning inserts at the END of the timeline instead of overwriting
--- editorial clips at the current playhead. SMPTE non-drop and drop frames.
 local function frame_base(fps)
   local n=tonumber(fps)
+  if not n and type(fps)=="string" then
+    -- Resolve can expose settings such as "29.97 DF". Parse only a leading
+    -- numeric rate; drop/non-drop is determined by the actual timecode separator.
+    n=tonumber(fps:match("^%s*(%d+%.?%d*)"))
+  end
   if not n or n<1 or n>120 then return nil end
   return math.floor(n+0.5),n
 end
@@ -29,15 +38,14 @@ local function parse_tc(tc,nominal)
   if type(tc)~="string" then return nil end
   local h,m,s,sep,f=tc:match("^(%d%d):(%d%d):(%d%d)([:;])(%d%d)$")
   h,m,s,f=tonumber(h),tonumber(m),tonumber(s),tonumber(f)
-  if not h or not m or not s or not f or m>=60 or s>=60 or f>=nominal then return nil end
-  if h>=24 then return nil end
+  if not h or not m or not s or not f or h>=24 or m>=60 or s>=60 or f>=nominal then return nil end
   local total=((h*60+m)*60+s)*nominal+f
   if sep==";" then
     if nominal~=30 and nominal~=60 then return nil end
-    local skip=nominal==30 and 2 or 4
-    if m%10~=0 and s==0 and f<skip then return nil end
+    local drop=nominal==30 and 2 or 4
+    if m%10~=0 and s==0 and f<drop then return nil end
     local minutes=60*h+m
-    total=total-skip*(minutes-math.floor(minutes/10))
+    total=total-drop*(minutes-math.floor(minutes/10))
   end
   return total,sep
 end
@@ -51,8 +59,7 @@ local function emit_tc(frame,nominal,sep)
     local perMinute=nominal*60-drop
     local whole=math.floor(frame/per10)
     local rest=frame%per10
-    local extra=drop*9*whole+drop*math.max(0,math.floor((rest-drop)/perMinute))
-    nominal_frames=frame+extra
+    nominal_frames=frame+drop*9*whole+drop*math.max(0,math.floor((rest-drop)/perMinute))
   end
   nominal_frames=nominal_frames%(nominal*3600*24)
   local h=math.floor(nominal_frames/(nominal*3600))
@@ -72,203 +79,572 @@ function M.timecode_add(tc,frames,fps)
   if not value then return nil,"TIMECODE_UNSUPPORTED: cannot encode target frame" end
   return value
 end
+local function equivalent_tc(a,b,fps)
+  local nominal=frame_base(fps)
+  if not nominal then return false end
+  local af=parse_tc(a,nominal)
+  local bf=parse_tc(b,nominal)
+  return af~=nil and bf~=nil and af==bf
+end
 
-local function project_and_timeline(resolve)
-  local manager,err=strict(resolve,"GetProjectManager")
-  if not manager then return nil,nil,nil,err end
-  local project,perr=strict(manager,"GetCurrentProject")
-  if not project then return nil,nil,nil,"NO_PROJECT: open a Resolve project ("..tostring(perr)..")" end
-  local timeline=call(project,"GetCurrentTimeline")
-  local made=false
-  if not timeline then
-    local pool,perr2=strict(project,"GetMediaPool")
-    if not pool then return nil,nil,nil,"NO_MEDIA_POOL: "..tostring(perr2) end
-    local name="CartoRig Scenes"
-    local count=call(project,"GetTimelineCount")
-    if type(count)=="number" and count>0 then name=name.." "..tostring(count+1) end
-    local created,cerr=call(pool,"CreateEmptyTimeline",name)
-    if not created then
-      return nil,nil,nil,"TIMELINE_CREATE_FAILED: Resolve rejected CreateEmptyTimeline. No Fusion Composition inserted. "..tostring(cerr)
-    end
-    local selected,serr=call(project,"SetCurrentTimeline",created)
-    if selected==false or selected==nil then
-      return nil,nil,nil,"TIMELINE_SELECT_FAILED: new timeline exists but is not current. "..tostring(serr)
-    end
-    timeline=created
-    made=true
+local function item_bounds(item,context)
+  local valid,invalid=require_handle(item,context or "TimelineItem","GetStart")
+  if not valid then return nil,nil,invalid end
+  local start,startErr=call(item,"GetStart",false)
+  local finish,endErr=call(item,"GetEnd",false)
+  if type(start)~="number" or type(finish)~="number" then
+    local name=call(item,"GetName")
+    return nil,nil,"TRACK_POSITION_INVALID: "..tostring(context or "TimelineItem")..
+      " name="..tostring(name)..
+      " GetStart(false)="..tostring(start).." ["..type(start).."]"..
+      " GetEnd(false)="..tostring(finish).." ["..type(finish).."]"..
+      (startErr and (" start_error="..tostring(startErr)) or "")..
+      (endErr and (" end_error="..tostring(endErr)) or "")
   end
-  return project,timeline,made
+  if finish<start then
+    return nil,nil,"TRACK_POSITION_INVALID: "..tostring(context or "TimelineItem")..
+      " end before start ("..tostring(start).." > "..tostring(finish)..")"
+  end
+  return start,finish
 end
-local function track_snapshot(timeline)
-  local tracks,err=call(timeline,"GetTrackCount","video")
-  if type(tracks)~="number" then
-    return nil,"TRACK_ACCESS_FAILED: "..tostring(err)
+local function item_id(item,context)
+  local value,err=call(item,"GetUniqueId")
+  if type(value)~="string" or value=="" then
+    return nil,"ITEM_ID_INVALID: "..tostring(context).." GetUniqueId returned "..type(value)..
+      " "..tostring(value)..(err and ("; "..tostring(err)) or "")
   end
-  -- A newly created empty timeline may contain no video track.
-  if tracks==0 then
-    local added=call(timeline,"AddTrack","video")
-    if added~=true then return nil,"VIDEO_TRACK_REQUIRED: Resolve refused to create first video track" end
-    tracks=call(timeline,"GetTrackCount","video")
-    if type(tracks)~="number" or tracks<1 then return nil,"VIDEO_TRACK_REQUIRED: missing after AddTrack" end
+  return value
+end
+local function scalar_signature(value)
+  local kind=type(value)
+  if kind=="nil" or kind=="boolean" or kind=="number" or kind=="string" then
+    return kind..":"..tostring(value)
   end
-  local before,maxend={},nil
-  for track=1,tracks do
-    local items,ie=call(timeline,"GetItemListInTrack","video",track)
-    if type(items)~="table" then return nil,"TRACK_READ_FAILED: "..tostring(ie) end
-    for _,item in pairs(items) do
-      local start=call(item,"GetStart")
-      local finish=call(item,"GetEnd")
-      if type(start)~="number" or type(finish)~="number" or finish<start then
-        return nil,"TRACK_POSITION_INVALID: cannot safely append"
+  return nil,"MARKER_VALUE_INVALID: unsupported marker field type "..kind
+end
+local function marker_signature(info)
+  local normalized,normalizeErr=api.named_dict(info,"marker information",MARKER_FIELDS)
+  if not normalized then return nil,normalizeErr end
+  local keys={}
+  for key,_ in pairs(normalized) do keys[#keys+1]=key end
+  table.sort(keys)
+  local parts={}
+  for _,key in ipairs(keys) do
+    local value,err=scalar_signature(normalized[key])
+    if not value then return nil,err end
+    parts[#parts+1]=key.."="..value
+  end
+  return table.concat(parts,"|")
+end
+local function snapshot_markers(timeline,start_frame)
+  local raw,err=call(timeline,"GetMarkers")
+  if raw==nil and err then return nil,nil,"MARKER_READ_FAILED: "..tostring(err) end
+  local markers,dictErr=api.numeric_dict(raw or {},"GetMarkers")
+  if not markers then return nil,nil,dictErr end
+  local snapshot,maxend={},nil
+  for frameId,info in pairs(markers) do
+    if type(frameId)~="number" or frameId~=frameId or
+       frameId==math.huge or frameId==-math.huge then
+      return nil,nil,"MARKER_POSITION_INVALID: expected finite numeric frame offset, got "..tostring(frameId)
+    end
+    local signature,sigErr=marker_signature(info)
+    if not signature then return nil,nil,sigErr end
+    local duration=info.duration
+    if duration==nil then duration=1 end
+    if type(duration)~="number" or duration~=duration or
+       duration==math.huge or duration==-math.huge then
+      return nil,nil,"MARKER_DURATION_INVALID: marker "..tostring(frameId)..
+        " duration "..tostring(duration)
+    end
+    -- The Blackmagic contract does not state that marker frameId/duration are
+    -- integers. Protect through the first whole frame strictly after its span.
+    local protectedEnd=math.ceil(start_frame+frameId+math.max(duration,1))
+    snapshot[frameId]=signature
+    maxend=math.max(maxend or start_frame,protectedEnd)
+  end
+  return snapshot,maxend
+end
+
+local function snapshot_timeline(timeline)
+  local timelineStart,startErr=call(timeline,"GetStartFrame")
+  if type(timelineStart)~="number" or timelineStart~=math.floor(timelineStart) then
+    return nil,"TIMELINE_START_INVALID: "..tostring(startErr or timelineStart)
+  end
+  local markers,markerEnd,markerErr=snapshot_markers(timeline,timelineStart)
+  if not markers then return nil,markerErr end
+  local state={items={},counts={},locks={},enabled={},names={},markers=markers,maxend=markerEnd,timeline_start=timelineStart}
+  for _,trackType in ipairs(TRACK_TYPES) do
+    local count,err=call(timeline,"GetTrackCount",trackType)
+    if type(count)~="number" or count<0 or count~=math.floor(count) then
+      return nil,"TRACK_COUNT_INVALID: "..trackType.." returned "..type(count).." "..tostring(count)..
+        (err and ("; "..tostring(err)) or "")
+    end
+    state.counts[trackType]=count
+    state.locks[trackType]={}
+    state.enabled[trackType]={}
+    state.names[trackType]={}
+    for track=1,count do
+      local locked,lockErr=call(timeline,"GetIsTrackLocked",trackType,track)
+      if type(locked)~="boolean" then
+        return nil,"TRACK_LOCK_STATE_INVALID: "..trackType.." "..track.." returned "..type(locked)..
+          " "..tostring(locked)..(lockErr and ("; "..tostring(lockErr)) or "")
       end
-      local identity=call(item,"GetUniqueId")
-      local id=type(identity)=="string" and identity or tostring(item)
-      if before[id] then return nil,"TRACK_ID_COLLISION: refuse unsafe insertion" end
-      before[id]={start=start,finish=finish}
-      maxend=math.max(maxend or finish,finish)
+      state.locks[trackType][track]=locked
+      local enabled,enabledErr=call(timeline,"GetIsTrackEnabled",trackType,track)
+      if type(enabled)~="boolean" then
+        return nil,"TRACK_ENABLED_STATE_INVALID: "..trackType.." "..track.." returned "..type(enabled)..
+          " "..tostring(enabled)..(enabledErr and ("; "..tostring(enabledErr)) or "")
+      end
+      state.enabled[trackType][track]=enabled
+      local trackName,nameErr=call(timeline,"GetTrackName",trackType,track)
+      if type(trackName)~="string" then
+        return nil,"TRACK_NAME_INVALID: "..trackType.." "..track.." returned "..type(trackName)..
+          " "..tostring(trackName)..(nameErr and ("; "..tostring(nameErr)) or "")
+      end
+      state.names[trackType][track]=trackName
+      local items,listErr=track_items(timeline,trackType,track)
+      if not items then return nil,listErr end
+      for index,item in ipairs(items) do
+        local id,idErr=item_id(item,trackType.." "..track.." item "..tostring(index))
+        if not id then return nil,idErr end
+        if state.items[id] then return nil,"TRACK_ID_COLLISION: duplicate TimelineItem UUID "..id end
+        local start,finish,posErr=item_bounds(item,trackType.." "..track.." item "..id)
+        if not start then return nil,posErr end
+        state.items[id]={track_type=trackType,track_index=track,start=start,finish=finish}
+        state.maxend=math.max(state.maxend or finish,finish)
+      end
     end
   end
-  return {items=before,count=tracks,maxend=maxend}
+  return state
 end
-local function verify_preserved(timeline,baseline)
-  local present,err=track_snapshot(timeline)
-  if not present then return nil,err end
-  for id,old in pairs(baseline.items) do
-    local now=present.items[id]
-    if not now or now.start~=old.start or now.finish~=old.finish then
-      return nil,"EXTERNAL_TIMELINE_CHANGED: existing editorial clip changed position or vanished"
+local function compare_timeline(timeline,before,allowed_new_id)
+  local after,err=snapshot_timeline(timeline)
+  if not after then return nil,err end
+  for _,trackType in ipairs(TRACK_TYPES) do
+    if after.counts[trackType]~=before.counts[trackType] then
+      return nil,"EXTERNAL_TIMELINE_CHANGED: "..trackType.." track count changed from "..
+        tostring(before.counts[trackType]).." to "..tostring(after.counts[trackType])
     end
+    for track=1,before.counts[trackType] do
+      if after.locks[trackType][track]~=before.locks[trackType][track] then
+        return nil,"EXTERNAL_TIMELINE_CHANGED: lock state changed on "..trackType.." "..track
+      end
+      if after.enabled[trackType][track]~=before.enabled[trackType][track] then
+        return nil,"EXTERNAL_TIMELINE_CHANGED: enabled state changed on "..trackType.." "..track
+      end
+      if after.names[trackType][track]~=before.names[trackType][track] then
+        return nil,"EXTERNAL_TIMELINE_CHANGED: track name changed on "..trackType.." "..track
+      end
+    end
+  end
+  for frameId,oldSignature in pairs(before.markers or {}) do
+    if after.markers[frameId]~=oldSignature then
+      return nil,"EXTERNAL_TIMELINE_CHANGED: timeline marker changed or vanished at offset "..tostring(frameId)
+    end
+  end
+  for frameId,_ in pairs(after.markers or {}) do
+    if not (before.markers or {})[frameId] then
+      return nil,"EXTERNAL_TIMELINE_CHANGED: unexpected timeline marker at offset "..tostring(frameId)
+    end
+  end
+  for id,old in pairs(before.items) do
+    local now=after.items[id]
+    if not now then return nil,"EXTERNAL_TIMELINE_CHANGED: existing item vanished: "..id end
+    if now.track_type~=old.track_type or now.track_index~=old.track_index or
+       now.start~=old.start or now.finish~=old.finish then
+      return nil,"EXTERNAL_TIMELINE_CHANGED: existing item moved: "..id
+    end
+  end
+  for id,_ in pairs(after.items) do
+    if not before.items[id] and id~=allowed_new_id then
+      return nil,"EXTERNAL_TIMELINE_CHANGED: unexpected new item: "..id
+    end
+  end
+  return after
+end
+
+local function project_context(resolve)
+  local _,rerr=require_handle(resolve,"Resolve context","GetProjectManager")
+  if rerr then return nil,"RESOLVE_CONTEXT_INVALID: "..rerr end
+  local manager,err=strict(resolve,"GetProjectManager")
+  if not manager then return nil,"PROJECT_MANAGER_UNAVAILABLE: "..tostring(err) end
+  manager,err=require_handle(manager,"GetProjectManager","GetCurrentProject")
+  if not manager then return nil,err end
+  local project,perr=strict(manager,"GetCurrentProject")
+  if not project then return nil,"NO_PROJECT: open a Resolve project ("..tostring(perr)..")" end
+  project,perr=require_handle(project,"GetCurrentProject","GetCurrentTimeline")
+  if not project then return nil,perr end
+  return {project=project}
+end
+local function ensure_timeline(ctx)
+  local timeline,err=call(ctx.project,"GetCurrentTimeline")
+  if err then return nil,"TIMELINE_ACCESS_FAILED: "..tostring(err) end
+  if timeline~=nil and timeline~=false then
+    local checked,invalid=require_handle(timeline,"GetCurrentTimeline","GetTrackCount")
+    if not checked then return nil,invalid end
+    ctx.timeline=timeline
+    return timeline
+  end
+  local mediaPool,merr=strict(ctx.project,"GetMediaPool")
+  if not mediaPool then return nil,"NO_MEDIA_POOL: "..tostring(merr) end
+  mediaPool,merr=require_handle(mediaPool,"GetMediaPool","CreateEmptyTimeline")
+  if not mediaPool then return nil,merr end
+  ctx.media_pool=mediaPool
+  local count=call(ctx.project,"GetTimelineCount")
+  local name="CartoRig Scenes"..(type(count)=="number" and count>0 and (" "..tostring(count+1)) or "")
+  local created,cerr=strict(ctx.media_pool,"CreateEmptyTimeline",name)
+  if not created then return nil,"TIMELINE_CREATE_FAILED: "..tostring(cerr) end
+  created,cerr=require_handle(created,"CreateEmptyTimeline","GetTrackCount")
+  if not created then return nil,cerr end
+  ctx.timeline=created
+  ctx.created_timeline=true
+  local selected,serr=call(ctx.project,"SetCurrentTimeline",created)
+  if selected~=true then
+    return nil,"TIMELINE_SELECT_FAILED: "..tostring(serr)
+  end
+  return created
+end
+local function ensure_video_track(ctx)
+  local count,err=call(ctx.timeline,"GetTrackCount","video")
+  if type(count)~="number" then return nil,"TRACK_COUNT_INVALID: video: "..tostring(err) end
+  if count>0 then return true end
+  local added,aerr=call(ctx.timeline,"AddTrack","video")
+  if added~=true then return nil,"VIDEO_TRACK_REQUIRED: Resolve refused AddTrack(video): "..tostring(aerr) end
+  local after=call(ctx.timeline,"GetTrackCount","video")
+  if after~=1 then return nil,"VIDEO_TRACK_REQUIRED: expected one video track after AddTrack, got "..tostring(after) end
+  ctx.added_video_track=1
+  return true
+end
+
+local function save_marks(timeline)
+  local raw,err=call(timeline,"GetMarkInOut")
+  if raw==nil and err then return nil,"MARK_STATE_UNAVAILABLE: "..tostring(err) end
+  local marks,dictErr=api.named_dict(raw or {},"GetMarkInOut",{video=true,audio=true})
+  if not marks then return nil,dictErr end
+  for kind,range in pairs(marks) do
+    local normalized,rangeErr=api.named_dict(range,"GetMarkInOut."..kind,{["in"]=true,["out"]=true})
+    if not normalized then return nil,rangeErr end
+    if type(normalized["in"])~="number" or type(normalized["out"])~="number" then
+      return nil,"MARK_STATE_INVALID: "..tostring(kind).." mark range is incomplete"
+    end
+    marks[kind]=normalized
+  end
+  return marks
+end
+local function mark_states_equal(a,b)
+  for _,kind in ipairs({"video","audio"}) do
+    local left=a and a[kind] or nil
+    local right=b and b[kind] or nil
+    if (left==nil)~=(right==nil) then return false end
+    if left and (left["in"]~=right["in"] or left["out"]~=right["out"]) then return false end
   end
   return true
 end
+local function restore_marks(timeline,marks)
+  local observed,observedErr=save_marks(timeline)
+  if not observed then return nil,observedErr end
+  if mark_states_equal(marks or {},observed) then return true end
+  for _,kind in ipairs({"video","audio"}) do
+    local desired=marks and marks[kind] or nil
+    local current=observed and observed[kind] or nil
+    if desired==nil and current~=nil then
+      local cleared,clearErr=call(timeline,"ClearMarkInOut",kind)
+      if cleared~=true then
+        return nil,"MARK_RESTORE_FAILED: ClearMarkInOut("..kind.."): "..tostring(clearErr)
+      end
+    elseif desired~=nil and (current==nil or current["in"]~=desired["in"] or current["out"]~=desired["out"]) then
+      local restored,restoreErr=call(timeline,"SetMarkInOut",desired["in"],desired["out"],kind)
+      if restored~=true then
+        return nil,"MARK_RESTORE_FAILED: SetMarkInOut("..kind.."): "..tostring(restoreErr)
+      end
+    end
+  end
+  local readback,readbackErr=save_marks(timeline)
+  if not readback then return nil,readbackErr end
+  if not mark_states_equal(marks or {},readback) then
+    return nil,"MARK_RESTORE_FAILED: readback differs from pre-transaction In/Out state"
+  end
+  return true
+end
+local function clear_video_marks(timeline,marks)
+  if not (marks and marks.video) then return true end
+  local cleared,err=call(timeline,"ClearMarkInOut","video")
+  if cleared~=true then return nil,"MARK_CLEAR_FAILED: "..tostring(err) end
+  return true
+end
+
+local function rollback_context(ctx,item)
+  local problems={}
+  if item and ctx.timeline then
+    local removed,err=call(ctx.timeline,"DeleteClips",{item},false)
+    if removed~=true then problems[#problems+1]="new clip not removed: "..tostring(err) end
+  end
+  if not ctx.created_timeline and ctx.timeline and ctx.rollback_baseline then
+    -- Remove only empty tracks beyond the pre-transaction count. This covers
+    -- both CartoRig's first video track and any empty track auto-created by Resolve.
+    for _,trackType in ipairs(TRACK_TYPES) do
+      local expected=ctx.rollback_baseline.counts[trackType] or 0
+      local current,countErr=call(ctx.timeline,"GetTrackCount",trackType)
+      if type(current)~="number" then
+        problems[#problems+1]="cannot read "..trackType.." track count during rollback: "..tostring(countErr)
+      else
+        for index=current,expected+1,-1 do
+          local items,itemErr=track_items(ctx.timeline,trackType,index)
+          local empty=items~=nil and #items==0
+          if empty then
+            local removed,removeErr=call(ctx.timeline,"DeleteTrack",trackType,index)
+            if removed~=true then
+              problems[#problems+1]="extra "..trackType.." track "..index.." not removed: "..tostring(removeErr)
+            end
+          else
+            problems[#problems+1]="extra "..trackType.." track "..index.." retained because it is non-empty or unreadable: "..tostring(itemErr)
+          end
+        end
+      end
+    end
+    -- Restore metadata on tracks that existed before the transaction.
+    for _,trackType in ipairs(TRACK_TYPES) do
+      for index=1,(ctx.rollback_baseline.counts[trackType] or 0) do
+        local expectedLock=ctx.rollback_baseline.locks[trackType][index]
+        local currentLock,lockErr=call(ctx.timeline,"GetIsTrackLocked",trackType,index)
+        if type(currentLock)~="boolean" then
+          problems[#problems+1]="cannot read lock state on "..trackType.." "..index..": "..tostring(lockErr)
+        elseif currentLock~=expectedLock then
+          local restored,restoreErr=call(ctx.timeline,"SetTrackLock",trackType,index,expectedLock)
+          if restored~=true then
+            problems[#problems+1]="lock not restored on "..trackType.." "..index..": "..tostring(restoreErr)
+          end
+        end
+        local expectedEnabled=ctx.rollback_baseline.enabled[trackType][index]
+        local currentEnabled,enabledErr=call(ctx.timeline,"GetIsTrackEnabled",trackType,index)
+        if type(currentEnabled)~="boolean" then
+          problems[#problems+1]="cannot read enabled state on "..trackType.." "..index..": "..tostring(enabledErr)
+        elseif currentEnabled~=expectedEnabled then
+          local restored,restoreErr=call(ctx.timeline,"SetTrackEnable",trackType,index,expectedEnabled)
+          if restored~=true then
+            problems[#problems+1]="enabled state not restored on "..trackType.." "..index..": "..tostring(restoreErr)
+          end
+        end
+        local expectedName=ctx.rollback_baseline.names[trackType][index]
+        local currentName,nameErr=call(ctx.timeline,"GetTrackName",trackType,index)
+        if type(currentName)~="string" then
+          problems[#problems+1]="cannot read track name on "..trackType.." "..index..": "..tostring(nameErr)
+        elseif currentName~=expectedName then
+          local restored,restoreErr=call(ctx.timeline,"SetTrackName",trackType,index,expectedName)
+          if restored~=true then
+            problems[#problems+1]="track name not restored on "..trackType.." "..index..": "..tostring(restoreErr)
+          end
+        end
+      end
+    end
+  end
+  -- Existing timelines must be restored before any verification. A timeline
+  -- created solely for this failed command is deleted instead of being edited.
+  if not ctx.created_timeline and ctx.timeline and ctx.original_marks then
+    local ok,err=restore_marks(ctx.timeline,ctx.original_marks)
+    if not ok then problems[#problems+1]=err end
+  end
+  if not ctx.created_timeline and ctx.timeline and type(ctx.original_timecode)=="string" then
+    local editOk,editErr=call(ctx.resolve,"OpenPage","edit")
+    if editOk~=true then
+      problems[#problems+1]="cannot enter Edit page to restore playhead: "..tostring(editErr)
+    else
+      local ok,err=call(ctx.timeline,"SetCurrentTimecode",ctx.original_timecode)
+      if ok~=true then problems[#problems+1]="playhead not restored: "..tostring(err) end
+    end
+  end
+  if not ctx.created_timeline and ctx.timeline and ctx.rollback_baseline then
+    local restored,err=compare_timeline(ctx.timeline,ctx.rollback_baseline,nil)
+    if not restored then problems[#problems+1]="external timeline not restored: "..tostring(err) end
+  end
+  if ctx.created_timeline and ctx.media_pool and ctx.timeline then
+    local deleted,err=call(ctx.media_pool,"DeleteTimelines",{ctx.timeline})
+    if deleted~=true then problems[#problems+1]="created timeline not deleted: "..tostring(err) end
+  end
+  if ctx.resolve and type(ctx.original_page)=="string" then
+    local ok,err=call(ctx.resolve,"OpenPage",ctx.original_page)
+    if ok~=true then problems[#problems+1]="page not restored: "..tostring(err) end
+  end
+  return #problems==0,table.concat(problems,"; ")
+end
+local function fail(ctx,item,reason)
+  local ok,details=rollback_context(ctx or {},item)
+  if ok then return nil,reason.."; transaction rolled back" end
+  return nil,reason.."; ROLLBACK_INCOMPLETE: "..details
+end
+
 local function access_comp(item)
+  local valid,invalid=require_handle(item,"TimelineItem","GetFusionCompCount")
+  if not valid then return nil,invalid end
   local n,err=call(item,"GetFusionCompCount")
   if type(n)~="number" or n<1 then
     return nil,"FUSION_COMP_MISSING: inserted item has no Fusion composition; "..tostring(err)
   end
   local comp,cerr=call(item,"GetFusionCompByIndex",1)
-  if not comp or not method(comp,"GetToolList") then
-    return nil,"FUSION_COMP_MISSING: cannot open Fusion comp by index 1; "..tostring(cerr)
-  end
+  if not comp then return nil,"FUSION_COMP_MISSING: cannot open Fusion comp by index 1; "..tostring(cerr) end
+  local checked,invalidComp=require_handle(comp,"GetFusionCompByIndex","GetToolList")
+  if not checked then return nil,invalidComp end
   return comp
-end
-local function cleanup_only_new(timeline,item)
-  local removed,err=call(timeline,"DeleteClips",{item},false)
-  return removed==true,removed==true and nil or ("NEW_CLIP_RETAINED: cannot safely remove inserted item; "..tostring(err))
-end
-local function result_error(timeline,item,reason)
-  if not item then return nil,reason end
-  local removed,report=cleanup_only_new(timeline,item)
-  return nil,reason..(removed and "; newly inserted clip removed" or "; "..tostring(report))
 end
 
 function M.create(resolve,title,opts)
   opts=opts or {}
   if type(title)~="string" or title:match("^%s*$") then return nil,"INVALID_TITLE: Scene title is required" end
-  local project,timeline,created,err=project_and_timeline(resolve)
-  if not project then return nil,err end
-  local previous,serr=track_snapshot(timeline)
-  if not previous then return nil,serr end
-  local start=call(timeline,"GetStartFrame")
-  local ending=call(timeline,"GetEndFrame")
-  local starttc=call(timeline,"GetStartTimecode")
+  local base,err=project_context(resolve)
+  if not base then return nil,err end
+  local ctx={resolve=resolve,project=base.project}
+  local originalPage,pageErr=call(resolve,"GetCurrentPage")
+  if type(originalPage)~="string" then
+    return nil,"PAGE_STATE_UNAVAILABLE: cannot capture editor page before transaction: "..tostring(pageErr or originalPage)
+  end
+  ctx.original_page=originalPage
+  local timeline,terr=ensure_timeline(ctx)
+  if not timeline then return fail(ctx,nil,terr) end
+  -- Snapshot before CartoRig adds a missing video track. This is the state a
+  -- failed transaction must restore exactly.
+  local rollbackBaseline,snapErr=snapshot_timeline(timeline)
+  if not rollbackBaseline then return fail(ctx,nil,snapErr) end
+  ctx.rollback_baseline=rollbackBaseline
+  local okTrack,trackErr=ensure_video_track(ctx)
+  if not okTrack then return fail(ctx,nil,trackErr) end
+  -- Working baseline includes any video track that a successful Scene needs.
+  local before,workErr=snapshot_timeline(timeline)
+  if not before then return fail(ctx,nil,workErr) end
+  ctx.baseline=before
+  local start=before.timeline_start
   local fps=call(timeline,"GetSetting","timelineFrameRate")
-  if type(start)~="number" or type(ending)~="number" or ending<start then
-    return nil,"TIMELINE_GEOMETRY_UNAVAILABLE: no reliable frame positions"
+  local starttc=call(timeline,"GetStartTimecode")
+  if type(start)~="number" or not frame_base(fps) or type(starttc)~="string" then
+    return fail(ctx,nil,"TIMELINE_GEOMETRY_UNAVAILABLE: start/fps/timecode unavailable")
   end
-  local target=math.max(start,ending,previous.maxend or start)
-  local targettc,te=M.timecode_add(starttc,target-start,fps)
-  if not targettc then return nil,te end
-  if not method(resolve,"OpenPage") then return nil,"RESOLVE_PAGE_API_UNAVAILABLE" end
-  -- SetCurrentTimecode is documented for Edit/Color/etc; not for the Fusion page.
-  local page=call(resolve,"GetCurrentPage")
-  local switched=call(resolve,"OpenPage","edit")
-  if switched~=true then return nil,"EDIT_PAGE_UNAVAILABLE: cannot position playhead safely" end
-  -- GetCurrentTimecode is not guaranteed on the Fusion page. Read it only
-  -- after switching to Edit, including on the 2nd/3rd/... Create Scene click.
-  local currenttc=call(timeline,"GetCurrentTimecode")
-  if type(currenttc)~="string" then
-    return nil,"TIMELINE_PLAYHEAD_UNAVAILABLE: no readable Edit-page timecode"
+  local target=before.maxend or start
+  if target<start then target=start end
+  local targettc,tcErr=M.timecode_add(starttc,target-start,fps)
+  if not targettc then return fail(ctx,nil,tcErr) end
+  if not method(resolve,"OpenPage") then return fail(ctx,nil,"RESOLVE_PAGE_API_UNAVAILABLE") end
+  local switched,swErr=call(resolve,"OpenPage","edit")
+  if switched~=true then return fail(ctx,nil,"EDIT_PAGE_UNAVAILABLE: "..tostring(swErr)) end
+  ctx.original_timecode=call(timeline,"GetCurrentTimecode")
+  if type(ctx.original_timecode)~="string" then
+    return fail(ctx,nil,"TIMELINE_PLAYHEAD_UNAVAILABLE: no readable Edit-page timecode")
   end
-  local seek=call(timeline,"SetCurrentTimecode",targettc)
-  if seek~=true then
-    if type(page)=="string" then pcall(resolve.OpenPage,resolve,page) end
-    return nil,"TIMELINE_SEEK_FAILED: cannot append safely at "..targettc
-  end
+  local marks,markErr=save_marks(timeline)
+  if not marks then return fail(ctx,nil,markErr) end
+  ctx.original_marks=marks
+  local cleared,clearErr=clear_video_marks(timeline,ctx.original_marks)
+  if not cleared then return fail(ctx,nil,clearErr) end
+  local seek,seekErr=call(timeline,"SetCurrentTimecode",targettc)
+  if seek~=true then return fail(ctx,nil,"TIMELINE_SEEK_FAILED: "..tostring(seekErr)) end
   local actual=call(timeline,"GetCurrentTimecode")
-  if actual~=targettc then
-    return nil,"TIMELINE_SEEK_UNVERIFIED: target "..targettc.." got "..tostring(actual)
+  if not equivalent_tc(actual,targettc,fps) then
+    return fail(ctx,nil,"TIMELINE_SEEK_UNVERIFIED: target "..targettc.." got "..tostring(actual))
   end
   local item,insertErr=call(timeline,"InsertFusionCompositionIntoTimeline")
-  if not item then return nil,"FUSION_INSERT_FAILED: "..tostring(insertErr) end
-  local at=call(item,"GetStart")
-  local finish=call(item,"GetEnd")
-  if type(at)~="number" or type(finish)~="number" or at<target or finish<=at then
-    return result_error(timeline,item,"FUSION_INSERT_POSITION_INVALID: insertion outside append boundary")
+  if not item then
+    return fail(ctx,nil,"FUSION_INSERT_FAILED: Resolve rejected insertion (destination video track may be locked/unavailable): "..tostring(insertErr))
   end
-  local retained,why=verify_preserved(timeline,previous)
-  if not retained then return result_error(timeline,item,why) end
-  -- Materialize the inserted Fusion Composition in the host BEFORE inspecting
-  -- MediaOut. Resolve may create its default MediaOut only on Fusion page entry;
-  -- authoring beforehand could create a second, unconnected output.
-  local opened=call(resolve,"OpenPage","fusion")
-  if opened~=true then
-    return result_error(timeline,item,"FUSION_PAGE_UNAVAILABLE: cannot initialize default MediaOut")
+  local itemId,idErr=item_id(item,"new Fusion Composition")
+  if not itemId then return fail(ctx,item,idErr) end
+  if before.items[itemId] then return fail(ctx,item,"FUSION_INSERT_ID_COLLISION: "..itemId) end
+  local at,finish,posErr=item_bounds(item,"new Fusion Composition")
+  if not at then return fail(ctx,item,posErr) end
+  if at~=target or finish<=at then
+    return fail(ctx,item,"FUSION_INSERT_POSITION_INVALID: expected start "..tostring(target)..
+      ", got "..tostring(at).."-"..tostring(finish))
   end
-  local comp,cerr=access_comp(item)
-  if not comp then return result_error(timeline,item,cerr) end
-  local inspect,ie=factory.inspect(comp)
-  if not inspect then return result_error(timeline,item,"NEW_COMP_INVALID: "..tostring(ie)) end
-  if inspect.has_scene then return result_error(timeline,item,"NEW_COMP_ALREADY_HAS_SCENE") end
-  -- Protect the canonical MediaOut of a newly created empty Fusion composition.
-  local result,nerr=factory.create_scene(comp,title,{require_existing_mediaout=opts.require_existing_mediaout~=false,
-    localappdata=opts.localappdata})
-  if not result then return result_error(timeline,item,nerr) end
-  -- A human-readable clip name, if supported, is optional. UUID is in comp metadata.
-  if method(item,"SetName") then pcall(item.SetName,item,"CartoRig - "..title) end
-  -- Keep playhead within newly created item so the editor sees the result in Fusion.
-  local scene_tc=M.timecode_add(starttc,at-start,fps)
-  if scene_tc then pcall(timeline.SetCurrentTimecode,timeline,scene_tc) end
+  local after,preserveErr=compare_timeline(timeline,before,itemId)
+  if not after then return fail(ctx,item,preserveErr) end
+  local inserted=after.items[itemId]
+  if not inserted then
+    return fail(ctx,item,"FUSION_INSERT_UNLOCATED: inserted UUID was not found in timeline tracks")
+  end
+  local trackType,trackIndex=inserted.track_type,inserted.track_index
+  if trackType~="video" or trackIndex<1 or trackIndex>before.counts.video then
+    return fail(ctx,item,"FUSION_INSERT_WRONG_TRACK: landed on "..tostring(trackType).." "..tostring(trackIndex))
+  end
+  local restored,restoreErr=restore_marks(timeline,ctx.original_marks)
+  if not restored then return fail(ctx,item,restoreErr) end
+  local opened,openErr=call(resolve,"OpenPage","fusion")
+  if opened~=true then return fail(ctx,item,"FUSION_PAGE_UNAVAILABLE: "..tostring(openErr)) end
+  local comp,compErr=access_comp(item)
+  if not comp then return fail(ctx,item,compErr) end
+  local inspect,inspectErr=factory.inspect(comp)
+  if not inspect then return fail(ctx,item,"NEW_COMP_INVALID: "..tostring(inspectErr)) end
+  if inspect.has_scene then return fail(ctx,item,"NEW_COMP_ALREADY_HAS_SCENE") end
+  local result,nodeErr=factory.create_scene(comp,title,{disallow_new_mediaout=true,localappdata=opts.localappdata})
+  if not result then return fail(ctx,item,nodeErr) end
+  local warnings={}
+  if method(item,"SetName") then
+    local renamed,renameErr=call(item,"SetName","CartoRig - "..title)
+    local observedName=call(item,"GetName")
+    if renamed~=true or observedName~="CartoRig - "..title then
+      warnings[#warnings+1]="Timeline clip name could not be verified: "..tostring(renameErr or observedName)
+    end
+  else
+    warnings[#warnings+1]="Timeline clip naming API unavailable; persisted Scene title remains authoritative"
+  end
+  -- Final editorial verification after Fusion graph authoring. Only the new
+  -- TimelineItem may differ from the pre-transaction snapshot.
+  local finalState,finalErr=compare_timeline(timeline,before,itemId)
+  if not finalState then return fail(ctx,item,"POST_AUTHORING_TIMELINE_CHANGED: "..tostring(finalErr)) end
+  local finalMarks,finalMarkErr=save_marks(timeline)
+  if not finalMarks then return fail(ctx,item,finalMarkErr) end
+  if not mark_states_equal(ctx.original_marks or {},finalMarks) then
+    return fail(ctx,item,"POST_AUTHORING_MARK_STATE_CHANGED: timeline In/Out differs after Fusion authoring")
+  end
+  -- Insertion already happened at the desired playhead. Do not call
+  -- SetCurrentTimecode while Fusion is active; Resolve documents it for Edit-like pages.
   return {
-    scene_id=result.scene_id,
-    objects=result.objects,
-    timeline_item=item,
-    composition=comp,
-    start_frame=at,
-    end_frame=finish,
-    new_timeline=created,
-    fusion_page_opened=true,
-    message="Scene created in its own Fusion Composition; host Viewer and save/reopen require verification",
+    scene_id=result.scene_id,title=result.title or title,objects=result.objects,
+    timeline_item=item,composition=comp,
+    start_frame=at,end_frame=finish,track_index=trackIndex,new_timeline=ctx.created_timeline==true,
+    fusion_page_opened=true,warnings=warnings,
+    message="Scene created in its own Fusion Composition; host Viewer and save/reopen require verification"
   }
 end
+
 function M.list_scenes(resolve)
-  local manager=call(resolve,"GetProjectManager")
-  local project=manager and call(manager,"GetCurrentProject")
-  local timeline=project and call(project,"GetCurrentTimeline")
-  if not timeline then return {},nil end
-  local total,err=call(timeline,"GetTrackCount","video")
-  if type(total)~="number" then return nil,"TRACK_ACCESS_FAILED: "..tostring(err) end
-  local results={}
+  local base,err=project_context(resolve)
+  if not base then return nil,err end
+  local timeline,terr=call(base.project,"GetCurrentTimeline")
+  if terr then return nil,"TIMELINE_ACCESS_FAILED: "..tostring(terr) end
+  if timeline==nil or timeline==false then return {},nil end
+  timeline,terr=require_handle(timeline,"GetCurrentTimeline","GetTrackCount")
+  if not timeline then return nil,terr end
+  local total,tErr=call(timeline,"GetTrackCount","video")
+  if type(total)~="number" or total<0 or total~=math.floor(total) then
+    return nil,"TRACK_ACCESS_FAILED: expected video count, got "..type(total).." ("..tostring(tErr or total)..")"
+  end
+  local results,warnings={},{}
   for track=1,total do
-    local clips=call(timeline,"GetItemListInTrack","video",track)
-    if type(clips)=="table" then
-      for _,item in pairs(clips) do
-        local number=call(item,"GetFusionCompCount")
-        if type(number)=="number" and number>=1 then
-          local comp=call(item,"GetFusionCompByIndex",1)
-          if comp then
-            local state=factory.inspect(comp)
-            if state and state.has_scene then
-              results[#results+1]={
-                scene_id=state.scene_id,
-                name=call(item,"GetName") or "CartoRig Scene",
-                track=track,
-                start_frame=call(item,"GetStart") or 0,
-                objects=state.objects
-              }
+    local clips,clipErr=track_items(timeline,"video",track)
+    if not clips then return nil,"TRACK_LIST_FAILED: V"..track..": "..tostring(clipErr) end
+    for _,item in ipairs(clips) do
+      local itemHandle,itemHandleErr=require_handle(item,"GetItemListInTrack","GetFusionCompCount")
+      if not itemHandle then return nil,itemHandleErr end
+      local count,numErr=call(item,"GetFusionCompCount")
+      if type(count)=="number" and count>=1 then
+        local comp,cerr=call(item,"GetFusionCompByIndex",1)
+        if comp then
+          local compHandle,compHandleErr=require_handle(comp,"GetFusionCompByIndex","GetToolList")
+          if not compHandle then return nil,compHandleErr end
+          local state,inspectErr=factory.inspect(comp)
+          if state and state.has_scene then
+            local sceneStart,_,positionError=item_bounds(item,"scene list V"..track)
+            if sceneStart then
+              results[#results+1]={scene_id=state.scene_id,name=state.title or call(item,"GetName") or "CartoRig Scene",
+                track=track,start_frame=sceneStart,objects=state.objects}
+            else
+              warnings[#warnings+1]=positionError
             end
+          elseif inspectErr then
+            warnings[#warnings+1]="Skipped Fusion composition: "..tostring(inspectErr)
           end
+        elseif cerr then
+          warnings[#warnings+1]="Cannot inspect Fusion composition: "..tostring(cerr)
         end
+      elseif numErr then
+        warnings[#warnings+1]="Cannot read Fusion comp count: "..tostring(numErr)
       end
     end
   end
@@ -276,20 +652,22 @@ function M.list_scenes(resolve)
     if a.start_frame~=b.start_frame then return a.start_frame<b.start_frame end
     return a.track<b.track
   end)
-  return results
+  return results,#warnings>0 and table.concat(warnings," | ") or nil
 end
 
 function M.current_scene(resolve)
-  local manager=call(resolve,"GetProjectManager")
-  local project=manager and call(manager,"GetCurrentProject")
-  local timeline=project and call(project,"GetCurrentTimeline")
-  if not timeline then return nil,"NO_TIMELINE" end
-  local item=call(timeline,"GetCurrentVideoItem")
-  if not item then return nil,"NO_ACTIVE_CLIP" end
-  local comp=access_comp(item)
-  if not comp then return nil,"NO_ACTIVE_FUSION_COMP" end
-  local scene,err=factory.inspect(comp)
-  if not scene then return nil,err end
+  local base,err=project_context(resolve)
+  if not base then return nil,err end
+  local timeline,terr=call(base.project,"GetCurrentTimeline")
+  if not timeline then return nil,"NO_TIMELINE: "..tostring(terr) end
+  timeline,terr=require_handle(timeline,"GetCurrentTimeline","GetCurrentVideoItem")
+  if not timeline then return nil,terr end
+  local item,itemErr=call(timeline,"GetCurrentVideoItem")
+  if not item then return nil,"NO_ACTIVE_CLIP: "..tostring(itemErr) end
+  local comp,compErr=access_comp(item)
+  if not comp then return nil,compErr end
+  local scene,inspectErr=factory.inspect(comp)
+  if not scene then return nil,inspectErr end
   if not scene.has_scene then return nil,"ACTIVE_CLIP_IS_NOT_CARTORIG" end
   return {composition=comp,objects=scene.objects,scene_id=scene.scene_id,timeline_item=item}
 end

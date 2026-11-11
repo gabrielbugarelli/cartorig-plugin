@@ -1,4 +1,4 @@
--- Single stable Fusion Scripts > Comp launcher for cartorig-dev.
+-- Single stable Workspace > Scripts > Utility launcher for cartorig-dev.
 -- Loads the UI from the managed app directory and explicitly reports all failures,
 -- including the UI returning early without raising an exception.
 local base=os.getenv("LOCALAPPDATA")

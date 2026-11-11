@@ -33,6 +33,18 @@ class LuaRuntimeIntegration(unittest.TestCase):
     def test_single_menu_launcher_fail_safe(self):
         self.invoke("tests/lua/test_launcher.lua")
 
+    def test_blackmagic_api_contract_boundary(self):
+        self.invoke("tests/lua/test_blackmagic_api.lua")
+
+    def test_fusion_contract_boundary(self):
+        self.invoke("tests/lua/test_fusion_contract.lua")
+
+    def test_resolve_handle_type_safety_regressions(self):
+        self.invoke("tests/lua/test_resolve_api_handles.lua")
+
+    def test_scene_ui_uses_valid_resolve_handle_for_five_clicks(self):
+        self.invoke("tests/lua/test_scene_ui_dispatch.lua")
+
     def test_factory_transactions_and_external_node_protection(self):
         self.invoke("tests/lua/test_node_factory.lua")
 

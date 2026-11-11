@@ -39,34 +39,51 @@ function domain.slug(text)
   return table.concat(parts)
 end
 
--- Non-security random UUID v4 for persistent object identity. Generated UUIDs
--- are checked for collision against the whole scene before being committed.
-local seeded = false
-local function seed()
-  if not seeded then
-    local clock = math.floor((os.clock() * 1000000) % 1000000)
-    math.randomseed((os.time() % 2147483647) + clock)
-    for _ = 1, 16 do math.random() end
-    seeded = true
-  end
-end
-function domain.uuid()
-  seed()
-  local chars = {}
-  for i = 1, 32 do chars[i] = string.format("%x", math.random(0, 15)) end
-  chars[13] = "4"
-  chars[17] = string.format("%x", math.random(8, 11))
-  local hex = table.concat(chars)
-  return hex:sub(1,8) .. "-" .. hex:sub(9,12) .. "-" .. hex:sub(13,16) .. "-" ..
-         hex:sub(17,20) .. "-" .. hex:sub(21,32)
-end
-
-function domain.is_uuid(s)
+-- UUID generation is deliberately host-independent. bmd.createuuid is exposed
+-- in some Fusion builds but is not part of the Blackmagic documentation used by
+-- CartoRig, so production identity must not depend on it. This local Park-Miller
+-- PRNG avoids changing Lua's process-global math.random state.
+local function valid_uuid(s)
   if type(s) ~= "string" or #s ~= 36 then return false end
   if not s:match("^[0-9a-fA-F%-]+$") then return false end
   return s:sub(9,9) == "-" and s:sub(14,14) == "-" and
          s:sub(19,19) == "-" and s:sub(24,24) == "-" and
          s:sub(15,15) == "4" and s:sub(20,20):match("[89aAbB]") ~= nil
+end
+
+local rng_state=nil
+local function initial_seed()
+  local clock=math.floor((os.clock()*1000000)%2147483646)
+  local address=tostring({}):match("0x(%x+)")
+  local address_part=0
+  if address then
+    -- Only the low 7 hex digits are needed; this stays inside exact Lua-number
+    -- integer range and adds per-runtime variation without exposing the address.
+    address_part=tonumber(address:sub(-7),16) or 0
+  end
+  local seed=(os.time()%2147483646 + clock + address_part)%2147483646
+  return seed+1
+end
+local function next_random()
+  if not rng_state then rng_state=initial_seed() end
+  rng_state=(rng_state*48271)%2147483647
+  return rng_state
+end
+local function nibble()
+  return next_random()%16
+end
+function domain.uuid()
+  local chars={}
+  for i=1,32 do chars[i]=string.format("%x",nibble()) end
+  chars[13]="4"
+  chars[17]=string.format("%x",8+(nibble()%4))
+  local hex=table.concat(chars)
+  return hex:sub(1,8).."-"..hex:sub(9,12).."-"..hex:sub(13,16).."-"..
+         hex:sub(17,20).."-"..hex:sub(21,32)
+end
+
+function domain.is_uuid(s)
+  return valid_uuid(s)
 end
 
 local function unique_id(used)
