@@ -42,6 +42,11 @@ end
 
 local function frame_base(fps)
   local n=tonumber(fps)
+  if not n and type(fps)=="string" then
+    -- Resolve can expose settings such as "29.97 DF". Parse only a leading
+    -- numeric rate; drop/non-drop is determined by the actual timecode separator.
+    n=tonumber(fps:match("^%s*(%d+%.?%d*)"))
+  end
   if not n or n<1 or n>120 then return nil end
   return math.floor(n+0.5),n
 end
