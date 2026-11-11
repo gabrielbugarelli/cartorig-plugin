@@ -30,7 +30,7 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('Rename "$R0\\cartorig-dev.lua" "$R0\\cartorig-dev.lua.migrated-060"',s)
         self.assertLess(s.index('Rename "$R2\\cartorig-dev.lua.pending"'),
                         s.index('Rename "$R0\\cartorig-dev.lua" "$R0\\cartorig-dev.lua.migrated-060"'))
-        self.assertIn('DisplayVersion" "0.6.0"',s)
+        self.assertIn('DisplayVersion" "0.6.1"',s)
 
     def test_installer_dependencies_and_cleanup(self):
         s=self.nsi
@@ -72,9 +72,31 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('fusion.UIManager',s)
         self.assertIn('status~=true',self.launcher)
 
+    def test_resolve_api_receivers_are_validated_before_indexing(self):
+        service=(ROOT/"src/CartoRig/timeline_service.lua").read_text(encoding="utf-8")
+        self.assertIn('API_INVALID_RECEIVER:',service)
+        self.assertIn('API_INVALID_HANDLE:',service)
+        self.assertIn('local ok,fn=pcall(function() return o[name] end)',service)
+        self.assertIn('GetProjectManager returned',service) if 'GetProjectManager returned' in service else self.assertIn('require_handle(manager,"GetProjectManager"',service)
+        self.assertIn('require_handle(comp,"GetFusionCompByIndex","GetToolList")',service)
+        self.assertIn('api_method(supplied_resolve,"GetProjectManager")',self.scene)
+        self.assertIn('bmd.scriptapp("Resolve")',self.scene)
+        self.assertIn('RESOLVE_CONTEXT_INVALID:',self.scene)
+
+    def test_historical_buggy_060_upgrade_is_an_actual_fixture(self):
+        current=(ROOT/"src/CartoRig/timeline_service.lua").read_text(encoding="utf-8")
+        prior=(ROOT/"src/CartoRig/legacy_timeline_service_0.6.0.lua").read_text(encoding="utf-8")
+        self.assertIn('return o and type(o[name])=="function"',prior)
+        self.assertNotIn('return o and type(o[name])=="function"',current)
+        fixture=(ROOT/"packaging/legacy-preview-0.6.0.nsi").read_text(encoding="utf-8")
+        self.assertIn('legacy_timeline_service_0.6.0.lua',fixture)
+        self.assertIn('legacy-scene-ui-0.6.0.lua',fixture)
+        self.assertIn('originalService',self.win)
+        self.assertIn('originalUi',self.win)
+
     def test_windows_package_tests_real_upgrade_layout(self):
         s=self.win
-        for marker in ('legacy-preview-0.5.2.nsi','cartorig-dev-0.6.0-win64.exe',
+        for marker in ('legacy-preview-0.5.2.nsi','legacy-preview-0.6.0.nsi','cartorig-dev-0.6.1-win64.exe',
                        'Get-FileHash','Utility\\cartorig-dev.lua','Comp\\cartorig-dev.lua',
                        'TimelineService mismatch','Not exactly one Scripts menu entry',
                        'Foreign script affected','retention-days: 7'):
