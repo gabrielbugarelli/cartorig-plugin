@@ -178,12 +178,12 @@ jobs:
           Copy-Item -LiteralPath 'src\CartoRig\native_probe.lua' -Destination $oldLib
           $verified = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
           if ($verified.ExitCode -ne 0 -or -not (Test-Path $single)) { throw "Verified legacy cleanup interrupted launcher upgrade" }
-          foreach ($owned in @($old1,$old2,$legacySingle,$oldLib)) {
-            if (Test-Path $owned) { throw "Verified historical CartoRig script not removed: $owned" }
-          }
           $verifiedLog = [IO.File]::ReadAllText($cleanupLogPath)
           Write-Output "Validated legacy cleanup report: $verifiedLog"
           if (Test-Path $oldLib) { Write-Output "Remaining native library hash: $((Get-FileHash -Algorithm SHA256 $oldLib).Hash.ToLowerInvariant())" }
+          foreach ($owned in @($old1,$old2,$legacySingle,$oldLib)) {
+            if (Test-Path $owned) { throw "Verified historical CartoRig script not removed: $owned" }
+          }
           foreach ($historical in @('CartoRig Host Probe.lua','CartoRig Native Integration Probe.lua','CartoRig.lua','CartoRigProbe\native_probe.lua')) {
             if (-not $verifiedLog.Contains("REMOVED_VERIFIED: $historical")) { throw "Missing verified removal evidence: $historical" }
           }
