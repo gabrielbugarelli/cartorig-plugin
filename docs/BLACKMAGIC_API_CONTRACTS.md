@@ -1,0 +1,132 @@
+# Blackmagic API contracts used by CartoRig
+
+This document is a development gate for CartoRig's Resolve/Fusion integration.
+It is not a replacement for Blackmagic documentation.
+
+## Sources and precedence
+
+1. **Authoritative Resolve scripting reference shipped by Blackmagic Design**:
+   `C:\ProgramData\Blackmagic Design\DaVinci Resolve\Support\Developer\Scripting\README.txt`
+   on Windows. Blackmagic's own release documentation directs developers to
+   **Help → Documentation → Developer** for detailed scripting documentation.
+2. **Blackmagic Fusion Scripting Guide and Reference Manual** for Composition/
+   Operator contracts that are not described in the Resolve scripting README.
+3. **Observed Resolve Studio 20.3.1 host evidence**. Observations may clarify
+   binding details that the documentation does not specify, but they never
+   override a documented contract.
+4. Tests and mocks. Mocks must model (1) plus known binding observations from (3);
+   they are never authority for host behavior.
+
+A public mirror of the Blackmagic README snapshot dated 18 Aug 2025 (Resolve
+20.2) is used during cloud review because GitHub Actions does not contain a
+licensed Resolve installation. Before any release claim, the README shipped
+with the target Resolve Studio 20 installation remains authoritative.
+
+## Collection shapes
+
+| API | Blackmagic contract | CartoRig handling |
+| --- | --- | --- |
+| `Timeline.GetItemListInTrack(type,index)` | `[items...]` list | Strict 1-based sequence via `blackmagic_api.sequence`. |
+| `Timeline.GetMarkers()` | `{markers...}` dictionary keyed by frameId | Numeric-key dictionary via `blackmagic_api.numeric_dict`. |
+| `Timeline.GetMarkInOut()` | `{mark}`; keys `video` / `audio` omitted when unset | Closed named dictionary via `blackmagic_api.named_dict`. |
+| `Composition.GetToolList(...)` | table of Tool handles | Table values via `blackmagic_api.table_values`; no numeric-index assumption. |
+
+### Lua binding metadata
+
+Resolve Studio 20.3.1 host evidence shows an internal `__flags` member can be
+present in Lua tables returned by the binding, including the value returned by
+`GetItemListInTrack()`. `__flags` is **not** a documented list/dictionary
+element.
+
+Only the central API boundary recognizes `__flags` as binding metadata. Any
+other public key that violates the documented collection shape fails closed.
+Application code must never special-case `__flags`.
+
+## Resolve contracts used by Create Scene
+
+| Object | Method | Documented contract used |
+| --- | --- | --- |
+| Resolve | `Fusion()` | Returns Fusion object. |
+| Resolve | `GetProjectManager()` | Returns ProjectManager. |
+| Resolve | `OpenPage(pageName)` | Bool; page is one of media/cut/edit/fusion/color/fairlight/deliver. |
+| Resolve | `GetCurrentPage()` | Current page string or None. |
+| ProjectManager | `GetCurrentProject()` | Current Project. |
+| Project | `GetMediaPool()` | MediaPool. |
+| Project | `GetTimelineCount()` | int. |
+| Project | `GetCurrentTimeline()` | current Timeline. |
+| Project | `SetCurrentTimeline(timeline)` | Bool. |
+| MediaPool | `CreateEmptyTimeline(name)` | Timeline. |
+| MediaPool | `DeleteTimelines([timeline])` | Bool. |
+| Timeline | `GetStartFrame()` | int. |
+| Timeline | `GetStartTimecode()` | string. |
+| Timeline | `GetTrackCount(trackType)` | int; type video/audio/subtitle. |
+| Timeline | `AddTrack(trackType,...)` | Bool. |
+| Timeline | `DeleteTrack(trackType,index)` | Bool. |
+| Timeline | `GetTrackName/SetTrackName` | string / Bool. |
+| Timeline | `GetIsTrackEnabled/SetTrackEnable` | Bool / Bool. |
+| Timeline | `GetIsTrackLocked/SetTrackLock` | Bool / Bool. |
+| Timeline | `GetItemListInTrack` | list of TimelineItems. |
+| Timeline | `GetMarkers()` | marker dictionary. |
+| Timeline | `GetMarkInOut/SetMarkInOut/ClearMarkInOut` | mark dictionary / Bool / Bool. |
+| Timeline | `GetCurrentTimecode/SetCurrentTimecode` | string / Bool on Cut, Edit, Color, Fairlight, Deliver. |
+| Timeline | `InsertFusionCompositionIntoTimeline()` | returns TimelineItem. No placement/track/duration parameters are documented. |
+| Timeline | `DeleteClips([items], ripple)` | Bool; ripple defaults false. |
+| TimelineItem | `GetUniqueId()` | unique string ID. |
+| TimelineItem | `GetStart(false)/GetEnd(false)` | integer frame positions when subframe precision is false. |
+| TimelineItem | `GetFusionCompCount()` | int. |
+| TimelineItem | `GetFusionCompByIndex(index)` | Fusion composition; 1-based index. |
+| TimelineItem | `GetName/SetName` | string / Bool. |
+
+## Deliberately unassumed Resolve behavior
+
+The Blackmagic reference documents `InsertFusionCompositionIntoTimeline()`
+without arguments. It does **not** document a destination track parameter,
+duration parameter, or placement algorithm.
+
+CartoRig therefore does not encode those as assumptions:
+
+1. Snapshot protected editorial state.
+2. Enter Edit page before using `SetCurrentTimecode`, as required by the
+   documented page support.
+3. Seek to the calculated append boundary.
+4. Temporarily clear only an existing video In/Out range and restore it.
+5. Call `InsertFusionCompositionIntoTimeline()` with no invented arguments.
+6. Read the returned TimelineItem's UUID/start/end.
+7. Re-scan documented track lists and locate that UUID.
+8. Verify destination, frame position and preservation of every pre-existing
+   clip/track/marker/mark state.
+9. Roll back and report failure if any postcondition differs.
+
+If host behavior changes, this path must fail closed rather than infer a new
+placement rule.
+
+## Fusion contracts used by NodeFactory
+
+| Object | Method | Contract |
+| --- | --- | --- |
+| Composition | `GetToolList([selected][,regid])` | table of Tool handles. |
+| Composition | `StartUndo(name)` | starts one undo event. |
+| Composition | `EndUndo(keep)` | closes event; `false` discards the undo event, it does **not** replace explicit rollback. |
+| Composition | `AddTool(...)` | returns Tool. Coordinate overload is verified from host return and tool attributes. |
+| Operator | `ConnectInput(input,target)` | connect/disconnect; target may be Operator/Output/nil. |
+| Operator | `Delete()` | removes Tool from composition. |
+
+The official historical Fusion manual and current Resolve host differ in
+overload details around `AddTool`. CartoRig's three-argument Lua form
+`AddTool(id,x,y)` is retained because it was directly verified in Resolve
+Studio 20 host probing. The returned object and RegID are always verified;
+failure is never inferred as success.
+
+## Review rule for future API use
+
+A new Resolve/Fusion API dependency is not accepted until all four are present:
+
+1. a row or note in this document identifying the Blackmagic contract;
+2. implementation through the appropriate API boundary module;
+3. a Lua 5.1 regression covering return shape, failure and relevant binding
+   metadata;
+4. host evidence when behavior needed by CartoRig is not specified by the
+   Blackmagic documentation.
+
+CI or mocks can validate the contract adapter and CartoRig logic. They cannot
+turn a licensed Resolve host test into PASS.
