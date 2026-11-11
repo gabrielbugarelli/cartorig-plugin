@@ -54,7 +54,10 @@ local function fake(start_with_timeline)
   local timeline={
     tracks={video={},audio={},subtitle={}},
     seek=clock,created=0,deletes=0,deleted_tracks=0,
-    destination_track=1,marks={video={["in"]=4,["out"]=8}},
+    destination_track=1,marks={
+      video={["in"]=4,["out"]=8},
+      audio={["in"]=2,["out"]=9}
+    },
     timeline_markers={},default_duration=120
   }
   local function to_tc(n)
@@ -268,6 +271,8 @@ for n=1,5 do
   assert(not items[result.timeline_item]);items[result.timeline_item]=true
   assert(timeline.marks.video and timeline.marks.video["in"]==4 and timeline.marks.video["out"]==8,
     "video marks must be restored after each insertion")
+  assert(timeline.marks.audio and timeline.marks.audio["in"]==2 and timeline.marks.audio["out"]==9,
+    "audio marks must remain byte-for-byte equivalent after each insertion")
 end
 assert(timeline.created==5 and project.createdName=="CartoRig Scenes")
 assert(#assert(svc.list_scenes(resolve))==5)
@@ -291,6 +296,7 @@ assert(t2.timeline_markers[900] and t2.timeline_markers[900].name=="Editorial Ma
 assert(audio.start==86420 and audio.finish==87000)
 assert(subtitle.start==86900 and subtitle.finish==87100)
 assert(t2.marks.video and t2.marks.video["in"]==4 and t2.marks.video["out"]==8)
+assert(t2.marks.audio and t2.marks.audio["in"]==2 and t2.marks.audio["out"]==9)
 
 -- The explicit subframe argument is mandatory for 0.6.1 regression coverage.
 local strictItem=add_item(t2,"video",1,90000,90120,"strict-position")
