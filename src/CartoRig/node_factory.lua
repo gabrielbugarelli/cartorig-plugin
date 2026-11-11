@@ -39,17 +39,34 @@ local function inventory(comp)
   end
   return list
 end
+local validated_datasets={}
 local function library_ready(root)
   local drive=root or os.getenv("LOCALAPPDATA")
   if type(drive)~="string" or drive=="" then
     return nil,"DATA_MISSING: local data directory unavailable"
   end
   local dataset=drive.."\\CartoRig\\App\\data\\ne_50m_land.lua"
+  if validated_datasets[dataset] then return dataset end
   local file=io.open(dataset,"rb")
   if not file then return nil,"DATA_MISSING: required Natural Earth 1:50m Land not installed" end
-  local length=file:seek("end")
   file:close()
-  if not length or length<500000 then return nil,"DATA_INCOMPATIBLE: land resource incomplete" end
+  local loaded,data=pcall(dofile,dataset)
+  if not loaded or type(data)~="table" or #data~=1422 then
+    return nil,"DATA_INCOMPATIBLE: expected Natural Earth 1:50m Land with exactly 1422 rings"
+  end
+  for ringIndex,ring in ipairs(data) do
+    if type(ring)~="table" or #ring<8 or #ring%2~=0 then
+      return nil,"DATA_INCOMPATIBLE: invalid land ring "..tostring(ringIndex)
+    end
+    for i=1,#ring,2 do
+      local lon,lat=ring[i],ring[i+1]
+      if type(lon)~="number" or type(lat)~="number" or lon~=lon or lat~=lat or
+         lon<-180 or lon>180 or lat<-90 or lat>90 then
+        return nil,"DATA_INCOMPATIBLE: invalid coordinate in land ring "..tostring(ringIndex)
+      end
+    end
+  end
+  validated_datasets[dataset]=true
   return dataset
 end
 
