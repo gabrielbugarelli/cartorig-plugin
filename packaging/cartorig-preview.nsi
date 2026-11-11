@@ -29,6 +29,14 @@ Section "Install cartorig-dev"
   SetOutPath "$PLUGINSDIR"
   File "/oname=verify-managed-comp-launcher.ps1" "..\support\verify-managed-comp-launcher.ps1"
   File "/oname=verify-managed-shared.ps1" "..\support\verify-managed-shared.ps1"
+  ; Resolve caches scripts/Fuses while running. Refuse mutation until the host is
+  ; closed so installation cannot leave menu visibility or loaded Fuse versions stale.
+  ClearErrors
+  ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "if(Get-Process -Name Resolve -ErrorAction SilentlyContinue){exit 10}else{exit 0}"' $0
+  ${If} $0 != 0
+    MessageBox MB_OK|MB_ICONSTOP "DaVinci Resolve must be closed before installing or updating cartorig-dev. No persistent files were changed." /SD IDOK
+    Abort
+  ${EndIf}
   ; The only development entry must be installed by a CartoRig-managed installer.
   ${If} ${FileExists} "$R0\cartorig-dev.lua"
     ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
@@ -299,6 +307,12 @@ MigrateCartoRigDone:
 SectionEnd
 
 Section "Uninstall"
+  ClearErrors
+  ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "if(Get-Process -Name Resolve -ErrorAction SilentlyContinue){exit 10}else{exit 0}"' $0
+  ${If} $0 != 0
+    MessageBox MB_OK|MB_ICONSTOP "DaVinci Resolve must be closed before uninstalling cartorig-dev. No files were removed." /SD IDOK
+    Abort
+  ${EndIf}
   StrCpy $INSTDIR "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts"
   ; Shared Resolve files are deleted only when their content is a known CartoRig
   ; version. A user-modified/replaced file is deliberately preserved.
