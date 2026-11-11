@@ -77,6 +77,7 @@ Section "Install cartorig-dev"
 
   SetOutPath "$LOCALAPPDATA\CartoRig\App"
   File "/oname=graph_test.lua" "..\src\CartoRig\native_probe.lua"
+  File "/oname=cleanup-verified-legacy.ps1" "..\support\cleanup-verified-legacy.ps1"
   SetOutPath "$LOCALAPPDATA\CartoRig\App\lua"
   File "/oname=cartorig_scene_ui.lua" "..\host\cartorig-dev-scene.lua"
   SetOutPath "$LOCALAPPDATA\CartoRig\App"
@@ -155,27 +156,14 @@ VerifyCartoRigLauncher:
   ${EndIf}
   Delete "$R0\cartorig-dev.lua.backup"
 
-  ; Migrating legacy diagnostics must NEVER remove the new development entry.
-  ${If} ${FileExists} "$LOCALAPPDATA\CartoRig\HostProbe\Uninstall-HostProbe.exe"
-    ExecWait '"$LOCALAPPDATA\CartoRig\HostProbe\Uninstall-HostProbe.exe" /S _?=$LOCALAPPDATA\CartoRig\HostProbe' $0
-    ${If} $0 != 0
-      StrCpy $R9 "Legacy Host Probe uninstaller failed; orphan preserved"
-    ${EndIf}
-  ${EndIf}
-  ${If} ${FileExists} "$LOCALAPPDATA\CartoRig\NativeIntegrationProbe\Uninstall-NativeIntegration.exe"
-    ExecWait '"$LOCALAPPDATA\CartoRig\NativeIntegrationProbe\Uninstall-NativeIntegration.exe" /S _?=$LOCALAPPDATA\CartoRig\NativeIntegrationProbe' $0
-    ${If} $0 != 0
-      StrCpy $R9 "Legacy Integration Probe uninstaller failed; orphan preserved"
-    ${EndIf}
-  ${EndIf}
-  ${If} ${FileExists} "$R0\CartoRig Host Probe.lua"
-    StrCpy $R9 "Old Host Probe script persists; not removed without ownership"
-  ${EndIf}
-  ${If} ${FileExists} "$R0\CartoRig Native Integration Probe.lua"
-    StrCpy $R9 "Old Integration Probe script persists; not removed without ownership"
-  ${EndIf}
-  ${If} ${FileExists} "$R0\CartoRig.lua"
-    StrCpy $R9 "Old CartoRig.lua persists; not removed without ownership"
+  ; Only remove historical diagnostic scripts when their exact SHA-256 matches
+  ; an allowlisted CartoRig source file. Unknown content is never deleted.
+  ClearErrors
+  ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$LOCALAPPDATA\CartoRig\App\cleanup-verified-legacy.ps1" -CompPath "$R0" -Report "$LOCALAPPDATA\CartoRig\App\legacy-cleanup.txt"' $0
+  ${If} $0 != 0
+    StrCpy $R9 "Verified legacy cleanup returned error; launcher preserved, see legacy-cleanup.txt"
+  ${Else}
+    StrCpy $R9 "Verified legacy cleanup completed; see legacy-cleanup.txt"
   ${EndIf}
   SetOutPath "$LOCALAPPDATA\CartoRig\App"
   FileOpen $R1 "$LOCALAPPDATA\CartoRig\App\install-location.txt" w
@@ -200,6 +188,8 @@ Section "Uninstall"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\cartorig_scene_ui.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\install-location.txt"
   Delete "$LOCALAPPDATA\CartoRig\App\last-error.txt"
+  Delete "$LOCALAPPDATA\CartoRig\App\cleanup-verified-legacy.ps1"
+  Delete "$LOCALAPPDATA\CartoRig\App\legacy-cleanup.txt"
   Delete "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigScene.fuse"
   Delete "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigWorldMap.fuse"
   Delete "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigCamera.fuse"
