@@ -68,45 +68,61 @@ Section "Install cartorig-dev"
       Abort
     ${EndIf}
   ${EndIf}
-  ; Recover old Comp staging files only when this profile still has a
-  ; CartoRig-managed uninstaller. Unknown residues are preserved untouched.
+  ; Legacy Comp recovery is allowed only for an older managed installation.
+  ; Verify active/backup/pending source bytes BEFORE any delete or rename.
   ${If} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
     ${IfNot} ${FileExists} "$R2\cartorig-dev.lua"
-    ${If} ${FileExists} "$R0\cartorig-dev.lua.backup"
+      InitPluginsDir
+      SetOutPath "$PLUGINSDIR"
+      File "/oname=verify-managed-comp-launcher.ps1" "..\support\verify-managed-comp-launcher.ps1"
+
       ${If} ${FileExists} "$R0\cartorig-dev.lua"
         ClearErrors
-        Delete "$R0\cartorig-dev.lua.backup"
-        IfErrors 0 +3
-          MessageBox MB_OK|MB_ICONSTOP "Cannot clear managed stale backup; current launcher preserved."
+        ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\verify-managed-comp-launcher.ps1" -Path "$R0\cartorig-dev.lua"' $0
+        ${If} $0 != 0
+          MessageBox MB_OK|MB_ICONSTOP "Comp\cartorig-dev.lua is not an exact recognized CartoRig 0.5.1/0.5.2 launcher. It was preserved and the upgrade was stopped."
           Abort
-      ${Else}
+        ${EndIf}
+      ${EndIf}
+      ${If} ${FileExists} "$R0\cartorig-dev.lua.backup"
         ClearErrors
-        Rename "$R0\cartorig-dev.lua.backup" "$R0\cartorig-dev.lua"
+        ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\verify-managed-comp-launcher.ps1" -Path "$R0\cartorig-dev.lua.backup"' $0
+        ${If} $0 != 0
+          MessageBox MB_OK|MB_ICONSTOP "Comp cartorig-dev.lua.backup is unrecognized. No legacy staging files were changed."
+          Abort
+        ${EndIf}
+      ${EndIf}
+      ${If} ${FileExists} "$R0\cartorig-dev.lua.pending"
+        ClearErrors
+        ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\verify-managed-comp-launcher.ps1" -Path "$R0\cartorig-dev.lua.pending"' $0
+        ${If} $0 != 0
+          MessageBox MB_OK|MB_ICONSTOP "Comp cartorig-dev.lua.pending is unrecognized. No legacy staging files were changed."
+          Abort
+        ${EndIf}
+      ${EndIf}
+
+      ${If} ${FileExists} "$R0\cartorig-dev.lua.backup"
+        ${If} ${FileExists} "$R0\cartorig-dev.lua"
+          ClearErrors
+          Delete "$R0\cartorig-dev.lua.backup"
+          IfErrors 0 +3
+            MessageBox MB_OK|MB_ICONSTOP "Cannot clear verified stale backup; current legacy launcher preserved."
+            Abort
+        ${Else}
+          ClearErrors
+          Rename "$R0\cartorig-dev.lua.backup" "$R0\cartorig-dev.lua"
+          IfErrors 0 +3
+            MessageBox MB_OK|MB_ICONSTOP "Could not restore verified interrupted update; backup preserved."
+            Abort
+        ${EndIf}
+      ${EndIf}
+      ${If} ${FileExists} "$R0\cartorig-dev.lua.pending"
+        ClearErrors
+        Delete "$R0\cartorig-dev.lua.pending"
         IfErrors 0 +3
-          MessageBox MB_OK|MB_ICONSTOP "Could not restore managed interrupted update; backup preserved."
+          MessageBox MB_OK|MB_ICONSTOP "Cannot clear verified staged file; active legacy launcher preserved."
           Abort
       ${EndIf}
-    ${EndIf}
-    ${If} ${FileExists} "$R0\cartorig-dev.lua.pending"
-      ClearErrors
-      Delete "$R0\cartorig-dev.lua.pending"
-      IfErrors 0 +3
-        MessageBox MB_OK|MB_ICONSTOP "Cannot clear managed staged file; active launcher preserved."
-        Abort
-    ${EndIf}
-    ${EndIf}
-  ${EndIf}
-  ; A legacy Comp launcher is migrated only if its normalized content is an
-  ; exact historical CartoRig 0.5.1/0.5.2 launcher. Unknown content is preserved.
-  ${If} ${FileExists} "$R0\cartorig-dev.lua"
-    InitPluginsDir
-    SetOutPath "$PLUGINSDIR"
-    File "/oname=verify-managed-comp-launcher.ps1" "..\support\verify-managed-comp-launcher.ps1"
-    ClearErrors
-    ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\verify-managed-comp-launcher.ps1" -Path "$R0\cartorig-dev.lua"' $0
-    ${If} $0 != 0
-      MessageBox MB_OK|MB_ICONSTOP "Comp\cartorig-dev.lua is not an exact recognized CartoRig legacy launcher. It was preserved and the upgrade was stopped."
-      Abort
     ${EndIf}
   ${EndIf}
   ; Older diagnostics must not block activation of the current launcher.
