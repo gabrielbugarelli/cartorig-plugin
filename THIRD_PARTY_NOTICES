@@ -1,11 +1,30 @@
-CartoRig V1.0 — third-party notices inventory
+CartoRig — third-party resource notices
 
-No third-party code, Natural Earth datasets or proprietary Fusion binaries are vendored as product runtime resources in this source repository. This is not the notice manifest for a finished product.
+CartoRig original Lua code and scripts: MIT, see LICENSE.
 
-**Diagnostic packaging dependency (not the CartoRig V1 runtime):** NSIS 3.13, via the free Chocolatey community package at Windows build time. The Windows host-probe EXE uses the NSIS self-extracting installer/uninstaller runtime with zlib compression. NSIS: Copyright (C) 1999–2026 Contributors, licensed under zlib/libpng for the core runtime and zlib compression. See https://nsis.sourceforge.io/Docs/AppendixI.html . No Resolve or paid software binaries are bundled. The diagnostic Lua code itself is MIT (see LICENSE).
+NATURAL EARTH
+- Resource: Natural Earth 1:50m Land, vector polygons (ne_50m_land.geojson).
+- Origin: https://github.com/nvkelso/natural-earth-vector/tree/ca96624a56bd078437bca8184e78163e5039ad19/geojson
+- Exact source commit: ca96624a56bd078437bca8184e78163e5039ad19 (2022-06-02).
+- Source: geojson/ne_50m_land.geojson.
+- Installed runtime representation: data/ne_50m_land.lua (1,422 rings, 60,669
+  original vertex pairs, unmodified numeric coordinate values).
+- Distribution terms: PUBLIC DOMAIN. The authors waive rights to use and
+  redistribute map data for personal and commercial use.
+- Attribution: Made with Natural Earth. www.naturalearthdata.com
+- Terms: https://www.naturalearthdata.com/about/terms-of-use/
+- Maintainers include Nathaniel Vaughn Kelso, Tom Patterson and collaborators.
+- Version is pinned per source commit; map geometry is NOT silently updated.
 
-Release requirements:
-- Identify every Natural Earth package actually included (Admin 0, available Admin 1, Populated Places, land/ocean/borders) and its source version, scale, SHA-256, license/attribution and permitted redistribution.
-- List the licenses, attribution, versions and hashes of every redistributable runtime, dependency, font, library and installer tool actually bundled.
-- Do not redistribute DaVinci Resolve Studio or proprietary SDK binaries unless separately authorized by the rightsholder.
-- Keep this file aligned with the actual installer contents and dataset manifest; fail the release gate if unfinished.
+The V1 also requires Admin 0, Admin 1, Populated Places, borders and other
+sources. THEY ARE NOT BUNDLED YET. Do not claim full V1 offline coverage.
+
+NSIS INSTALLER
+- Build-time tool: NSIS 3.x from Chocolatey community packages on a standard
+  free Windows GitHub Actions runner.
+- The installed executable carries the NSIS zlib/libpng-licensed installer
+  and uninstaller runtime. See https://nsis.sourceforge.io/Docs/AppendixI.html
+- Runtime Fusion Fuses and scripts are Lua source; no proprietary Resolve SDK
+  or DaVinci Resolve binaries are redistributed.
+
+Other third-party code or datasets are not currently bundled.
