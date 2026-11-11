@@ -1,7 +1,7 @@
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !ifndef OUTPUTFILE
-  !define OUTPUTFILE "cartorig-dev-0.5-win64.exe"
+  !define OUTPUTFILE "cartorig-dev-0.5.1-win64.exe"
 !endif
 Unicode true
 Name "cartorig-dev"
@@ -53,14 +53,7 @@ Section "Install cartorig-dev"
       Abort
     ${EndIf}
   ${EndIf}
-  ; Upgrade the same program in place without multiplying Scripts entries.
-  ${If} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
-    ExecWait '"$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe" /S _?=$LOCALAPPDATA\CartoRig\App' $0
-    ${If} $0 != 0
-      MessageBox MB_OK|MB_ICONSTOP "Existing CartoRig uninstall failed (exit $0). Upgrade stopped."
-      Abort
-    ${EndIf}
-  ${EndIf}
+  ; In-place managed upgrade: the old entry remains until the new one is ready.
   ; One-time automatic migration: use the original installers' own uninstallers.
   ${If} ${FileExists} "$LOCALAPPDATA\CartoRig\HostProbe\Uninstall-HostProbe.exe"
     ExecWait '"$LOCALAPPDATA\CartoRig\HostProbe\Uninstall-HostProbe.exe" /S _?=$LOCALAPPDATA\CartoRig\HostProbe' $0
@@ -92,6 +85,8 @@ Section "Install cartorig-dev"
 
   SetOutPath "$LOCALAPPDATA\CartoRig\App"
   File "/oname=graph_test.lua" "..\src\CartoRig\native_probe.lua"
+  SetOutPath "$LOCALAPPDATA\CartoRig\App\lua"
+  File "/oname=cartorig_scene_ui.lua" "..\host\cartorig-dev-scene.lua"
   File "/oname=THIRD_PARTY_NOTICES.txt" "..\THIRD_PARTY_NOTICES"
   SetOutPath "$LOCALAPPDATA\CartoRig\App\lua\CartoRig"
   File "/oname=domain.lua" "..\src\CartoRig\domain.lua"
@@ -108,11 +103,46 @@ Section "Install cartorig-dev"
   File "/oname=README.txt" "..\docs\CARTORIG_PREVIEW_TEST.md"
   File "/oname=LICENSE.txt" "..\LICENSE"
   WriteUninstaller "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
-  SetOutPath "$INSTDIR\Comp"
-  File "/oname=cartorig-dev.lua" "..\host\cartorig-dev-scene.lua"
+  ; Always use Resolve's per-user Scripts/Comp path; $INSTDIR can be customized.
+  StrCpy $R0 "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp"
+  IfFileExists "$R0\cartorig-dev.lua.backup" 0 +3
+    MessageBox MB_OK|MB_ICONSTOP "A previous CartoRig upgrade backup exists. Launcher preserved. Contact support."
+    Abort
+  SetOutPath "$R0"
+  ClearErrors
+  File "/oname=cartorig-dev.lua.pending" "..\host\cartorig-dev-launcher.lua"
+  IfErrors 0 +3
+    MessageBox MB_OK|MB_ICONSTOP "Cannot stage the new launcher; previous script preserved."
+    Abort
+  IfFileExists "$R0\cartorig-dev.lua.pending" +3 0
+    MessageBox MB_OK|MB_ICONSTOP "Staged launcher missing; previous script preserved."
+    Abort
+  IfFileExists "$R0\cartorig-dev.lua" 0 +5
+    ClearErrors
+    Rename "$R0\cartorig-dev.lua" "$R0\cartorig-dev.lua.backup"
+    IfErrors 0 +3
+      MessageBox MB_OK|MB_ICONSTOP "Cannot preserve previous launcher. Upgrade aborted."
+      Abort
+  ClearErrors
+  Rename "$R0\cartorig-dev.lua.pending" "$R0\cartorig-dev.lua"
+  IfErrors 0 +4
+    Rename "$R0\cartorig-dev.lua.backup" "$R0\cartorig-dev.lua"
+    MessageBox MB_OK|MB_ICONSTOP "Cannot activate new launcher; old script restored."
+    Abort
+  IfFileExists "$R0\cartorig-dev.lua" +4 0
+    Rename "$R0\cartorig-dev.lua.backup" "$R0\cartorig-dev.lua"
+    MessageBox MB_OK|MB_ICONSTOP "Launcher missing after activation; old script restored."
+    Abort
+  Delete "$R0\cartorig-dev.lua.backup"
+  SetOutPath "$LOCALAPPDATA\CartoRig\App"
+  FileOpen $R1 "$LOCALAPPDATA\CartoRig\App\install-location.txt" w
+  FileWrite $R1 "Launcher: $R0\cartorig-dev.lua$\r$\n"
+  FileWrite $R1 "UI: $LOCALAPPDATA\CartoRig\App\lua\cartorig_scene_ui.lua$\r$\n"
+  FileWrite $R1 "Version: 0.5.1$\r$\n"
+  FileClose $R1
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "DisplayName" "cartorig-dev (Development Preview)"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "UninstallString" '"$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"'
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "DisplayVersion" "0.5.0"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "DisplayVersion" "0.5.1"
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "NoModify" 1
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "NoRepair" 1
 SectionEnd
@@ -120,6 +150,11 @@ SectionEnd
 Section "Uninstall"
   StrCpy $INSTDIR "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts"
   Delete "$INSTDIR\Comp\cartorig-dev.lua"
+  Delete "$INSTDIR\Comp\cartorig-dev.lua.pending"
+  Delete "$INSTDIR\Comp\cartorig-dev.lua.backup"
+  Delete "$LOCALAPPDATA\CartoRig\App\lua\cartorig_scene_ui.lua"
+  Delete "$LOCALAPPDATA\CartoRig\App\install-location.txt"
+  Delete "$LOCALAPPDATA\CartoRig\App\last-error.txt"
   Delete "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigScene.fuse"
   Delete "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigWorldMap.fuse"
   Delete "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigCamera.fuse"
