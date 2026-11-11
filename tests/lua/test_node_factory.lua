@@ -7,7 +7,11 @@ f:write("local t={}\nfor i=1,1422 do t[i]={0,0,1,0,1,1,0,1} end\nreturn t\n")
 f:close()
 local function fake()
  local comp={tools={},data={},added={},deleted=0,undo=0,undo_keeps={}}
- function comp:GetToolList() return self.tools end
+ function comp:GetToolList()
+  local out={__flags=1048576}
+  for i,tool in ipairs(self.tools) do out["Tool"..i]=tool end
+  return out
+ end
  function comp:GetData(key) return self.data[key] end
  function comp:SetData(key,v) self.data[key]=v end
  function comp:StartUndo() self.undo=self.undo+1 end
