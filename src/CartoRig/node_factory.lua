@@ -273,8 +273,9 @@ function factory.create_scene(comp,title,opts)
     comp:SetData(VERSION,state.schema_version)
     comp:SetData(SOURCE,"Natural Earth 1:50m land")
     comp:SetData(TITLE,state.title)
-    if get(comp,SCENE_KEY)~=state.scene_id or get(comp,TITLE)~=state.title then
-      error("SCENE_STATE_FAILED: composition did not persist scene identity/title")
+    if get(comp,SCENE_KEY)~=state.scene_id or get(comp,TITLE)~=state.title or
+       get(comp,VERSION)~=state.schema_version or get(comp,SOURCE)~="Natural Earth 1:50m land" then
+      error("SCENE_STATE_FAILED: composition did not persist identity/title/schema/dataset source")
     end
     local observed,observedErr=factory.inspect(comp)
     if not observed or not observed.has_scene or observed.scene_id~=state.scene_id or observed.title~=state.title then
