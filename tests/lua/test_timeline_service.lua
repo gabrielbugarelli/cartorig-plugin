@@ -177,7 +177,9 @@ local function fake(start_with_timeline)
       ensure_track("video",#self.tracks.video+1)
       destination=#self.tracks.video
     end
-    local track=self.tracks.video[destination]
+    local targetKind=self.wrong_track_type or "video"
+    local targetIndex=self.wrong_track_index or destination
+    local track=self.tracks[targetKind][targetIndex]
     if not track or track.locked then return nil end
     local duration=self.default_duration
     if self.marks.video then
@@ -208,7 +210,7 @@ local function fake(start_with_timeline)
     if self.failfuse then comp.fail=true end
     if self.corrupt_new_comp then comp.corrupt=true end
     local item=make_item("clip-"..self.created,self.seek,self.seek+duration,
-      self.wrong_track_type or "video",self.wrong_track_index or destination,comp)
+      targetKind,targetIndex,comp)
     if self.missingcomp then item.missing=true end
     track.items[#track.items+1]=item
     if self.mutate_existing_lock and self.tracks.video[1] then
@@ -419,7 +421,9 @@ assert(t7.created==0)
 -- Wrong destination track/type is rejected and the new item removed.
 local r8,p8,t8=fake(true)
 t8:AddTrack("video")
+t8:AddTrack("audio")
 t8.wrong_track_type="audio"
+t8.wrong_track_index=1
 local wrong,wrongErr=svc.create(r8,"Wrong target")
 assert(wrong==nil and wrongErr:find("FUSION_INSERT_WRONG_TRACK",1,true))
 assert(#t8.tracks.video[1].items==0 and t8.deletes==1)
@@ -430,7 +434,7 @@ local r9a,p9a,t9a=fake(true)
 t9a:AddTrack("video")
 t9a.auto_extra_track=true
 local extraTrack,extraTrackErr=svc.create(r9a,"Auto extra track")
-assert(extraTrack==nil and extraTrackErr:find("FUSION_INSERT_WRONG_TRACK",1,true))
+assert(extraTrack==nil and extraTrackErr:find("EXTERNAL_TIMELINE_CHANGED",1,true))
 assert(t9a:GetTrackCount("video")==1 and t9a.deleted_tracks==1)
 
 -- If an insertion unexpectedly mutates a pre-existing track lock, rollback
