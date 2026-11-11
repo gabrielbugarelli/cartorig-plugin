@@ -33,7 +33,11 @@ local function fake(start_with_timeline)
   end
   function timeline:GetTrackCount(which) return self.tracks end
   function timeline:AddTrack(which) self.tracks=1;return true end
-  function timeline:GetItemListInTrack(which,index) return self.clips end
+  function timeline:GetItemListInTrack(which,index)
+    -- A real empty video track may return nil, not a Lua table.
+    if #self.clips==0 then return nil end
+    return self.clips
+  end
   function timeline:GetStartFrame() return clock end
   function timeline:GetEndFrame()
     local finish=clock
