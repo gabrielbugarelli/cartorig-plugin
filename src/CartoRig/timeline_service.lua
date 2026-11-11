@@ -131,15 +131,6 @@ local function item_id(item,context)
   end
   return value
 end
-local function item_track(item,context)
-  local location,err=call(item,"GetTrackTypeAndIndex")
-  if type(location)~="table" or type(location[1])~="string" or type(location[2])~="number" then
-    return nil,nil,"TRACK_LOCATION_INVALID: "..tostring(context).." returned "..type(location)..
-      " "..tostring(location)..(err and ("; "..tostring(err)) or "")
-  end
-  return location[1],location[2]
-end
-
 local function scalar_signature(value)
   local kind=type(value)
   if kind=="nil" or kind=="boolean" or kind=="number" or kind=="string" then
@@ -570,11 +561,6 @@ function M.create(resolve,title,opts)
   local itemId,idErr=item_id(item,"new Fusion Composition")
   if not itemId then return fail(ctx,item,idErr) end
   if before.items[itemId] then return fail(ctx,item,"FUSION_INSERT_ID_COLLISION: "..itemId) end
-  local trackType,trackIndex,locErr=item_track(item,"new Fusion Composition")
-  if not trackType then return fail(ctx,item,locErr) end
-  if trackType~="video" or trackIndex<1 or trackIndex>before.counts.video then
-    return fail(ctx,item,"FUSION_INSERT_WRONG_TRACK: landed on "..tostring(trackType).." "..tostring(trackIndex))
-  end
   local at,finish,posErr=item_bounds(item,"new Fusion Composition")
   if not at then return fail(ctx,item,posErr) end
   if at~=target or finish<=at then
@@ -583,6 +569,14 @@ function M.create(resolve,title,opts)
   end
   local after,preserveErr=compare_timeline(timeline,before,itemId)
   if not after then return fail(ctx,item,preserveErr) end
+  local inserted=after.items[itemId]
+  if not inserted then
+    return fail(ctx,item,"FUSION_INSERT_UNLOCATED: inserted UUID was not found in timeline tracks")
+  end
+  local trackType,trackIndex=inserted.track_type,inserted.track_index
+  if trackType~="video" or trackIndex<1 or trackIndex>before.counts.video then
+    return fail(ctx,item,"FUSION_INSERT_WRONG_TRACK: landed on "..tostring(trackType).." "..tostring(trackIndex))
+  end
   local restored,restoreErr=restore_marks(timeline,ctx.original_marks)
   if not restored then return fail(ctx,item,restoreErr) end
   local opened,openErr=call(resolve,"OpenPage","fusion")
