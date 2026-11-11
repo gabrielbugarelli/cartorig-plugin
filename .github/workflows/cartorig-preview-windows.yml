@@ -87,6 +87,8 @@ jobs:
           $fuses = @('CartoRigScene.fuse','CartoRigCamera.fuse','CartoRigWorldMap.fuse')
           $fuseDir = Join-Path $env:APPDATA 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses'
           $appDir = Join-Path $env:LOCALAPPDATA 'CartoRig\App'
+          $legacyCleaner = Join-Path $appDir 'cleanup-verified-legacy.ps1'
+          $expectedCleanerHash = (Get-FileHash -Algorithm SHA256 'support\cleanup-verified-legacy.ps1').Hash
           $landData = Join-Path $appDir 'data\ne_50m_land.lua'
           foreach ($legacy in @('fixture\OldHost.exe', 'fixture\OldGraph.exe')) {
             $process = Start-Process -FilePath (Resolve-Path $legacy).Path -ArgumentList '/S' -Wait -PassThru
@@ -123,6 +125,8 @@ jobs:
             if (-not (Test-Path $landData) -or (Get-Item $landData).Length -lt 500000) { throw "Natural Earth 1:50m land data missing" }
             if ((Get-FileHash -Algorithm SHA256 $landData).Hash -ne (Get-FileHash -Algorithm SHA256 'data\ne_50m_land.lua').Hash) { throw "Natural Earth geometry does not match source" }
             if (-not (Test-Path (Join-Path $appDir 'lua\CartoRig\node_factory.lua'))) { throw "NodeFactory missing" }
+            if (-not (Test-Path $legacyCleaner)) { throw "Legacy cleanup helper missing" }
+            if ((Get-FileHash -Algorithm SHA256 $legacyCleaner).Hash -ne $expectedCleanerHash) { throw "Legacy cleanup helper corrupted" }
             if ((Test-Path $old1) -or (Test-Path $old2) -or (Test-Path $oldLib) -or (Test-Path $legacySingle)) { throw "Old Scripts menu entries were not removed" }
             $installed = @(Get-ChildItem $scripts -File -Filter '*.lua' | Where-Object { $_.Name -like 'CartoRig*' -or $_.Name -like 'cartorig-dev*' })
             if ($installed.Count -ne 1 -or $installed[0].Name -ne 'cartorig-dev.lua') { throw "CartoRig Scripts menu has multiple entries" }
@@ -197,6 +201,13 @@ jobs:
           if (-not (Test-Path $other) -or [IO.File]::ReadAllText($other) -ne $otherContent) { throw "External script damaged after uninstall" }
           if ((Test-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev') -or (Test-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRig')) { throw "Preview Installed Apps entry not removed" }
           "PASS: 0.1-0.5.1 migration, verified-only legacy cleanup, unknown-script protection, interrupted upgrade recovery, clean install/uninstall; live Resolve menu NOT RUN." | Set-Content 'dist\package-validation.txt'
+      - name: Include read-only Windows diagnostic in the same artifact
+        shell: pwsh
+        run: |
+          Copy-Item -LiteralPath support/cartorig-dev-diagnose.ps1,support/verificar-cartorig-dev.cmd,support/README.md -Destination dist/
+          foreach ($name in @('cartorig-dev-diagnose.ps1','verificar-cartorig-dev.cmd','README.md')) {
+            if (-not (Test-Path "dist/$name")) { throw "Diagnostic kit missing: $name" }
+          }
       - name: Upload approved preview package (not a stable release)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
