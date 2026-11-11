@@ -111,7 +111,11 @@ class InstallerSafetyTests(unittest.TestCase):
         s=self.nsi
         verifier=(ROOT/"support/verify-managed-comp-launcher.ps1").read_text(encoding="utf-8")
         self.assertIn('verify-managed-comp-launcher.ps1',s)
-        self.assertIn('Comp\\cartorig-dev.lua is not an exact recognized CartoRig legacy launcher',s)
+        self.assertIn('Comp\\cartorig-dev.lua is not an exact recognized CartoRig 0.5.1/0.5.2 launcher',s)
+        self.assertIn('cartorig-dev.lua.backup is unrecognized',s)
+        self.assertIn('cartorig-dev.lua.pending is unrecognized',s)
+        self.assertLess(s.index('verify-managed-comp-launcher.ps1'),
+                        s.index('Delete "$R0\\cartorig-dev.lua.backup"'))
         self.assertIn('Both Utility and Comp cartorig-dev.lua exist',s)
         self.assertIn('997bd170c2b2a1ea921119c61ce53a5cee53bc1324ee715446c84cd96248ea4a',verifier)
         self.assertIn('6d1bd1fd52575bea31e73754f3408dbb0351d6089701690e6e82c95240a9b262',verifier)
