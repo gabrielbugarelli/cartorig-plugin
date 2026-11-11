@@ -260,29 +260,48 @@ function factory.create_scene(comp,title,opts)
       error("SCENE_STATE_FAILED: post-create reconstruction failed: "..tostring(observedErr))
     end
   end)
-  if not succeeded then
+  local function rollback_creation()
     local cleanup={}
     if modified_external then
-      local disconnected,de=pcall(function() modified_external:ConnectInput("Input",nil) end)
-      if not disconnected then cleanup[#cleanup+1]="MediaOut: "..tostring(de) end
+      local disconnected,de=pcall(function() return modified_external:ConnectInput("Input",nil) end)
+      if not disconnected then
+        cleanup[#cleanup+1]="MediaOut disconnect exception: "..tostring(de)
+      else
+        local input=input_of(modified_external,"Input")
+        if input and type(input.GetConnectedOutput)=="function" then
+          local checked,value=pcall(function() return input:GetConnectedOutput() end)
+          if not checked or value~=nil then cleanup[#cleanup+1]="MediaOut input still connected after rollback" end
+        end
+      end
     end
     for i=#created,1,-1 do
-      local deleted,de=pcall(function() created[i]:Delete() end)
-      if not deleted then cleanup[#cleanup+1]=tostring(de) end
+      local deleted,de=pcall(function() return created[i]:Delete() end)
+      if not deleted then cleanup[#cleanup+1]="node delete exception: "..tostring(de) end
     end
-    pcall(function() comp:SetData(SCENE_KEY,nil) end)
-    pcall(function() comp:SetData(VERSION,nil) end)
-    pcall(function() comp:SetData(SOURCE,nil) end)
-    pcall(function() comp:SetData(TITLE,nil) end)
-    pcall(function() comp:EndUndo(true) end)
-    return nil,"SCENE_CREATE_FAILED: "..tostring(why)..(#cleanup>0 and
-      "; cleanup may be incomplete: "..table.concat(cleanup,"; ") or "; created nodes removed")
+    for _,key in ipairs({SCENE_KEY,VERSION,SOURCE,TITLE}) do
+      local cleared,ce=pcall(function() comp:SetData(key,nil) end)
+      if not cleared then cleanup[#cleanup+1]="composition metadata cleanup: "..tostring(ce) end
+    end
+    local ended,endErr=pcall(function() comp:EndUndo(false) end)
+    if not ended then cleanup[#cleanup+1]="EndUndo(false): "..tostring(endErr) end
+    local observed,inspectErr=factory.inspect(comp)
+    if not observed or observed.has_scene then
+      cleanup[#cleanup+1]="post-rollback graph invalid: "..tostring(inspectErr or "Scene still present")
+    end
+    return #cleanup==0,table.concat(cleanup,"; ")
+  end
+  if not succeeded then
+    local clean,cleanupErr=rollback_creation()
+    return nil,"SCENE_CREATE_FAILED: "..tostring(why)..
+      (clean and "; transaction rolled back" or "; ROLLBACK_INCOMPLETE: "..cleanupErr)
   end
   local ended,e=pcall(function() comp:EndUndo(true) end)
   if not ended then
-    return nil,"UNDO_ERROR: "..tostring(e).."; discard unsaved test composition"
+    local clean,cleanupErr=rollback_creation()
+    return nil,"UNDO_ERROR: "..tostring(e)..
+      (clean and "; transaction rolled back" or "; ROLLBACK_INCOMPLETE: "..cleanupErr)
   end
-  return {scene_id=state.scene_id,objects=state.objects,source=dataset,
+  return {scene_id=state.scene_id,title=state.title,objects=state.objects,source=dataset,
     output_connected=true,created_author_nodes=3,
     status="CREATED_NEEDS_FUSION_RENDER_AND_REOPEN_VALIDATION"}
 end
