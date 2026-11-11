@@ -3,19 +3,46 @@
 -- No pre-existing timeline clip, foreign node or media is deliberately modified.
 local factory=require("CartoRig.node_factory")
 local M={}
+-- Resolve API proxies are userdata (sometimes tables). An exposed global or
+-- an API return can also be nil/false/0; Lua considers 0 truthy. Never index
+-- an unchecked value or assume a lookup through a proxy cannot throw.
+local function lookup(o,name)
+  local kind=type(o)
+  if kind~="userdata" and kind~="table" then
+    return nil,"API_INVALID_RECEIVER: "..tostring(name).." needs an object, got "..kind
+  end
+  local ok,fn=pcall(function() return o[name] end)
+  if not ok then
+    return nil,"API_LOOKUP_FAILED: "..tostring(name)..": "..tostring(fn)
+  end
+  if type(fn)~="function" then
+    return nil,"API_METHOD_UNAVAILABLE: "..tostring(name).." on "..kind..
+      " (member type "..type(fn)..")"
+  end
+  return fn
+end
 local function method(o,name)
-  return o and type(o[name])=="function"
+  return lookup(o,name)~=nil
 end
 local function call(o,name,...)
-  if not method(o,name) then return nil,"API_MISSING: "..name end
-  local ok,value=pcall(o[name],o,...)
-  if not ok then return nil,"API_FAILURE: "..name..": "..tostring(value) end
+  local fn,err=lookup(o,name)
+  if not fn then return nil,err end
+  local ok,value=pcall(fn,o,...)
+  if not ok then return nil,"API_CALL_FAILED: "..name..": "..tostring(value) end
   return value
 end
 local function strict(o,name,...)
   local val,err=call(o,name,...)
   if val==nil or val==false then return nil,err or "API_REJECTED: "..name end
   return val
+end
+local function require_handle(value,returned_by,required_method)
+  local fn,err=lookup(value,required_method)
+  if not fn then
+    return nil,"API_INVALID_HANDLE: "..tostring(returned_by).." returned "..type(value)..
+      "; expected object implementing "..required_method.."; "..tostring(err)
+  end
+  return value
 end
 
 -- Positioning inserts at the END of the timeline instead of overwriting
@@ -74,28 +101,43 @@ function M.timecode_add(tc,frames,fps)
 end
 
 local function project_and_timeline(resolve)
+  local _,rerr=require_handle(resolve,"Resolve context","GetProjectManager")
+  if rerr then return nil,nil,nil,"RESOLVE_CONTEXT_INVALID: "..rerr end
   local manager,err=strict(resolve,"GetProjectManager")
+  if not manager then return nil,nil,nil,"PROJECT_MANAGER_UNAVAILABLE: "..tostring(err) end
+  manager,err=require_handle(manager,"GetProjectManager","GetCurrentProject")
   if not manager then return nil,nil,nil,err end
   local project,perr=strict(manager,"GetCurrentProject")
   if not project then return nil,nil,nil,"NO_PROJECT: open a Resolve project ("..tostring(perr)..")" end
-  local timeline=call(project,"GetCurrentTimeline")
+  project,perr=require_handle(project,"GetCurrentProject","GetCurrentTimeline")
+  if not project then return nil,nil,nil,perr end
+  local timeline,terr=call(project,"GetCurrentTimeline")
+  if timeline==false or timeline==0 then
+    return nil,nil,nil,"TIMELINE_INVALID: GetCurrentTimeline returned "..type(timeline).." value "..tostring(timeline)
+  end
   local made=false
-  if not timeline then
+  if timeline==nil then
     local pool,perr2=strict(project,"GetMediaPool")
     if not pool then return nil,nil,nil,"NO_MEDIA_POOL: "..tostring(perr2) end
+    pool,perr2=require_handle(pool,"GetMediaPool","CreateEmptyTimeline")
+    if not pool then return nil,nil,nil,perr2 end
     local name="CartoRig Scenes"
     local count=call(project,"GetTimelineCount")
     if type(count)=="number" and count>0 then name=name.." "..tostring(count+1) end
-    local created,cerr=call(pool,"CreateEmptyTimeline",name)
+    local created,cerr=strict(pool,"CreateEmptyTimeline",name)
     if not created then
-      return nil,nil,nil,"TIMELINE_CREATE_FAILED: Resolve rejected CreateEmptyTimeline. No Fusion Composition inserted. "..tostring(cerr)
+      return nil,nil,nil,"TIMELINE_CREATE_FAILED: "..tostring(cerr)
     end
-    local selected,serr=call(project,"SetCurrentTimeline",created)
+    timeline,cerr=require_handle(created,"CreateEmptyTimeline","GetTrackCount")
+    if not timeline then return nil,nil,nil,cerr end
+    local selected,serr=call(project,"SetCurrentTimeline",timeline)
     if selected==false or selected==nil then
       return nil,nil,nil,"TIMELINE_SELECT_FAILED: new timeline exists but is not current. "..tostring(serr)
     end
-    timeline=created
     made=true
+  else
+    local checked,invalid=require_handle(timeline,"GetCurrentTimeline","GetTrackCount")
+    if not checked then return nil,nil,nil,invalid end
   end
   return project,timeline,made
 end
@@ -142,14 +184,18 @@ local function verify_preserved(timeline,baseline)
   return true
 end
 local function access_comp(item)
+  local valid,invalid=require_handle(item,"TimelineItem","GetFusionCompCount")
+  if not valid then return nil,invalid end
   local n,err=call(item,"GetFusionCompCount")
   if type(n)~="number" or n<1 then
     return nil,"FUSION_COMP_MISSING: inserted item has no Fusion composition; "..tostring(err)
   end
   local comp,cerr=call(item,"GetFusionCompByIndex",1)
-  if not comp or not method(comp,"GetToolList") then
+  if not comp then
     return nil,"FUSION_COMP_MISSING: cannot open Fusion comp by index 1; "..tostring(cerr)
   end
+  local checked,invalid=require_handle(comp,"GetFusionCompByIndex","GetToolList")
+  if not checked then return nil,invalid end
   return comp
 end
 local function cleanup_only_new(timeline,item)
@@ -242,32 +288,62 @@ function M.create(resolve,title,opts)
   }
 end
 function M.list_scenes(resolve)
-  local manager=call(resolve,"GetProjectManager")
-  local project=manager and call(manager,"GetCurrentProject")
-  local timeline=project and call(project,"GetCurrentTimeline")
-  if not timeline then return {},nil end
-  local total,err=call(timeline,"GetTrackCount","video")
-  if type(total)~="number" then return nil,"TRACK_ACCESS_FAILED: "..tostring(err) end
+  local valid,invalid=require_handle(resolve,"Resolve context","GetProjectManager")
+  if not valid then return nil,"RESOLVE_CONTEXT_INVALID: "..invalid end
+  local manager,err=strict(resolve,"GetProjectManager")
+  if not manager then return nil,"PROJECT_MANAGER_UNAVAILABLE: "..tostring(err) end
+  manager,err=require_handle(manager,"GetProjectManager","GetCurrentProject")
+  if not manager then return nil,err end
+  local project,perr=call(manager,"GetCurrentProject")
+  if project==nil or project==false then return {},nil end
+  project,perr=require_handle(project,"GetCurrentProject","GetCurrentTimeline")
+  if not project then return nil,perr end
+  local timeline,terr=call(project,"GetCurrentTimeline")
+  if timeline==nil then return {},nil end
+  if timeline==false then return nil,"TIMELINE_UNAVAILABLE: "..tostring(terr) end
+  timeline,terr=require_handle(timeline,"GetCurrentTimeline","GetTrackCount")
+  if not timeline then return nil,terr end
+  local total,tErr=call(timeline,"GetTrackCount","video")
+  if type(total)~="number" or total<0 or total~=math.floor(total) then
+    return nil,"TRACK_ACCESS_FAILED: expected count, got "..type(total).." ("..tostring(tErr or total)..")"
+  end
   local results={}
   for track=1,total do
-    local clips=call(timeline,"GetItemListInTrack","video",track)
-    if type(clips)=="table" then
-      for _,item in pairs(clips) do
-        local number=call(item,"GetFusionCompCount")
-        if type(number)=="number" and number>=1 then
-          local comp=call(item,"GetFusionCompByIndex",1)
-          if comp then
-            local state=factory.inspect(comp)
-            if state and state.has_scene then
-              results[#results+1]={
-                scene_id=state.scene_id,
-                name=call(item,"GetName") or "CartoRig Scene",
-                track=track,
-                start_frame=call(item,"GetStart") or 0,
-                objects=state.objects
-              }
-            end
-          end
+    local clips,cliperr=call(timeline,"GetItemListInTrack","video",track)
+    if clips==nil then
+      -- Some Resolve versions return nil for an empty track; this is not an error.
+      clips={}
+    elseif type(clips)~="table" then
+      return nil,"TRACK_LIST_INVALID: GetItemListInTrack V"..track.." returned "..type(clips)..
+        " ("..tostring(cliperr or clips)..")"
+    end
+    for _,item in pairs(clips) do
+      local handle,herr=require_handle(item,"GetItemListInTrack","GetFusionCompCount")
+      if not handle then return nil,herr end
+      local number,numerr=call(item,"GetFusionCompCount")
+      if type(number)~="number" then
+        return nil,"FUSION_COUNT_INVALID: GetFusionCompCount returned "..type(number)..
+          " ("..tostring(numerr or number)..")"
+      end
+      if number>=1 then
+        local comp,cerr=call(item,"GetFusionCompByIndex",1)
+        if comp==nil or comp==false then
+          return nil,"FUSION_COMP_UNAVAILABLE: "..tostring(cerr)
+        end
+        local checked,invalid_comp=require_handle(comp,"GetFusionCompByIndex","GetToolList")
+        if not checked then return nil,invalid_comp end
+        local state,inspecterr=factory.inspect(comp)
+        if not state then
+          return nil,"SCENE_INSPECTION_FAILED: "..tostring(inspecterr)
+        end
+        if state.has_scene then
+          results[#results+1]={
+            scene_id=state.scene_id,
+            name=call(item,"GetName") or "CartoRig Scene",
+            track=track,
+            start_frame=call(item,"GetStart") or 0,
+            objects=state.objects
+          }
         end
       end
     end
@@ -280,16 +356,26 @@ function M.list_scenes(resolve)
 end
 
 function M.current_scene(resolve)
-  local manager=call(resolve,"GetProjectManager")
-  local project=manager and call(manager,"GetCurrentProject")
-  local timeline=project and call(project,"GetCurrentTimeline")
-  if not timeline then return nil,"NO_TIMELINE" end
-  local item=call(timeline,"GetCurrentVideoItem")
-  if not item then return nil,"NO_ACTIVE_CLIP" end
-  local comp=access_comp(item)
-  if not comp then return nil,"NO_ACTIVE_FUSION_COMP" end
-  local scene,err=factory.inspect(comp)
-  if not scene then return nil,err end
+  local valid,invalid=require_handle(resolve,"Resolve context","GetProjectManager")
+  if not valid then return nil,"RESOLVE_CONTEXT_INVALID: "..invalid end
+  local manager,err=call(resolve,"GetProjectManager")
+  if not manager then return nil,"PROJECT_MANAGER_UNAVAILABLE: "..tostring(err) end
+  manager,err=require_handle(manager,"GetProjectManager","GetCurrentProject")
+  if not manager then return nil,err end
+  local project,perr=call(manager,"GetCurrentProject")
+  if not project then return nil,"NO_PROJECT: "..tostring(perr) end
+  project,perr=require_handle(project,"GetCurrentProject","GetCurrentTimeline")
+  if not project then return nil,perr end
+  local timeline,terr=call(project,"GetCurrentTimeline")
+  if not timeline then return nil,"NO_TIMELINE: "..tostring(terr) end
+  timeline,terr=require_handle(timeline,"GetCurrentTimeline","GetCurrentVideoItem")
+  if not timeline then return nil,terr end
+  local item,ierr=call(timeline,"GetCurrentVideoItem")
+  if not item then return nil,"NO_ACTIVE_CLIP: "..tostring(ierr) end
+  local comp,cerr=access_comp(item)
+  if not comp then return nil,cerr end
+  local scene,inspecterr=factory.inspect(comp)
+  if not scene then return nil,inspecterr end
   if not scene.has_scene then return nil,"ACTIVE_CLIP_IS_NOT_CARTORIG" end
   return {composition=comp,objects=scene.objects,scene_id=scene.scene_id,timeline_item=item}
 end
