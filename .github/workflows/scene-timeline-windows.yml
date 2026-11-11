@@ -99,6 +99,22 @@ jobs:
           if ((Get-FileHash (Join-Path $app 'lua\CartoRig\node_factory.lua') -Algorithm SHA256).Hash -ne $factory062) {
             throw 'Old 0.6.2 NodeFactory fixture was not genuinely installed'
           }
+          # A same-name Comp script appearing beside the managed Utility entry is
+          # not owned by 0.6.3. Upgrade must stop before changing either file.
+          $conflictComp=Join-Path $root 'Comp\cartorig-dev.lua'
+          [IO.File]::WriteAllText($conflictComp,'external duplicate cartorig-dev; preserve me')
+          $conflictHash=(Get-FileHash $conflictComp -Algorithm SHA256).Hash
+          $preUpgradeUtilityHash=(Get-FileHash $utility -Algorithm SHA256).Hash
+          $preUpgradeServiceHash=(Get-FileHash $module -Algorithm SHA256).Hash
+          $blocked=Start-Process -FilePath $new -ArgumentList '/S' -Wait -PassThru
+          if (!(Test-Path $conflictComp) -or (Get-FileHash $conflictComp -Algorithm SHA256).Hash -ne $conflictHash) {
+            throw '0.6.3 changed conflicting external Comp/cartorig-dev.lua'
+          }
+          if ((Get-FileHash $utility -Algorithm SHA256).Hash -ne $preUpgradeUtilityHash -or
+              (Get-FileHash $module -Algorithm SHA256).Hash -ne $preUpgradeServiceHash) {
+            throw 'Blocked duplicate-entry upgrade modified the installed 0.6.2 runtime'
+          }
+          Remove-Item -LiteralPath $conflictComp -Force
           for ($i=0; $i -lt 2; $i++) {
             $p=Start-Process -FilePath $new -ArgumentList '/S' -Wait -PassThru
             if ($p.ExitCode -ne 0) {throw "Preview install iteration $i failed"}
@@ -129,7 +145,34 @@ jobs:
           $p=Start-Process -FilePath $uninstall -ArgumentList '/S' -Wait -PassThru
           if ($p.ExitCode -ne 0 -or (Test-Path $utility)) {throw 'Clean uninstall failed'}
           if ((Get-FileHash $foreign -Algorithm SHA256).Hash -ne $hash) {throw 'Foreign script affected'}
-          'PASS: 0.5.2 -> authentic buggy 0.6.0 -> authentic 0.6.1 -> authentic 0.6.2 -> 0.6.3 migration, repeat install, one menu file, clean install/uninstall, foreign script preserved; Resolve host NOT RUN.' |
+
+          # Direct recognized legacy migration: authentic 0.5.2 Comp launcher must
+          # pass normalized SHA verification and migrate to the one Utility entry.
+          $p=Start-Process -FilePath $old -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or !(Test-Path $comp) -or (Test-Path $utility)) {throw 'Direct legacy fixture setup failed'}
+          $legacyHash=(Get-FileHash $comp -Algorithm SHA256).Hash
+          $p=Start-Process -FilePath $new -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or !(Test-Path $utility) -or (Test-Path $comp) -or !(Test-Path $backup)) {
+            throw 'Verified 0.5.2 legacy launcher did not migrate to 0.6.3'
+          }
+          $p=Start-Process -FilePath $uninstall -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or (Test-Path $utility) -or (Test-Path $backup)) {throw 'Direct migration uninstall failed'}
+
+          # Modified legacy launcher: same path and managed uninstall record are
+          # insufficient ownership proof. New installer must preserve and abort.
+          $p=Start-Process -FilePath $old -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or !(Test-Path $comp)) {throw 'Modified legacy fixture setup failed'}
+          Add-Content -LiteralPath $comp -Value '-- external modification after historical install'
+          $modifiedLegacyHash=(Get-FileHash $comp -Algorithm SHA256).Hash
+          $blockedLegacy=Start-Process -FilePath $new -ArgumentList '/S' -Wait -PassThru
+          if (!(Test-Path $comp) -or (Get-FileHash $comp -Algorithm SHA256).Hash -ne $modifiedLegacyHash) {
+            throw '0.6.3 changed unrecognized/modified legacy Comp launcher'
+          }
+          if (Test-Path $utility) {throw '0.6.3 activated Utility despite unverified legacy Comp launcher'}
+          $p=Start-Process -FilePath $uninstall -ArgumentList '/S' -Wait -PassThru
+          if ((Test-Path $utility)) {throw 'Cleanup after modified legacy fixture failed'}
+
+          'PASS: historical migration through 0.6.3, exact legacy SHA ownership, duplicate-entry blocking, repeat install, clean install/uninstall, same-name and unrelated foreign scripts preserved; Resolve host NOT RUN.' |
             Set-Content dist/package-validation.txt
       - name: Include read-only installation diagnostic
         shell: pwsh
