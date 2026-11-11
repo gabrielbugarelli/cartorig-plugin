@@ -196,6 +196,25 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('service062',self.win)
         self.assertIn('factory062',self.win)
 
+    def test_historical_063_flags_iteration_bug_is_pinned_before_064(self):
+        current=(ROOT/"src/CartoRig/timeline_service.lua").read_text(encoding="utf-8")
+        prior=(ROOT/"src/CartoRig/legacy_timeline_service_0.6.3.lua").read_text(encoding="utf-8")
+        boundary=(ROOT/"src/CartoRig/blackmagic_api.lua").read_text(encoding="utf-8")
+        self.assertIn('for index,item in pairs(items)',prior)
+        self.assertIn('for _,item in pairs(clips)',prior)
+        self.assertNotIn('for index,item in pairs(items)',current)
+        self.assertNotIn('for _,item in pairs(clips)',current)
+        self.assertIn('api.sequence(raw or {}',current)
+        self.assertIn('BINDING_METADATA={__flags=true}',boundary)
+        fixture=(ROOT/"packaging/legacy-preview-0.6.3.nsi").read_text(encoding="utf-8")
+        self.assertIn('legacy_timeline_service_0.6.3.lua',fixture)
+        self.assertIn('legacy_node_factory_0.6.3.lua',fixture)
+        self.assertIn('legacy-scene-ui-0.6.3.lua',fixture)
+        self.assertIn('$old063',self.win)
+        self.assertIn('service063',self.win)
+        self.assertIn('factory063',self.win)
+        self.assertIn('ui063',self.win)
+
     def test_windows_package_tests_real_upgrade_layout(self):
         s=self.win
         for marker in ('legacy-preview-0.5.2.nsi','legacy-preview-0.6.0.nsi','legacy-preview-0.6.1.nsi','legacy-preview-0.6.2.nsi','cartorig-dev-0.6.3-win64.exe',
