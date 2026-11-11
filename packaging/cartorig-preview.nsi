@@ -39,8 +39,10 @@ Section "Install cartorig-dev"
   ${EndIf}
   ; Never overwrite a previous interrupted migration backup owned by someone else.
   ${If} ${FileExists} "$R0\cartorig-dev.lua.migrated-060"
-    MessageBox MB_OK|MB_ICONSTOP "Previous migration backup found. Update stopped without changing scripts."
-    Abort
+    ${If} ${FileExists} "$R0\cartorig-dev.lua"
+      MessageBox MB_OK|MB_ICONSTOP "Conflicting Comp launcher and migration backup found. Update stopped."
+      Abort
+    ${EndIf}
   ${EndIf}
   ; Refuse to overwrite external Fuse tools: only the CartoRig managed
   ; uninstaller may own these filenames.
@@ -177,11 +179,13 @@ VerifyCartoRigUtility:
   ${If} ${FileExists} "$R0\cartorig-dev.lua"
     ClearErrors
     Rename "$R0\cartorig-dev.lua" "$R0\cartorig-dev.lua.migrated-060"
-    IfErrors 0 +6
-      Delete "$R2\cartorig-dev.lua"
-      Rename "$R2\cartorig-dev.lua.backup" "$R2\cartorig-dev.lua"
-      MessageBox MB_OK|MB_ICONSTOP "Cannot retire old Comp entry. Utility installation rolled back."
-      Abort
+    IfErrors MigrateCartoRigFailed MigrateCartoRigDone
+MigrateCartoRigFailed:
+    Delete "$R2\cartorig-dev.lua"
+    Rename "$R2\cartorig-dev.lua.backup" "$R2\cartorig-dev.lua"
+    MessageBox MB_OK|MB_ICONSTOP "Cannot retire old Comp entry. Utility installation rolled back."
+    Abort
+MigrateCartoRigDone:
   ${EndIf}
   Delete "$R2\cartorig-dev.lua.backup"
   ; Only remove historical diagnostic scripts when their exact SHA-256 matches
