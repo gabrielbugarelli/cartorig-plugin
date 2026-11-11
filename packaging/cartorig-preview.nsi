@@ -1,7 +1,7 @@
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !ifndef OUTPUTFILE
-  !define OUTPUTFILE "cartorig-dev-0.6.2-win64.exe"
+  !define OUTPUTFILE "cartorig-dev-0.6.3-win64.exe"
 !endif
 Unicode true
 Name "cartorig-dev"
@@ -64,28 +64,31 @@ Section "Install cartorig-dev"
       Abort
     ${EndIf}
   ${EndIf}
-  ; Recover the launcher from a previous interrupted update.
-  ${If} ${FileExists} "$R0\cartorig-dev.lua.backup"
-    ${If} ${FileExists} "$R0\cartorig-dev.lua"
+  ; Recover old Comp staging files only when this profile still has a
+  ; CartoRig-managed uninstaller. Unknown residues are preserved untouched.
+  ${If} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
+    ${If} ${FileExists} "$R0\cartorig-dev.lua.backup"
+      ${If} ${FileExists} "$R0\cartorig-dev.lua"
+        ClearErrors
+        Delete "$R0\cartorig-dev.lua.backup"
+        IfErrors 0 +3
+          MessageBox MB_OK|MB_ICONSTOP "Cannot clear managed stale backup; current launcher preserved."
+          Abort
+      ${Else}
+        ClearErrors
+        Rename "$R0\cartorig-dev.lua.backup" "$R0\cartorig-dev.lua"
+        IfErrors 0 +3
+          MessageBox MB_OK|MB_ICONSTOP "Could not restore managed interrupted update; backup preserved."
+          Abort
+      ${EndIf}
+    ${EndIf}
+    ${If} ${FileExists} "$R0\cartorig-dev.lua.pending"
       ClearErrors
-      Delete "$R0\cartorig-dev.lua.backup"
+      Delete "$R0\cartorig-dev.lua.pending"
       IfErrors 0 +3
-        MessageBox MB_OK|MB_ICONSTOP "Cannot clear stale backup; current launcher preserved."
-        Abort
-    ${Else}
-      ClearErrors
-      Rename "$R0\cartorig-dev.lua.backup" "$R0\cartorig-dev.lua"
-      IfErrors 0 +3
-        MessageBox MB_OK|MB_ICONSTOP "Could not restore interrupted update; backup preserved."
+        MessageBox MB_OK|MB_ICONSTOP "Cannot clear managed staged file; active launcher preserved."
         Abort
     ${EndIf}
-  ${EndIf}
-  ${If} ${FileExists} "$R0\cartorig-dev.lua.pending"
-    ClearErrors
-    Delete "$R0\cartorig-dev.lua.pending"
-    IfErrors 0 +3
-      MessageBox MB_OK|MB_ICONSTOP "Cannot clear previous staged file; active launcher preserved."
-      Abort
   ${EndIf}
   ; Older diagnostics must not block activation of the current launcher.
   ; Their own uninstallers run only AFTER the new launcher is active.
@@ -201,26 +204,23 @@ MigrateCartoRigDone:
   FileOpen $R1 "$LOCALAPPDATA\CartoRig\App\install-location.txt" w
   FileWrite $R1 "Launcher: $R2\cartorig-dev.lua$\r$\n"
   FileWrite $R1 "UI: $LOCALAPPDATA\CartoRig\App\lua\cartorig_scene_ui.lua$\r$\n"
-  FileWrite $R1 "Version: 0.6.2$\r$\n"
+  FileWrite $R1 "Version: 0.6.3$\r$\n"
   FileWrite $R1 "$R9$\r$\n"
   FileClose $R1
   ; Menu enumeration is NOT verified by this installer or the Windows Actions runner.
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "DisplayName" "cartorig-dev (Development Preview)"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "UninstallString" '"$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"'
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "DisplayVersion" "0.6.2"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "DisplayVersion" "0.6.3"
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "NoModify" 1
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "NoRepair" 1
 SectionEnd
 
 Section "Uninstall"
   StrCpy $INSTDIR "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts"
-  Delete "$INSTDIR\Comp\cartorig-dev.lua"
   Delete "$INSTDIR\Comp\cartorig-dev.lua.migrated-060"
   Delete "$INSTDIR\Utility\cartorig-dev.lua"
   Delete "$INSTDIR\Utility\cartorig-dev.lua.pending"
   Delete "$INSTDIR\Utility\cartorig-dev.lua.backup"
-  Delete "$INSTDIR\Comp\cartorig-dev.lua.pending"
-  Delete "$INSTDIR\Comp\cartorig-dev.lua.backup"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\cartorig_scene_ui.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\install-location.txt"
   Delete "$LOCALAPPDATA\CartoRig\App\last-error.txt"
