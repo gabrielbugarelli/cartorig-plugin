@@ -1,7 +1,7 @@
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !ifndef OUTPUTFILE
-  !define OUTPUTFILE "cartorig-dev-0.5.2-win64.exe"
+  !define OUTPUTFILE "cartorig-dev-0.6.0-win64.exe"
 !endif
 Unicode true
 Name "cartorig-dev"
@@ -21,6 +21,8 @@ ShowUninstDetails show
 Section "Install cartorig-dev"
   ; Canonical per-user location; never rely on user-customizable $INSTDIR.
   StrCpy $R0 "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp"
+  ; Utility is visible on every Resolve page; Comp is Fusion-context-only.
+  StrCpy $R2 "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility"
   StrCpy $R9 "Managed legacy cleanup: no error"
   ; The only development entry must be installed by a CartoRig-managed installer.
   ${If} ${FileExists} "$R0\cartorig-dev.lua"
@@ -28,6 +30,17 @@ Section "Install cartorig-dev"
       MessageBox MB_OK|MB_ICONSTOP "Existing cartorig-dev.lua is unmanaged; no files replaced."
       Abort
     ${EndIf}
+  ${EndIf}
+  ${If} ${FileExists} "$R2\cartorig-dev.lua"
+    ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
+      MessageBox MB_OK|MB_ICONSTOP "Existing Utility cartorig-dev.lua is unmanaged. No files were changed."
+      Abort
+    ${EndIf}
+  ${EndIf}
+  ; Never overwrite a previous interrupted migration backup owned by someone else.
+  ${If} ${FileExists} "$R0\cartorig-dev.lua.migrated-060"
+    MessageBox MB_OK|MB_ICONSTOP "Previous migration backup found. Update stopped without changing scripts."
+    Abort
   ${EndIf}
   ; Refuse to overwrite external Fuse tools: only the CartoRig managed
   ; uninstaller may own these filenames.
@@ -87,6 +100,7 @@ Section "Install cartorig-dev"
   File "/oname=geo.lua" "..\src\CartoRig\geo.lua"
   File "/oname=catalog.lua" "..\src\CartoRig\catalog.lua"
   File "/oname=node_factory.lua" "..\src\CartoRig\node_factory.lua"
+  File "/oname=timeline_service.lua" "..\src\CartoRig\timeline_service.lua"
   SetOutPath "$LOCALAPPDATA\CartoRig\App\data"
   File "/oname=ne_50m_land.lua" "..\data\ne_50m_land.lua"
   SetOutPath "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses"
@@ -123,39 +137,53 @@ Section "Install cartorig-dev"
     Abort
   ${EndIf}
 
-  ; Stage, verify and promote without a pre-upgrade uninstall.
-  SetOutPath "$R0"
+  ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\timeline_service.lua"
+    MessageBox MB_OK|MB_ICONSTOP "TimelineService missing; old entry preserved."
+    Abort
+  ${EndIf}
+  ; Activate the new Utility entry before retiring the previous Comp entry.
+  ; This avoids disappearing from all menus during a failed migration.
+  SetOutPath "$R2"
   ClearErrors
   File "/oname=cartorig-dev.lua.pending" "..\host\cartorig-dev-launcher.lua"
   IfErrors 0 +3
-    MessageBox MB_OK|MB_ICONSTOP "Cannot write staged launcher; previous launcher preserved."
+    MessageBox MB_OK|MB_ICONSTOP "Cannot stage Utility launcher; previous entry preserved."
     Abort
-  ${IfNot} ${FileExists} "$R0\cartorig-dev.lua.pending"
-    MessageBox MB_OK|MB_ICONSTOP "Staged launcher missing; previous launcher preserved."
+  ${IfNot} ${FileExists} "$R2\cartorig-dev.lua.pending"
+    MessageBox MB_OK|MB_ICONSTOP "Utility launcher staging failed; previous entry preserved."
     Abort
   ${EndIf}
-  ${If} ${FileExists} "$R0\cartorig-dev.lua"
+  ${If} ${FileExists} "$R2\cartorig-dev.lua"
     ClearErrors
-    Rename "$R0\cartorig-dev.lua" "$R0\cartorig-dev.lua.backup"
+    Rename "$R2\cartorig-dev.lua" "$R2\cartorig-dev.lua.backup"
     IfErrors 0 +3
-      MessageBox MB_OK|MB_ICONSTOP "Cannot back up current launcher; upgrade aborted."
+      MessageBox MB_OK|MB_ICONSTOP "Cannot back up Utility launcher. Previous entry preserved."
       Abort
   ${EndIf}
   ClearErrors
-  Rename "$R0\cartorig-dev.lua.pending" "$R0\cartorig-dev.lua"
-  IfErrors RestoreCartoRigLauncher VerifyCartoRigLauncher
-RestoreCartoRigLauncher:
-  ${If} ${FileExists} "$R0\cartorig-dev.lua.backup"
-    Rename "$R0\cartorig-dev.lua.backup" "$R0\cartorig-dev.lua"
+  Rename "$R2\cartorig-dev.lua.pending" "$R2\cartorig-dev.lua"
+  IfErrors RestoreCartoRigUtility VerifyCartoRigUtility
+RestoreCartoRigUtility:
+  ${If} ${FileExists} "$R2\cartorig-dev.lua.backup"
+    Rename "$R2\cartorig-dev.lua.backup" "$R2\cartorig-dev.lua"
   ${EndIf}
-  MessageBox MB_OK|MB_ICONSTOP "Cannot activate launcher; previous version restored when possible."
+  MessageBox MB_OK|MB_ICONSTOP "Cannot activate Utility launcher; previous entry restored when possible."
   Abort
-VerifyCartoRigLauncher:
-  ${IfNot} ${FileExists} "$R0\cartorig-dev.lua"
-    Goto RestoreCartoRigLauncher
+VerifyCartoRigUtility:
+  ${IfNot} ${FileExists} "$R2\cartorig-dev.lua"
+    Goto RestoreCartoRigUtility
   ${EndIf}
-  Delete "$R0\cartorig-dev.lua.backup"
-
+  ; The Comp launcher is only retired once the Utility launcher is present.
+  ${If} ${FileExists} "$R0\cartorig-dev.lua"
+    ClearErrors
+    Rename "$R0\cartorig-dev.lua" "$R0\cartorig-dev.lua.migrated-060"
+    IfErrors 0 +6
+      Delete "$R2\cartorig-dev.lua"
+      Rename "$R2\cartorig-dev.lua.backup" "$R2\cartorig-dev.lua"
+      MessageBox MB_OK|MB_ICONSTOP "Cannot retire old Comp entry. Utility installation rolled back."
+      Abort
+  ${EndIf}
+  Delete "$R2\cartorig-dev.lua.backup"
   ; Only remove historical diagnostic scripts when their exact SHA-256 matches
   ; an allowlisted CartoRig source file. Unknown content is never deleted.
   ClearErrors
@@ -167,15 +195,15 @@ VerifyCartoRigLauncher:
   ${EndIf}
   SetOutPath "$LOCALAPPDATA\CartoRig\App"
   FileOpen $R1 "$LOCALAPPDATA\CartoRig\App\install-location.txt" w
-  FileWrite $R1 "Launcher: $R0\cartorig-dev.lua$\r$\n"
+  FileWrite $R1 "Launcher: $R2\cartorig-dev.lua$\r$\n"
   FileWrite $R1 "UI: $LOCALAPPDATA\CartoRig\App\lua\cartorig_scene_ui.lua$\r$\n"
-  FileWrite $R1 "Version: 0.5.2$\r$\n"
+  FileWrite $R1 "Version: 0.6.0$\r$\n"
   FileWrite $R1 "$R9$\r$\n"
   FileClose $R1
   ; Menu enumeration is NOT verified by this installer or the Windows Actions runner.
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "DisplayName" "cartorig-dev (Development Preview)"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "UninstallString" '"$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"'
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "DisplayVersion" "0.5.2"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "DisplayVersion" "0.6.0"
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "NoModify" 1
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "NoRepair" 1
 SectionEnd
@@ -183,6 +211,10 @@ SectionEnd
 Section "Uninstall"
   StrCpy $INSTDIR "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts"
   Delete "$INSTDIR\Comp\cartorig-dev.lua"
+  Delete "$INSTDIR\Comp\cartorig-dev.lua.migrated-060"
+  Delete "$INSTDIR\Utility\cartorig-dev.lua"
+  Delete "$INSTDIR\Utility\cartorig-dev.lua.pending"
+  Delete "$INSTDIR\Utility\cartorig-dev.lua.backup"
   Delete "$INSTDIR\Comp\cartorig-dev.lua.pending"
   Delete "$INSTDIR\Comp\cartorig-dev.lua.backup"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\cartorig_scene_ui.lua"
@@ -197,6 +229,7 @@ Section "Uninstall"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\geo.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\catalog.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\node_factory.lua"
+  Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\timeline_service.lua"
   RMDir "$LOCALAPPDATA\CartoRig\App\lua\CartoRig"
   RMDir "$LOCALAPPDATA\CartoRig\App\lua"
   Delete "$LOCALAPPDATA\CartoRig\App\data\ne_50m_land.lua"
