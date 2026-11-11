@@ -27,24 +27,24 @@ Section "Install cartorig-dev"
   ; The only development entry must be installed by a CartoRig-managed installer.
   ${If} ${FileExists} "$R0\cartorig-dev.lua"
     ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
-      MessageBox MB_OK|MB_ICONSTOP "Existing Comp cartorig-dev.lua is unmanaged; no files were changed."
+      MessageBox MB_OK|MB_ICONSTOP "Existing Comp cartorig-dev.lua is unmanaged; no files were changed." /SD IDOK
       Abort
     ${EndIf}
   ${EndIf}
   ${If} ${FileExists} "$R2\cartorig-dev.lua"
     ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
-      MessageBox MB_OK|MB_ICONSTOP "Existing Utility cartorig-dev.lua is unmanaged. No files were changed."
+      MessageBox MB_OK|MB_ICONSTOP "Existing Utility cartorig-dev.lua is unmanaged. No files were changed." /SD IDOK
       Abort
     ${EndIf}
     ${If} ${FileExists} "$R0\cartorig-dev.lua"
-      MessageBox MB_OK|MB_ICONSTOP "Both Utility and Comp cartorig-dev.lua exist. The Comp file is preserved as unverified; resolve the duplicate before upgrading."
+      MessageBox MB_OK|MB_ICONSTOP "Both Utility and Comp cartorig-dev.lua exist. The Comp file is preserved as unverified; resolve the duplicate before upgrading." /SD IDOK
       Abort
     ${EndIf}
   ${EndIf}
   ; Never overwrite a previous interrupted migration backup owned by someone else.
   ${If} ${FileExists} "$R0\cartorig-dev.lua.migrated-060"
     ${If} ${FileExists} "$R0\cartorig-dev.lua"
-      MessageBox MB_OK|MB_ICONSTOP "Conflicting Comp launcher and migration backup found. Update stopped."
+      MessageBox MB_OK|MB_ICONSTOP "Conflicting Comp launcher and migration backup found. Update stopped." /SD IDOK
       Abort
     ${EndIf}
   ${EndIf}
@@ -52,19 +52,19 @@ Section "Install cartorig-dev"
   ; uninstaller may own these filenames.
   ${If} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigScene.fuse"
     ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
-      MessageBox MB_OK|MB_ICONSTOP "External CartoRig Fuse installation exists. No files changed."
+      MessageBox MB_OK|MB_ICONSTOP "External CartoRig Fuse installation exists. No files changed." /SD IDOK
       Abort
     ${EndIf}
   ${EndIf}
   ${If} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigWorldMap.fuse"
     ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
-      MessageBox MB_OK|MB_ICONSTOP "External CartoRig WorldMap Fuse found. No files changed."
+      MessageBox MB_OK|MB_ICONSTOP "External CartoRig WorldMap Fuse found. No files changed." /SD IDOK
       Abort
     ${EndIf}
   ${EndIf}
   ${If} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigCamera.fuse"
     ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
-      MessageBox MB_OK|MB_ICONSTOP "External CartoRig Camera Fuse found. No files changed."
+      MessageBox MB_OK|MB_ICONSTOP "External CartoRig Camera Fuse found. No files changed." /SD IDOK
       Abort
     ${EndIf}
   ${EndIf}
@@ -80,7 +80,7 @@ Section "Install cartorig-dev"
         ClearErrors
         ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\verify-managed-comp-launcher.ps1" -Path "$R0\cartorig-dev.lua"' $0
         ${If} $0 != 0
-          MessageBox MB_OK|MB_ICONSTOP "Comp\cartorig-dev.lua is not an exact recognized CartoRig 0.5.1/0.5.2 launcher. It was preserved and the upgrade was stopped."
+          MessageBox MB_OK|MB_ICONSTOP "Comp\cartorig-dev.lua is not an exact recognized CartoRig 0.5.1/0.5.2 launcher. It was preserved and the upgrade was stopped." /SD IDOK
           Abort
         ${EndIf}
       ${EndIf}
@@ -88,7 +88,7 @@ Section "Install cartorig-dev"
         ClearErrors
         ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\verify-managed-comp-launcher.ps1" -Path "$R0\cartorig-dev.lua.backup"' $0
         ${If} $0 != 0
-          MessageBox MB_OK|MB_ICONSTOP "Comp cartorig-dev.lua.backup is unrecognized. No legacy staging files were changed."
+          MessageBox MB_OK|MB_ICONSTOP "Comp cartorig-dev.lua.backup is unrecognized. No legacy staging files were changed." /SD IDOK
           Abort
         ${EndIf}
       ${EndIf}
@@ -96,7 +96,7 @@ Section "Install cartorig-dev"
         ClearErrors
         ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\verify-managed-comp-launcher.ps1" -Path "$R0\cartorig-dev.lua.pending"' $0
         ${If} $0 != 0
-          MessageBox MB_OK|MB_ICONSTOP "Comp cartorig-dev.lua.pending is unrecognized. No legacy staging files were changed."
+          MessageBox MB_OK|MB_ICONSTOP "Comp cartorig-dev.lua.pending is unrecognized. No legacy staging files were changed." /SD IDOK
           Abort
         ${EndIf}
       ${EndIf}
@@ -106,13 +106,13 @@ Section "Install cartorig-dev"
           ClearErrors
           Delete "$R0\cartorig-dev.lua.backup"
           IfErrors 0 +3
-            MessageBox MB_OK|MB_ICONSTOP "Cannot clear verified stale backup; current legacy launcher preserved."
+            MessageBox MB_OK|MB_ICONSTOP "Cannot clear verified stale backup; current legacy launcher preserved." /SD IDOK
             Abort
         ${Else}
           ClearErrors
           Rename "$R0\cartorig-dev.lua.backup" "$R0\cartorig-dev.lua"
           IfErrors 0 +3
-            MessageBox MB_OK|MB_ICONSTOP "Could not restore verified interrupted update; backup preserved."
+            MessageBox MB_OK|MB_ICONSTOP "Could not restore verified interrupted update; backup preserved." /SD IDOK
             Abort
         ${EndIf}
       ${EndIf}
@@ -120,7 +120,7 @@ Section "Install cartorig-dev"
         ClearErrors
         Delete "$R0\cartorig-dev.lua.pending"
         IfErrors 0 +3
-          MessageBox MB_OK|MB_ICONSTOP "Cannot clear verified staged file; active legacy launcher preserved."
+          MessageBox MB_OK|MB_ICONSTOP "Cannot clear verified staged file; active legacy launcher preserved." /SD IDOK
           Abort
       ${EndIf}
     ${EndIf}
@@ -153,32 +153,32 @@ Section "Install cartorig-dev"
   WriteUninstaller "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
   ; Files that the menu launcher requires must exist before any launcher rename.
   ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\lua\cartorig_scene_ui.lua"
-    MessageBox MB_OK|MB_ICONSTOP "Scene UI missing; the existing menu script was preserved."
+    MessageBox MB_OK|MB_ICONSTOP "Scene UI missing; the existing menu script was preserved." /SD IDOK
     Abort
   ${EndIf}
   ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\node_factory.lua"
-    MessageBox MB_OK|MB_ICONSTOP "NodeFactory missing; the existing menu script was preserved."
+    MessageBox MB_OK|MB_ICONSTOP "NodeFactory missing; the existing menu script was preserved." /SD IDOK
     Abort
   ${EndIf}
   ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\data\ne_50m_land.lua"
-    MessageBox MB_OK|MB_ICONSTOP "Offline map data missing; the existing menu script was preserved."
+    MessageBox MB_OK|MB_ICONSTOP "Offline map data missing; the existing menu script was preserved." /SD IDOK
     Abort
   ${EndIf}
   ${IfNot} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigScene.fuse"
-    MessageBox MB_OK|MB_ICONSTOP "Scene Fuse missing; the existing menu script was preserved."
+    MessageBox MB_OK|MB_ICONSTOP "Scene Fuse missing; the existing menu script was preserved." /SD IDOK
     Abort
   ${EndIf}
   ${IfNot} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigWorldMap.fuse"
-    MessageBox MB_OK|MB_ICONSTOP "WorldMap Fuse missing; the existing menu script was preserved."
+    MessageBox MB_OK|MB_ICONSTOP "WorldMap Fuse missing; the existing menu script was preserved." /SD IDOK
     Abort
   ${EndIf}
   ${IfNot} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigCamera.fuse"
-    MessageBox MB_OK|MB_ICONSTOP "Camera Fuse missing; the existing menu script was preserved."
+    MessageBox MB_OK|MB_ICONSTOP "Camera Fuse missing; the existing menu script was preserved." /SD IDOK
     Abort
   ${EndIf}
 
   ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\timeline_service.lua"
-    MessageBox MB_OK|MB_ICONSTOP "TimelineService missing; old entry preserved."
+    MessageBox MB_OK|MB_ICONSTOP "TimelineService missing; old entry preserved." /SD IDOK
     Abort
   ${EndIf}
   ; Activate the new Utility entry before retiring the previous Comp entry.
@@ -187,17 +187,17 @@ Section "Install cartorig-dev"
   ClearErrors
   File "/oname=cartorig-dev.lua.pending" "..\host\cartorig-dev-launcher.lua"
   IfErrors 0 +3
-    MessageBox MB_OK|MB_ICONSTOP "Cannot stage Utility launcher; previous entry preserved."
+    MessageBox MB_OK|MB_ICONSTOP "Cannot stage Utility launcher; previous entry preserved." /SD IDOK
     Abort
   ${IfNot} ${FileExists} "$R2\cartorig-dev.lua.pending"
-    MessageBox MB_OK|MB_ICONSTOP "Utility launcher staging failed; previous entry preserved."
+    MessageBox MB_OK|MB_ICONSTOP "Utility launcher staging failed; previous entry preserved." /SD IDOK
     Abort
   ${EndIf}
   ${If} ${FileExists} "$R2\cartorig-dev.lua"
     ClearErrors
     Rename "$R2\cartorig-dev.lua" "$R2\cartorig-dev.lua.backup"
     IfErrors 0 +3
-      MessageBox MB_OK|MB_ICONSTOP "Cannot back up Utility launcher. Previous entry preserved."
+      MessageBox MB_OK|MB_ICONSTOP "Cannot back up Utility launcher. Previous entry preserved." /SD IDOK
       Abort
   ${EndIf}
   ClearErrors
@@ -207,7 +207,7 @@ RestoreCartoRigUtility:
   ${If} ${FileExists} "$R2\cartorig-dev.lua.backup"
     Rename "$R2\cartorig-dev.lua.backup" "$R2\cartorig-dev.lua"
   ${EndIf}
-  MessageBox MB_OK|MB_ICONSTOP "Cannot activate Utility launcher; previous entry restored when possible."
+  MessageBox MB_OK|MB_ICONSTOP "Cannot activate Utility launcher; previous entry restored when possible." /SD IDOK
   Abort
 VerifyCartoRigUtility:
   ${IfNot} ${FileExists} "$R2\cartorig-dev.lua"
@@ -221,7 +221,7 @@ VerifyCartoRigUtility:
 MigrateCartoRigFailed:
     Delete "$R2\cartorig-dev.lua"
     Rename "$R2\cartorig-dev.lua.backup" "$R2\cartorig-dev.lua"
-    MessageBox MB_OK|MB_ICONSTOP "Cannot retire old Comp entry. Utility installation rolled back."
+    MessageBox MB_OK|MB_ICONSTOP "Cannot retire old Comp entry. Utility installation rolled back." /SD IDOK
     Abort
 MigrateCartoRigDone:
   ${EndIf}
