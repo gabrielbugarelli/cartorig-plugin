@@ -325,13 +325,14 @@ add_item(t2,"video",1,86400,86500,"video-editorial")
 local audio=add_item(t2,"audio",1,86420,87000,"audio-editorial")
 local subtitle=add_item(t2,"subtitle",1,86900,87100,"subtitle-editorial")
 -- Timeline markers are offsets from timeline start. This marker ends after all clips.
-t2.timeline_markers[900]={color="Blue",name="Editorial Marker",note="keep",duration=20,customData="external"}
-local beforeMarker=t2.timeline_markers[900]
+t2.timeline_markers[900.5]={color="Blue",name="Editorial Marker",note="keep",duration=20.25,customData="external"}
+local beforeMarker=t2.timeline_markers[900.5]
 local beforeSeek=t2.seek
 local appended,appendErr=svc.create(r2,"After all media")
 assert(appended,appendErr)
-assert(appended.start_frame==87320,"must append after subtitle/audio and marker global end")
-assert(t2.timeline_markers[900] and t2.timeline_markers[900].name=="Editorial Marker",
+assert(appended.start_frame==87321,
+  "fractional marker span must protect through the next whole frame without rewriting marker")
+assert(t2.timeline_markers[900.5] and t2.timeline_markers[900.5].name=="Editorial Marker",
   "timeline marker must remain at the same offset")
 assert(audio.start==86420 and audio.finish==87000)
 assert(subtitle.start==86900 and subtitle.finish==87100)
