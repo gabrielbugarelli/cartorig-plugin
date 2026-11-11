@@ -106,11 +106,15 @@ function factory.inspect(comp)
     end
   end
   local title=get(comp,TITLE)
-  if compid and (type(title)~="string" or title:match("^%s*$")) then
-    return nil,"STATE_INVALID: Scene title is missing from persisted composition state"
+  if title~=nil and (type(title)~="string" or title:match("^%s*$")) then
+    return nil,"STATE_INVALID: persisted Scene title is malformed"
   end
+  -- 0.6.0-0.6.2 development Scenes did not persist the title on the comp.
+  -- They remain readable; every new 0.6.3 Scene is required to persist it.
+  local legacyTitleMissing=compid~=nil and title==nil
   table.sort(objects,function(a,b) return a.name<b.name end)
-  return {scene_id=compid,title=title,objects=objects,has_scene=compid~=nil,existing_tools=list}
+  return {scene_id=compid,title=title,legacy_title_missing=legacyTitleMissing,
+    objects=objects,has_scene=compid~=nil,existing_tools=list}
 end
 
 -- A TimelineItem Fusion Composition usually already contains MediaOut1.
