@@ -49,7 +49,7 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('Rename "$R0\\cartorig-dev.lua" "$R0\\cartorig-dev.lua.migrated-060"',s)
         self.assertLess(s.index('Rename "$R2\\cartorig-dev.lua.pending"'),
                         s.index('Rename "$R0\\cartorig-dev.lua" "$R0\\cartorig-dev.lua.migrated-060"'))
-        self.assertIn('DisplayVersion" "0.6.3"',s)
+        self.assertIn('DisplayVersion" "0.6.4"',s)
 
     def test_installer_dependencies_and_cleanup(self):
         s=self.nsi
@@ -156,9 +156,9 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('997bd170c2b2a1ea921119c61ce53a5cee53bc1324ee715446c84cd96248ea4a',verifier)
         self.assertIn('6d1bd1fd52575bea31e73754f3408dbb0351d6089701690e6e82c95240a9b262',verifier)
         self.assertIn('Replace("`r`n","`n")',verifier)
-        self.assertIn('0.6.3 changed conflicting external Comp/cartorig-dev.lua',self.win)
-        self.assertIn('0.6.3 changed unrecognized/modified legacy Comp launcher',self.win)
-        self.assertIn('Verified 0.5.2 legacy launcher did not migrate cleanly to 0.6.3',self.win)
+        self.assertIn('0.6.4 changed conflicting external Comp/cartorig-dev.lua',self.win)
+        self.assertIn('0.6.4 changed unrecognized/modified legacy Comp launcher',self.win)
+        self.assertIn('Verified 0.5.2 legacy launcher did not migrate cleanly to 0.6.4',self.win)
     def test_shared_resolve_files_require_content_ownership(self):
         s=self.nsi
         verifier=self.shared
@@ -217,7 +217,7 @@ class InstallerSafetyTests(unittest.TestCase):
 
     def test_windows_package_tests_real_upgrade_layout(self):
         s=self.win
-        for marker in ('legacy-preview-0.5.2.nsi','legacy-preview-0.6.0.nsi','legacy-preview-0.6.1.nsi','legacy-preview-0.6.2.nsi','cartorig-dev-0.6.3-win64.exe',
+        for marker in ('legacy-preview-0.5.2.nsi','legacy-preview-0.6.0.nsi','legacy-preview-0.6.1.nsi','legacy-preview-0.6.2.nsi','legacy-preview-0.6.3.nsi','cartorig-dev-0.6.4-win64.exe',
                        'Get-FileHash','Utility\\cartorig-dev.lua','Comp\\cartorig-dev.lua',
                        'TimelineService mismatch','Not exactly one Scripts menu entry',
                        'Foreign script affected','retention-days: 7'):
