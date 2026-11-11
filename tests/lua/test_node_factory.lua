@@ -30,7 +30,11 @@ local function fake()
   function tool:GetData(k) return self.data[k] end
   function tool:FindInput(port)
    local parent=self
-   return {GetConnectedOutput=function() return parent.links[port] end}
+   return {GetConnectedOutput=function()
+    local source=parent.links[port]
+    if not source then return nil end
+    return {GetTool=function() return source end}
+   end}
   end
   function tool:ConnectInput(port,other)
    if comp.fail_link==port and self.regid=="MediaOut" then return false end
