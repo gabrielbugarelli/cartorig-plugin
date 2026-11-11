@@ -1,22 +1,41 @@
 -- cartorig-dev: Scene UI Manager only. One Create Scene = one timeline Fusion clip.
 -- No prior Fusion Composition or manual wiring; scene listing is automatic.
+-- The host can expose a global named "resolve" whose value is a number.
+-- In Lua, 0 is truthy: never accept globals solely by their truthiness.
+local function api_member(o,key)
+  local kind=type(o)
+  if kind~="table" and kind~="userdata" then return nil end
+  local ok,v=pcall(function() return o[key] end)
+  if ok then return v end
+end
+local function api_method(o,name)
+  return type(api_member(o,name))=="function"
+end
 local bmd=rawget(_G,"bmd")
-local resolve=rawget(_G,"resolve")
-if not resolve and bmd and type(bmd.scriptapp)=="function" then
-  local ok,result=pcall(bmd.scriptapp,"Resolve")
-  if ok then resolve=result end
+local supplied_resolve=rawget(_G,"resolve")
+local resolve=api_method(supplied_resolve,"GetProjectManager") and supplied_resolve or nil
+local fallback_type="not attempted"
+if not resolve and api_method(bmd,"scriptapp") then
+  local ok,result=pcall(function() return bmd.scriptapp("Resolve") end)
+  fallback_type=ok and type(result) or "exception"
+  if ok and api_method(result,"GetProjectManager") then
+    resolve=result
+  end
 end
 if not resolve then
-  local err="RESOLVE_UNAVAILABLE: open a Resolve project (not standalone Fusion)"
+  local err="RESOLVE_CONTEXT_INVALID: global resolve type "..type(supplied_resolve)..
+    "; bmd.scriptapp('Resolve') returned "..fallback_type..
+    ". Resolve scripting handle unavailable."
   print(err);return false,err
 end
-local fusion=rawget(_G,"fusion") or rawget(_G,"fu")
-if not fusion and type(resolve.Fusion)=="function" then
+local fusion=rawget(_G,"fusion")
+if not api_member(fusion,"UIManager") then fusion=rawget(_G,"fu") end
+if not api_member(fusion,"UIManager") and api_method(resolve,"Fusion") then
   local ok,result=pcall(function() return resolve:Fusion() end)
-  if ok then fusion=result end
+  if ok and api_member(result,"UIManager") then fusion=result end
 end
-if not bmd or type(bmd.UIDispatcher)~="function" or not fusion then
-  local err="UI_UNAVAILABLE: Resolve Fusion UIManager and UIDispatcher are required"
+if not api_method(bmd,"UIDispatcher") or not api_member(fusion,"UIManager") then
+  local err="UI_UNAVAILABLE: Resolve Fusion UIManager or UIDispatcher is missing"
   print(err);return false,err
 end
 local localapp=os.getenv("LOCALAPPDATA")
@@ -31,13 +50,13 @@ if not ok or type(service)~="table" then
   local err="TIMELINE_SERVICE_MISSING: "..tostring(service)
   print(err);return false,err
 end
-local ui=fusion.UIManager
+local ui=api_member(fusion,"UIManager")
 if type(ui)=="function" then
   local worked,result=pcall(function() return fusion:UIManager() end)
   if worked then ui=result end
 end
-if not ui then
-  local err="UI_MANAGER_UNAVAILABLE: Fusion UIManager is unavailable"
+if type(ui)~="table" and type(ui)~="userdata" then
+  local err="UI_MANAGER_UNAVAILABLE: expected UIManager object; got "..type(ui)
   print(err);return false,err
 end
 local okd,disp=pcall(function() return bmd.UIDispatcher(ui) end)
