@@ -96,6 +96,32 @@ Section "Install cartorig-dev"
   File "/oname=README.txt" "..\docs\CARTORIG_PREVIEW_TEST.md"
   File "/oname=LICENSE.txt" "..\LICENSE"
   WriteUninstaller "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
+  ; Files that the menu launcher requires must exist before any launcher rename.
+  ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\lua\cartorig_scene_ui.lua"
+    MessageBox MB_OK|MB_ICONSTOP "Scene UI missing; the existing menu script was preserved."
+    Abort
+  ${EndIf}
+  ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\node_factory.lua"
+    MessageBox MB_OK|MB_ICONSTOP "NodeFactory missing; the existing menu script was preserved."
+    Abort
+  ${EndIf}
+  ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\data\ne_50m_land.lua"
+    MessageBox MB_OK|MB_ICONSTOP "Offline map data missing; the existing menu script was preserved."
+    Abort
+  ${EndIf}
+  ${IfNot} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigScene.fuse"
+    MessageBox MB_OK|MB_ICONSTOP "Scene Fuse missing; the existing menu script was preserved."
+    Abort
+  ${EndIf}
+  ${IfNot} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigWorldMap.fuse"
+    MessageBox MB_OK|MB_ICONSTOP "WorldMap Fuse missing; the existing menu script was preserved."
+    Abort
+  ${EndIf}
+  ${IfNot} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigCamera.fuse"
+    MessageBox MB_OK|MB_ICONSTOP "Camera Fuse missing; the existing menu script was preserved."
+    Abort
+  ${EndIf}
+
   ; Stage, verify and promote without a pre-upgrade uninstall.
   SetOutPath "$R0"
   ClearErrors
