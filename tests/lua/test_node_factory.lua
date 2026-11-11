@@ -67,11 +67,12 @@ assert(#comp.tools==5)
 local rejected,rm=fake()
 rejected.fail_link="Input"
 local result2,reason2=factory.create_scene(rejected,"Connection failure",{localappdata=ROOT})
-assert(not result2 and reason2:match("SCENE_CREATE_FAILED"))
+assert(not result2 and type(reason2)=="string" and reason2:match("SCENE_CREATE_FAILED"),
+ "Expected transactional failure, got result="..tostring(result2).." / "..tostring(reason2))
 assert(#rejected.tools==1 and rm.links.Input==nil)
 assert(rejected:GetData("CartoRig.V1.SceneId")==nil)
 local failed,c=fake()
-failed.fail="CartoRigCamera"
+failed.fail="Fuse.CartoRigCamera"
 local result,error=factory.create_scene(failed,"Failure",{localappdata=ROOT})
 assert(not result and error:match("SCENE_CREATE_FAILED"))
 assert(#failed.tools==1 and failed.deleted==1)
