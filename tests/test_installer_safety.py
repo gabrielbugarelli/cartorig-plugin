@@ -54,13 +54,19 @@ class InstallerSafetyTests(unittest.TestCase):
     def test_installer_dependencies_and_cleanup(self):
         s=self.nsi
         self.assertIn('File "/oname=timeline_service.lua" "..\\src\\CartoRig\\timeline_service.lua"',s)
+        self.assertIn('File "/oname=blackmagic_api.lua" "..\\src\\CartoRig\\blackmagic_api.lua"',s)
+        self.assertIn('File "/oname=fusion_contract.lua" "..\\src\\CartoRig\\fusion_contract.lua"',s)
         self.assertIn('File "/oname=cartorig_scene_ui.lua" "..\\host\\cartorig-dev-scene.lua"',s)
+        self.assertIn('Blackmagic API contract boundary missing',s)
+        self.assertIn('Fusion contract boundary missing',s)
         self.assertIn('TimelineService missing',s)
         self.assertIn('Scene Fuse missing',s)
         self.assertIn('WorldMap Fuse missing',s)
         self.assertIn('Camera Fuse missing',s)
         self.assertIn('Delete "$INSTDIR\\Utility\\cartorig-dev.lua"',s)
         self.assertNotIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua.migrated-060"',s)
+        self.assertIn('Delete "$LOCALAPPDATA\\CartoRig\\App\\lua\\CartoRig\\blackmagic_api.lua"',s)
+        self.assertIn('Delete "$LOCALAPPDATA\\CartoRig\\App\\lua\\CartoRig\\fusion_contract.lua"',s)
         self.assertIn('Delete "$LOCALAPPDATA\\CartoRig\\App\\lua\\CartoRig\\timeline_service.lua"',s)
         self.assertNotIn('RMDir /r "$APPDATA\\Blackmagic Design',s)
 
@@ -88,18 +94,23 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertNotIn('WRONG_COMPOSITION',s)
         self.assertNotIn('SetActiveTool',s)
         self.assertIn('service.list_scenes,resolve',s)
-        self.assertIn('api_member(fusion,"UIManager")',s)
+        self.assertIn('require,"CartoRig.blackmagic_api"',s)
+        self.assertIn('api.call_function(bmd,"scriptapp","Resolve")',s)
+        self.assertIn('api.call_function(bmd,"UIDispatcher",ui)',s)
+        self.assertNotIn('local function api_member',s)
         self.assertIn('status~=true',self.launcher)
 
-    def test_resolve_api_receivers_are_validated_before_indexing(self):
+    def test_resolve_api_receivers_are_validated_by_shared_boundary(self):
         service=(ROOT/"src/CartoRig/timeline_service.lua").read_text(encoding="utf-8")
-        self.assertIn('API_INVALID_RECEIVER:',service)
-        self.assertIn('API_INVALID_HANDLE:',service)
-        self.assertIn('local ok,fn=pcall(function() return o[name] end)',service)
-        self.assertIn('GetProjectManager returned',service) if 'GetProjectManager returned' in service else self.assertIn('require_handle(manager,"GetProjectManager"',service)
+        boundary=(ROOT/"src/CartoRig/blackmagic_api.lua").read_text(encoding="utf-8")
+        self.assertIn('require("CartoRig.blackmagic_api")',service)
+        self.assertIn('API_INVALID_RECEIVER:',boundary)
+        self.assertIn('API_INVALID_HANDLE:',boundary)
+        self.assertIn('pcall(function() return receiver[key] end)',boundary)
+        self.assertIn('require_handle(manager,"GetProjectManager"',service)
         self.assertIn('require_handle(comp,"GetFusionCompByIndex","GetToolList")',service)
-        self.assertIn('api_method(supplied_resolve,"GetProjectManager")',self.scene)
-        self.assertIn('bmd.scriptapp("Resolve")',self.scene)
+        self.assertIn('api.method(supplied_resolve,"GetProjectManager")',self.scene)
+        self.assertIn('api.call_function(bmd,"scriptapp","Resolve")',self.scene)
         self.assertIn('RESOLVE_CONTEXT_INVALID:',self.scene)
 
     def test_historical_buggy_060_upgrade_is_an_actual_fixture(self):
