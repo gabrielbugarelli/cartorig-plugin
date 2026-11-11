@@ -108,7 +108,7 @@ jobs:
             if (-not (Test-Path $installRecord)) { throw "No installation location diagnostic" }
             $record=[IO.File]::ReadAllText($installRecord)
             if (-not $record.Contains($single) -or -not $record.Contains($uiInstalled) -or -not $record.Contains('0.5.1')) { throw "Installer wrote an inconsistent location record" }
-            if (Test-Path "$single.pending" -or (Test-Path "$single.backup")) { throw "Staged launcher or backup leaked to completed installation" }
+            if ((Test-Path "$single.pending") -or (Test-Path "$single.backup")) { throw "Staged launcher or backup leaked to completed installation" }
             foreach ($name in $fuses) {
               $path = Join-Path $fuseDir $name
               if (-not (Test-Path $path)) { throw "Missing physical Fusion Fuse $name" }
