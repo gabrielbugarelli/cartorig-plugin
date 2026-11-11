@@ -293,17 +293,12 @@ local function ensure_timeline(ctx)
   if not created then return nil,"TIMELINE_CREATE_FAILED: "..tostring(cerr) end
   created,cerr=require_handle(created,"CreateEmptyTimeline","GetTrackCount")
   if not created then return nil,cerr end
-  local selected,serr=call(ctx.project,"SetCurrentTimeline",created)
-  if selected~=true then
-    local deleted,deleteErr=call(ctx.media_pool,"DeleteTimelines",{created})
-    if deleted~=true then
-      return nil,"TIMELINE_SELECT_FAILED: "..tostring(serr)..
-        "; ROLLBACK_INCOMPLETE: created timeline not deleted: "..tostring(deleteErr)
-    end
-    return nil,"TIMELINE_SELECT_FAILED: "..tostring(serr).."; created timeline removed"
-  end
   ctx.timeline=created
   ctx.created_timeline=true
+  local selected,serr=call(ctx.project,"SetCurrentTimeline",created)
+  if selected~=true then
+    return nil,"TIMELINE_SELECT_FAILED: "..tostring(serr)
+  end
   return created
 end
 local function ensure_video_track(ctx)
