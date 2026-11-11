@@ -301,8 +301,13 @@ local function rollback_context(ctx,item)
     if not ok then problems[#problems+1]=err end
   end
   if not ctx.created_timeline and ctx.timeline and type(ctx.original_timecode)=="string" then
-    local ok,err=call(ctx.timeline,"SetCurrentTimecode",ctx.original_timecode)
-    if ok~=true then problems[#problems+1]="playhead not restored: "..tostring(err) end
+    local editOk,editErr=call(ctx.resolve,"OpenPage","edit")
+    if editOk~=true then
+      problems[#problems+1]="cannot enter Edit page to restore playhead: "..tostring(editErr)
+    else
+      local ok,err=call(ctx.timeline,"SetCurrentTimecode",ctx.original_timecode)
+      if ok~=true then problems[#problems+1]="playhead not restored: "..tostring(err) end
+    end
   end
   if not ctx.created_timeline and ctx.timeline and ctx.rollback_baseline then
     local restored,err=compare_timeline(ctx.timeline,ctx.rollback_baseline,nil)
@@ -423,8 +428,8 @@ function M.create(resolve,title,opts)
   local result,nodeErr=factory.create_scene(comp,title,{disallow_new_mediaout=true,localappdata=opts.localappdata})
   if not result then return fail(ctx,item,nodeErr) end
   if method(item,"SetName") then pcall(item.SetName,item,"CartoRig - "..title) end
-  local sceneTc=M.timecode_add(starttc,at-start,fps)
-  if sceneTc then pcall(timeline.SetCurrentTimecode,timeline,sceneTc) end
+  -- Insertion already happened at the desired playhead. Do not call
+  -- SetCurrentTimecode while Fusion is active; Resolve documents it for Edit-like pages.
   return {
     scene_id=result.scene_id,objects=result.objects,timeline_item=item,composition=comp,
     start_frame=at,end_frame=finish,track_index=trackIndex,new_timeline=ctx.created_timeline==true,
