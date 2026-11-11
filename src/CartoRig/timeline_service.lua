@@ -204,13 +204,15 @@ function M.create(resolve,title,opts)
   end
   local retained,why=verify_preserved(timeline,previous)
   if not retained then return result_error(timeline,item,why) end
-  local comp,cerr=access_comp(item)
-  if not comp then
-    -- Newly added Fusion Compositions may initialize their graph on the Fusion page.
-    local _=call(resolve,"OpenPage","fusion")
-    comp,cerr=access_comp(item)
-    if not comp then return result_error(timeline,item,cerr) end
+  -- Materialize the inserted Fusion Composition in the host BEFORE inspecting
+  -- MediaOut. Resolve may create its default MediaOut only on Fusion page entry;
+  -- authoring beforehand could create a second, unconnected output.
+  local opened=call(resolve,"OpenPage","fusion")
+  if opened~=true then
+    return result_error(timeline,item,"FUSION_PAGE_UNAVAILABLE: cannot initialize default MediaOut")
   end
+  local comp,cerr=access_comp(item)
+  if not comp then return result_error(timeline,item,cerr) end
   local inspect,ie=factory.inspect(comp)
   if not inspect then return result_error(timeline,item,"NEW_COMP_INVALID: "..tostring(ie)) end
   if inspect.has_scene then return result_error(timeline,item,"NEW_COMP_ALREADY_HAS_SCENE") end
@@ -223,7 +225,6 @@ function M.create(resolve,title,opts)
   -- Keep playhead within newly created item so the editor sees the result in Fusion.
   local scene_tc=M.timecode_add(starttc,at-start,fps)
   if scene_tc then pcall(timeline.SetCurrentTimecode,timeline,scene_tc) end
-  local fusionOpened=call(resolve,"OpenPage","fusion")
   return {
     scene_id=result.scene_id,
     objects=result.objects,
@@ -232,7 +233,7 @@ function M.create(resolve,title,opts)
     start_frame=at,
     end_frame=finish,
     new_timeline=created,
-    fusion_page_opened=fusionOpened==true,
+    fusion_page_opened=true,
     message="Scene created in its own Fusion Composition; host Viewer and save/reopen require verification",
   }
 end
