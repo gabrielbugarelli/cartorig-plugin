@@ -53,6 +53,18 @@ function api.call(receiver,name,...)
   return value
 end
 
+-- Blackmagic's global bmd table exposes module functions (dot-call), unlike
+-- Resolve/Fusion objects whose methods receive the object as self (colon-call).
+function api.call_function(container,name,...)
+  local fn,err=api.method(container,name,name)
+  if not fn then return nil,err end
+  local ok,value=pcall(fn,...)
+  if not ok then
+    return nil,"API_FUNCTION_FAILED: "..tostring(name)..": "..tostring(value)
+  end
+  return value
+end
+
 function api.strict(receiver,name,...)
   local value,err=api.call(receiver,name,...)
   if value==nil or value==false then
