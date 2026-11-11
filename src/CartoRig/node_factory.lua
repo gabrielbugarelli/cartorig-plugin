@@ -80,17 +80,21 @@ function factory.inspect(comp)
   if owned>0 and not compid then
     return nil,"STATE_INVALID: orphaned CartoRig nodes; no implicit repair"
   end
-  if compid and owned~=3 and owned~=4 then
-    return nil,"STATE_INVALID: expected exactly three structural nodes and optional owned MediaOut"
-  end
   if compid then
-    local found={}
+    -- Scene/WorldMap/Camera are the only singleton structural types. Additional
+    -- CartoRig authoring nodes (Country, State, Route, Marker, Label, etc.) are
+    -- expected and must not invalidate a healthy composition.
+    local structural={Scene=0,WorldMap=0,Camera=0}
     for _,o in ipairs(objects) do
-      if found[o.type] then return nil,"STATE_INVALID: duplicated structural type" end
-      found[o.type]=true
+      if structural[o.type]~=nil then
+        structural[o.type]=structural[o.type]+1
+        if structural[o.type]>1 then
+          return nil,"STATE_INVALID: duplicated structural type "..tostring(o.type)
+        end
+      end
     end
-    if not found.Scene or not found.WorldMap or not found.Camera then
-      return nil,"STATE_INVALID: structural nodes missing"
+    if structural.Scene~=1 or structural.WorldMap~=1 or structural.Camera~=1 then
+      return nil,"STATE_INVALID: structural nodes missing or duplicated"
     end
   end
   table.sort(objects,function(a,b) return a.name<b.name end)
