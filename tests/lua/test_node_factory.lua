@@ -71,6 +71,12 @@ for _,o in ipairs(persisted.objects) do
  if o.type=="Scene" then sceneDisplay=o.display_name end
 end
 assert(sceneDisplay=="Brazil Map","Scene display name must persist independently of timeline clip name")
+comp:SetData("CartoRig.V1.Title",nil)
+local legacyReadable=assert(factory.inspect(comp))
+assert(legacyReadable.has_scene and legacyReadable.legacy_title_missing==true and legacyReadable.title==nil,
+ "pre-0.6.3 Scene without persisted title must remain readable")
+comp:SetData("CartoRig.V1.Title","Brazil Map")
+assert(assert(factory.inspect(comp)).legacy_title_missing==false)
 -- Additional authoring nodes must not invalidate the three singleton structural
 -- nodes. Multiple Countries/States/Markers/etc. are expected by the product.
 local countries={}
