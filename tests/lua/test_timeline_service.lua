@@ -122,8 +122,12 @@ local function fake(start_with_timeline)
   end
   function timeline:GetItemListInTrack(kind,index)
     local track=self.tracks[kind][index]
-    if not track or #track.items==0 then return nil end
-    return track.items
+    if not track then return nil end
+    -- Resolve Studio 20.3.1 host evidence: documented [items...] lists can
+    -- include internal Lua-binding metadata beside numeric list elements.
+    local out={__flags=4194304}
+    for i,item in ipairs(track.items) do out[i]=item end
+    return out
   end
   function timeline:GetStartFrame() return clock end
   function timeline:GetStartTimecode() return "01:00:00:00" end
@@ -140,21 +144,21 @@ local function fake(start_with_timeline)
     return true
   end
   function timeline:GetMarkers()
-    local out={}
+    local out={__flags=262144}
     for frameId,info in pairs(self.timeline_markers) do
-      local copy={}
+      local copy={__flags=131072}
       for key,value in pairs(info) do copy[key]=value end
       out[frameId]=copy
     end
     return out
   end
   function timeline:GetMarkInOut()
-    local out={}
+    local out={__flags=65536}
     if self.marks.video then
-      out.video={["in"]=self.marks.video["in"],["out"]=self.marks.video["out"]}
+      out.video={["in"]=self.marks.video["in"],["out"]=self.marks.video["out"],__flags=32768}
     end
     if self.marks.audio then
-      out.audio={["in"]=self.marks.audio["in"],["out"]=self.marks.audio["out"]}
+      out.audio={["in"]=self.marks.audio["in"],["out"]=self.marks.audio["out"],__flags=32768}
     end
     return out
   end
@@ -352,6 +356,20 @@ t2b.fail_clear_missing=true
 local emptyMarks,emptyMarksErr=svc.create(r2b,"No marks")
 assert(emptyMarks,emptyMarksErr)
 assert(next(t2b.marks)==nil,"empty In/Out state must remain empty after Scene creation")
+
+-- A public non-list key is not binding metadata and must fail closed rather
+-- than being silently ignored.
+local r2c,p2c,t2c=fake(true)
+t2c:AddTrack("video")
+local originalList=t2c.GetItemListInTrack
+function t2c:GetItemListInTrack(kind,index)
+  local out=originalList(self,kind,index)
+  if kind=="video" and index==1 then out.unexpected="not API metadata" end
+  return out
+end
+local malformedList,malformedListErr=svc.create(r2c,"Malformed list")
+assert(malformedList==nil and malformedListErr:find("API_LIST_KEY_INVALID",1,true))
+assert(t2c.created==0,"malformed documented list must block before insertion")
 
 -- Locked destination track: no clip, no page/playhead/marks side effects.
 local r3,p3,t3=fake(true)
