@@ -1,5 +1,6 @@
 -- CartoRig V1 | model of immutable object identity and scene invariants.
 -- Only the Fusion adapter may turn model proposals into physical native nodes.
+local api = require("CartoRig.blackmagic_api")
 local domain = {}
 local VALID_TYPES = {
   Scene = true, WorldMap = true, Camera = true,
@@ -60,13 +61,10 @@ local function seed()
 end
 function domain.uuid()
   local bmd = rawget(_G, "bmd")
+  local native = nil
   if type(bmd) == "table" or type(bmd) == "userdata" then
-    local ok, native = pcall(function()
-      local generator = bmd.createuuid
-      if type(generator) ~= "function" then return nil end
-      return generator()
-    end)
-    if ok and valid_uuid(native) then return native end
+    native = api.call_function(bmd,"createuuid")
+    if valid_uuid(native) then return native end
   end
   seed()
   local chars = {}
