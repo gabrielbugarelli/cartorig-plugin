@@ -141,9 +141,13 @@ function window.On.CreateScene.Clicked(ev)
     refresh()
     return
   end
-  record("Create Scene",true,"Scene "..tostring(value.scene_id)..
+  local detail="Scene "..tostring(value.scene_id)..
     ", individual Fusion Composition frames "..tostring(value.start_frame)..
-    "–"..tostring(value.end_frame).."; Fusion page opened: "..tostring(value.fusion_page_opened))
+    "–"..tostring(value.end_frame).."; Fusion page opened: "..tostring(value.fusion_page_opened)
+  if type(value.warnings)=="table" and #value.warnings>0 then
+    detail=detail.."; warnings: "..table.concat(value.warnings," | ")
+  end
+  record("Create Scene",true,detail)
   refresh()
 end
 function window.On.SaveReport.Clicked(ev)
