@@ -107,6 +107,10 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('legacy_timeline_service_0.6.1.lua',fixture)
         self.assertIn('service061',self.win)
 
+    def test_all_installer_error_dialogs_have_silent_defaults(self):
+        dialogs=[line for line in self.nsi.splitlines() if 'MessageBox ' in line]
+        self.assertGreater(len(dialogs),0)
+        self.assertTrue(all('/SD IDOK' in line for line in dialogs), dialogs)
     def test_legacy_comp_migration_requires_exact_content_ownership(self):
         s=self.nsi
         verifier=(ROOT/"support/verify-managed-comp-launcher.ps1").read_text(encoding="utf-8")
