@@ -39,8 +39,16 @@ function domain.slug(text)
   return table.concat(parts)
 end
 
--- Non-security random UUID v4 for persistent object identity. Generated UUIDs
--- are checked for collision against the whole scene before being committed.
+-- Prefer Fusion's native UUID generator in the host. The pure Lua fallback is
+-- retained only for source tests or environments where bmd.createuuid is absent.
+local function valid_uuid(s)
+  if type(s) ~= "string" or #s ~= 36 then return false end
+  if not s:match("^[0-9a-fA-F%-]+$") then return false end
+  return s:sub(9,9) == "-" and s:sub(14,14) == "-" and
+         s:sub(19,19) == "-" and s:sub(24,24) == "-" and
+         s:sub(15,15) == "4" and s:sub(20,20):match("[89aAbB]") ~= nil
+end
+
 local seeded = false
 local function seed()
   if not seeded then
@@ -51,6 +59,15 @@ local function seed()
   end
 end
 function domain.uuid()
+  local bmd = rawget(_G, "bmd")
+  if type(bmd) == "table" or type(bmd) == "userdata" then
+    local ok, native = pcall(function()
+      local generator = bmd.createuuid
+      if type(generator) ~= "function" then return nil end
+      return generator()
+    end)
+    if ok and valid_uuid(native) then return native end
+  end
   seed()
   local chars = {}
   for i = 1, 32 do chars[i] = string.format("%x", math.random(0, 15)) end
@@ -62,11 +79,7 @@ function domain.uuid()
 end
 
 function domain.is_uuid(s)
-  if type(s) ~= "string" or #s ~= 36 then return false end
-  if not s:match("^[0-9a-fA-F%-]+$") then return false end
-  return s:sub(9,9) == "-" and s:sub(14,14) == "-" and
-         s:sub(19,19) == "-" and s:sub(24,24) == "-" and
-         s:sub(15,15) == "4" and s:sub(20,20):match("[89aAbB]") ~= nil
+  return valid_uuid(s)
 end
 
 local function unique_id(used)
