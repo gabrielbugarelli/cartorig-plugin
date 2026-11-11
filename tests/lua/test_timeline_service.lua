@@ -62,8 +62,14 @@ local function fake(start_with_timeline)
     if self.failinsert then return nil end
     local comp={}
     local item={start=self.seek,finish=self.seek+120,identity="clip-"..self.created,comp=comp}
-    function item:GetStart() return self.start end
-    function item:GetEnd() return self.finish end
+    function item:GetStart(subframe_precision)
+      assert(subframe_precision==false,"GetStart must receive explicit false in Resolve Lua binding")
+      return self.start
+    end
+    function item:GetEnd(subframe_precision)
+      assert(subframe_precision==false,"GetEnd must receive explicit false in Resolve Lua binding")
+      return self.finish
+    end
     function item:GetUniqueId() return self.identity end
     function item:GetFusionCompCount() return self.missing and 0 or 1 end
     function item:GetFusionCompByIndex(index) return self.comp end
@@ -134,12 +140,39 @@ assert(#timeline.clips==5 and timeline.created==5 and project.createdName=="Cart
 assert(#assert(svc.list_scenes(resolve))==5)
 assert(resolve.page=="fusion")
 assert(svc.current_scene(resolve).scene_id==timeline.last.comp.sid)
+-- Reproduce the 0.6.1 host incompatibility directly: when the optional-looking
+-- argument is omitted, this TimelineItem returns nil rather than a number.
+local strictItem={start=90000,finish=90120}
+function strictItem:GetStart(subframe_precision)
+  if subframe_precision~=false then return nil end
+  return self.start
+end
+function strictItem:GetEnd(subframe_precision)
+  if subframe_precision~=false then return nil end
+  return self.finish
+end
+function strictItem:GetUniqueId() return "strict-position-item" end
+function strictItem:GetFusionCompCount() return 0 end
+local strictResolve,strictProject,strictTimeline=fake(true)
+strictTimeline:AddTrack("video")
+strictTimeline.clips[1]=strictItem
+local strictCreated,strictError=svc.create(strictResolve,"Explicit subframe flag")
+assert(strictCreated,strictError)
+assert(strictCreated.start_frame==90120,
+  "Service must read existing TimelineItem positions with GetStart(false)/GetEnd(false)")
+
 -- Existing media in a project must stay byte-equivalent and at same frames.
 local second,pr,tl=fake(true)
 tl:AddTrack("video")
 local foreign={start=86400,finish=86500,identity="editorialClip",comp={}}
-function foreign:GetStart() return self.start end
-function foreign:GetEnd() return self.finish end
+function foreign:GetStart(subframe_precision)
+  assert(subframe_precision==false,"foreign GetStart requires explicit false")
+  return self.start
+end
+function foreign:GetEnd(subframe_precision)
+  assert(subframe_precision==false,"foreign GetEnd requires explicit false")
+  return self.finish
+end
 function foreign:GetUniqueId() return self.identity end
 function foreign:GetFusionCompCount() return 0 end
 tl.clips[1]=foreign
