@@ -448,10 +448,14 @@ function M.list_scenes(resolve)
     if clips==nil then clips={} end
     if type(clips)~="table" then return nil,"TRACK_LIST_INVALID: V"..track.." returned "..type(clips) end
     for _,item in pairs(clips) do
+      local itemHandle,itemHandleErr=require_handle(item,"GetItemListInTrack","GetFusionCompCount")
+      if not itemHandle then return nil,itemHandleErr end
       local count,numErr=call(item,"GetFusionCompCount")
       if type(count)=="number" and count>=1 then
         local comp,cerr=call(item,"GetFusionCompByIndex",1)
         if comp then
+          local compHandle,compHandleErr=require_handle(comp,"GetFusionCompByIndex","GetToolList")
+          if not compHandle then return nil,compHandleErr end
           local state,inspectErr=factory.inspect(comp)
           if state and state.has_scene then
             local sceneStart,_,positionError=item_bounds(item,"scene list V"..track)
