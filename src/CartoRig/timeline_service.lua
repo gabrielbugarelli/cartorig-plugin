@@ -293,17 +293,23 @@ local function rollback_context(ctx,item)
       problems[#problems+1]="added video track retained because it is not empty"
     end
   end
-  if ctx.created_timeline and ctx.media_pool and ctx.timeline then
-    local deleted,err=call(ctx.media_pool,"DeleteTimelines",{ctx.timeline})
-    if deleted~=true then problems[#problems+1]="created timeline not deleted: "..tostring(err) end
-  end
-  if ctx.timeline and ctx.original_marks then
+  -- Existing timelines must be restored before any verification. A timeline
+  -- created solely for this failed command is deleted instead of being edited.
+  if not ctx.created_timeline and ctx.timeline and ctx.original_marks then
     local ok,err=restore_video_marks(ctx.timeline,ctx.original_marks)
     if not ok then problems[#problems+1]=err end
   end
-  if ctx.timeline and type(ctx.original_timecode)=="string" then
+  if not ctx.created_timeline and ctx.timeline and type(ctx.original_timecode)=="string" then
     local ok,err=call(ctx.timeline,"SetCurrentTimecode",ctx.original_timecode)
     if ok~=true then problems[#problems+1]="playhead not restored: "..tostring(err) end
+  end
+  if not ctx.created_timeline and ctx.timeline and ctx.baseline then
+    local restored,err=compare_timeline(ctx.timeline,ctx.baseline,nil)
+    if not restored then problems[#problems+1]="external timeline not restored: "..tostring(err) end
+  end
+  if ctx.created_timeline and ctx.media_pool and ctx.timeline then
+    local deleted,err=call(ctx.media_pool,"DeleteTimelines",{ctx.timeline})
+    if deleted~=true then problems[#problems+1]="created timeline not deleted: "..tostring(err) end
   end
   if ctx.resolve and type(ctx.original_page)=="string" then
     local ok,err=call(ctx.resolve,"OpenPage",ctx.original_page)
