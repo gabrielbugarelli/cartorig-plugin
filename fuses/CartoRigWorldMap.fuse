@@ -1,0 +1,124 @@
+-- CartoRig WorldMap: physical Fusion generator with actual local Natural Earth 1:50m land.
+-- V1 Work in progress: borders not yet enabled, host render unverified.
+FuRegisterClass("CartoRigWorldMap", CT_SourceTool, {
+  REGS_Name="CartoRig WorldMap", REGS_Category="CartoRig",
+  REGS_OpIconString="WM", REGS_OpDescription="Offline Natural Earth 1:50m WorldMap",
+  REG_Source_GlobalCtrls=true, REG_Source_SizeCtrls=true,
+  REG_NoMotionBlurCtrls=true, REG_NoBlendCtrls=true, REG_Version=1,
+})
+local rings=nil
+local cachedShape=nil
+local shapeKey=nil
+local function getrings()
+  if rings then return rings end
+  local localapp=os.getenv("LOCALAPPDATA")
+  if not localapp or localapp=="" then error("DATA_MISSING: LOCALAPPDATA is unavailable") end
+  local filename=localapp.."\\CartoRig\\App\\data\\ne_50m_land.lua"
+  local ok,result=pcall(dofile,filename)
+  if not ok or type(result)~="table" or #result~=1422 then
+    error("DATA_INCOMPATIBLE: required Natural Earth 1:50m land rings missing or invalid: "..tostring(result))
+  end
+  rings=result
+  return rings
+end
+local function read(input,req)
+  local p=input:GetValue(req)
+  if not p or type(p.Value)~="number" then error("Control value unavailable") end
+  return p.Value
+end
+local function colorInput(title,base,group,r,g,b)
+  local defaults={r,g,b}
+  local inputs={}
+  for i,suffix in ipairs({"R","G","B"}) do
+    inputs[i]=self:AddInput(i==1 and title or suffix,base..suffix,{
+      LINKID_DataType="Number",INPID_InputControl="ColorControl",
+      IC_ControlGroup=group,IC_ControlID=i-1,
+      INP_Default=defaults[i],INP_MinScale=0,INP_MaxScale=1,
+      INP_MinAllowed=0,INP_MaxAllowed=1,
+    })
+  end
+  return inputs
+end
+function Create()
+  self:AddControlPage("Control")
+  LandControls=colorInput("Land Fill Color","Land",10,214/255,215/255,210/255)
+  OceanControls=colorInput("Ocean Fill Color","Ocean",11,21/255,43/255,60/255)
+  InLandVisible=self:AddInput("Land Visible","LandVisible",{
+    LINKID_DataType="Number",INPID_InputControl="CheckboxControl",INP_Integer=true,INP_Default=1,
+  })
+  InOceanVisible=self:AddInput("Ocean Visible","OceanVisible",{
+    LINKID_DataType="Number",INPID_InputControl="CheckboxControl",INP_Integer=true,INP_Default=1,
+  })
+  InLandOpacity=self:AddInput("Land Opacity","LandOpacity",{
+    LINKID_DataType="Number",INPID_InputControl="SliderControl",
+    INP_Default=1,INP_MinScale=0,INP_MaxScale=1,INP_MinAllowed=0,INP_MaxAllowed=1,
+  })
+  InOceanOpacity=self:AddInput("Ocean Opacity","OceanOpacity",{
+    LINKID_DataType="Number",INPID_InputControl="SliderControl",
+    INP_Default=1,INP_MinScale=0,INP_MaxScale=1,INP_MinAllowed=0,INP_MaxAllowed=1,
+  })
+  InMapOpacity=self:AddInput("WorldMap Opacity","WorldMapOpacity",{
+    LINKID_DataType="Number",INPID_InputControl="SliderControl",
+    INP_Default=1,INP_MinScale=0,INP_MaxScale=1,INP_MinAllowed=0,INP_MaxAllowed=1,
+  })
+  InTransparent=self:AddInput("Background Transparent","BackgroundTransparent",{
+    LINKID_DataType="Number",INPID_InputControl="CheckboxControl",INP_Integer=true,INP_Default=0,
+  })
+  self:AddInput("Source: Natural Earth 1:50m land (local)", "SourceInfo",{
+    LINKID_DataType="Text", INPID_InputControl="LabelControl",INP_Passive=true,INP_External=false,
+  })
+  self:AddControlPage("Motion")
+  self:AddInput("Motion preset not yet implemented in this preview","NoMotion",{
+    LINKID_DataType="Text",INPID_InputControl="LabelControl",INP_Passive=true,INP_External=false,
+  })
+  OutImage=self:AddOutput("Output","Output",{LINKID_DataType="Image",LINK_Main=1})
+end
+local function getShape(w,h,xaspect,yaspect)
+  local key=table.concat({w,h,xaspect,yaspect},":")
+  if cachedShape and shapeKey==key then return cachedShape end
+  local data=getrings()
+  local s=Shape()
+  local worldscale=math.min(w/360,h/180)
+  local xscale=worldscale/w
+  local yscale=worldscale/w -- Shape uses width-normalized units on both axes
+  for _,ring in ipairs(data) do
+    if #ring>=8 then
+      s:MoveTo(0.5+ring[1]*xscale, (h*0.5+ring[2]*worldscale)/w)
+      for k=3,#ring,2 do
+        s:LineTo(0.5+ring[k]*xscale,(h*0.5+ring[k+1]*worldscale)/w)
+      end
+      s:Close()
+    end
+  end
+  cachedShape=s;shapeKey=key
+  return s
+end
+function Process(req)
+  local realw,realh=Width,Height
+  local scale=Scale and Scale>0 and Scale or 1
+  local width,height=math.max(1,math.floor(realw/scale+0.5)),math.max(1,math.floor(realh/scale+0.5))
+  local attrs={
+    IMG_Document=self.Comp,IMG_Width=width,IMG_Height=height,
+    IMG_XScale=XAspect,IMG_YScale=YAspect,
+    IMG_Quality=not req:IsQuick(),IMG_MotionBlurQuality=not req:IsNoMotionBlur(),
+    IMAT_OriginalWidth=realw,IMAT_OriginalHeight=realh,
+  }
+  local img=Image(attrs)
+  if not img then error("RENDER_FAILED: Fusion did not allocate an image") end
+  local mapOpacity=read(InMapOpacity,req)
+  local oAlpha=(read(InOceanVisible,req)>=0.5 and read(InTransparent,req)<0.5)
+     and read(InOceanOpacity,req)*mapOpacity or 0
+  img:Fill(Pixel({R=read(OceanControls[1],req),G=read(OceanControls[2],req),
+    B=read(OceanControls[3],req),A=oAlpha}))
+  if read(InLandVisible,req)>=0.5 and mapOpacity>0 then
+    local shape=getShape(width,height,XAspect,YAspect)
+    local ic=ImageChannel(img,req:IsQuick() and 1 or 4)
+    local cs=ChannelStyle()
+    cs.Color=Pixel({R=read(LandControls[1],req),G=read(LandControls[2],req),
+      B=read(LandControls[3],req),A=read(InLandOpacity,req)*mapOpacity})
+    ic:SetStyleFill(FillStyle())
+    ic:ShapeFill(shape)
+    ic:PutToImage("CM_Merge",cs)
+  end
+  OutImage:Set(req,img)
+end

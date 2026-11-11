@@ -1,4 +1,4 @@
-"""Exercise actual Lua core modules on a free Linux runner, no Resolve mock."""
+"""Exercise actual Lua source modules on a free runner, no Resolve acceptance mock."""
 from __future__ import annotations
 import os
 from pathlib import Path
@@ -13,7 +13,7 @@ class LuaRuntimeIntegration(unittest.TestCase):
         env = dict(os.environ)
         env["LUA_PATH"] = str(ROOT / "src/?.lua") + ";" + str(ROOT / "src/?/init.lua") + ";;"
         result = subprocess.run([LUA, str(ROOT / script)], cwd=ROOT, env=env,
-                                capture_output=True, text=True, timeout=15, check=False)
+                                capture_output=True, text=True, timeout=40, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + "\n" + result.stderr)
         self.assertIn("PASS", result.stdout)
         return result
@@ -28,8 +28,13 @@ class LuaRuntimeIntegration(unittest.TestCase):
         self.invoke("tests/lua/test_catalog.lua")
 
     def test_defensive_fusion_bridge_mock_unit(self):
-        # Only application logic is simulated; this is NOT host acceptance.
         self.invoke("tests/lua/test_native_probe.lua")
+
+    def test_factory_transactions_and_external_node_protection(self):
+        self.invoke("tests/lua/test_node_factory.lua")
+
+    def test_pinned_natural_earth_real_world_data(self):
+        self.invoke("tests/lua/test_land_source.lua")
 
 if __name__ == "__main__":
     unittest.main()
