@@ -55,6 +55,8 @@ class FuseContractTests(unittest.TestCase):
         self.assertIn('GetTrackTypeAndIndex',service)
         self.assertIn('GetIsTrackLocked',service)
         self.assertIn('GetMarkInOut',service)
+        self.assertIn('GetMarkers',service)
+        self.assertIn('SetTrackLock',service)
         self.assertIn('DeleteTrack',service)
         self.assertIn('DeleteTimelines',service)
         self.assertIn('ROLLBACK_INCOMPLETE',service)
