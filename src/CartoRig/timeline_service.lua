@@ -157,7 +157,14 @@ local function track_snapshot(timeline)
   local before,maxend={},nil
   for track=1,tracks do
     local items,ie=call(timeline,"GetItemListInTrack","video",track)
-    if type(items)~="table" then return nil,"TRACK_READ_FAILED: "..tostring(ie) end
+    if items==nil and ie then
+      return nil,"TRACK_READ_FAILED: "..tostring(ie)
+    elseif items==nil then
+      -- Resolve can report nil for an existing but empty track.
+      items={}
+    elseif type(items)~="table" then
+      return nil,"TRACK_READ_INVALID: V"..track.." returned "..type(items)
+    end
     for _,item in pairs(items) do
       local start=call(item,"GetStart")
       local finish=call(item,"GetEnd")
