@@ -36,6 +36,9 @@ class LuaRuntimeIntegration(unittest.TestCase):
     def test_resolve_handle_type_safety_regressions(self):
         self.invoke("tests/lua/test_resolve_api_handles.lua")
 
+    def test_scene_ui_uses_valid_resolve_handle_for_five_clicks(self):
+        self.invoke("tests/lua/test_scene_ui_dispatch.lua")
+
     def test_factory_transactions_and_external_node_protection(self):
         self.invoke("tests/lua/test_node_factory.lua")
 
