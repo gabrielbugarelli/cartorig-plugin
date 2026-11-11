@@ -12,7 +12,7 @@ The only scripts entry is **Workspace → Scripts → cartorig-dev**. It is inst
 4. Restart Resolve and open an existing test project. **Do not manually add Fusion Composition to the timeline.**
 5. Open **Workspace → Scripts → cartorig-dev** on the Edit page. The Scene window will appear without an active Fusion Composition.
 
-Upgrading from 0.5.2 installs the new Utility launcher before retiring the previous Comp launcher. The older file is retained as a non-script backup at `Comp\cartorig-dev.lua.migrated-060` until the next uninstall. After installation, exactly one active `cartorig-dev.lua` should exist under `Scripts\Utility`.
+Upgrading from a recognized 0.5.1/0.5.2 Comp launcher verifies its normalized SHA-256, activates the new Utility launcher first, retires the legacy entry, and removes the temporary migration backup only after the new entry is active. Unknown or modified same-name scripts are preserved and the upgrade is blocked. After installation, exactly one active managed `cartorig-dev.lua` should exist under `Scripts\Utility`.
 
 ## First Studio 20 acceptance exercise
 
@@ -22,7 +22,7 @@ Upgrading from 0.5.2 installs the new Utility launcher before retiring the previ
 4. Close the window and select a CartoRig clip, then inspect the Fusion Node Editor. In WorldMap, adjust Land Fill Color and verify the Viewer/MediaOut output. Change the Camera's center and zoom directly in its Inspector.
 5. Save, close and reopen the project. Verify that the five clips still exist, remain independent and render. Opening cartorig-dev again must show the scene list automatically; there is **no Open Scene button**.
 6. Test while keeping unrelated editorial clips in the timeline. The CartoRig insertion must append safely and **must not overwrite or move** existing clips.
-7. Use **Save Report** and send the TXT from `%TEMP%` with screenshots if errors occur.
+7. Use **Save Report** after the test. The TXT records the installed version and exact GitHub Actions commit; send that report with screenshots if errors occur.
 
 If Resolve refuses to create the first empty timeline, refuses to seek safely to the append boundary, cannot return the inserted Fusion Composition or rejects the default MediaOut connection, **the command fails explicitly**. These exact host capabilities have not yet been verified with this new workflow. Do not edit your main project to experiment.
 
@@ -67,7 +67,7 @@ These checks are exercised by Lua/Python tests, including simulated ripple acros
 
 The ZIP includes a read-only **`verificar-cartorig-dev.cmd`** diagnostic. Running it creates a report in `%TEMP%` without modifying project files. If the menu entry is present but the UI does not open, inspect `%LOCALAPPDATA%\CartoRig\App\last-error.txt`.
 
-Windows Installed Apps → **cartorig-dev (Development Preview)** → Uninstall. It removes only the managed scripts, Fuses, assets and their temporary staging files, not Resolve projects or unrelated scripts.
+Windows Installed Apps → **cartorig-dev (Development Preview)** → Uninstall. Resolve must be closed. Files in Resolve's shared Scripts/Fuses directories are removed only when their normalized SHA-256 matches a known CartoRig-managed version; modified or replacement files are preserved. Private CartoRig runtime files are removed. Resolve projects and unrelated scripts are never targeted.
 
 ## Verification limits
 
