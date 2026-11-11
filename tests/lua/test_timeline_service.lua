@@ -89,6 +89,12 @@ local function fake(start_with_timeline)
     local track=self.tracks[kind][index]
     return track and track.locked or false
   end
+  function timeline:SetTrackLock(kind,index,locked)
+    local track=self.tracks[kind][index]
+    if not track then return false end
+    track.locked=locked
+    return true
+  end
   function timeline:GetItemListInTrack(kind,index)
     local track=self.tracks[kind][index]
     if not track or #track.items==0 then return nil end
@@ -140,7 +146,12 @@ local function fake(start_with_timeline)
   function timeline:InsertFusionCompositionIntoTimeline()
     self.created=self.created+1
     if self.failinsert then return nil end
-    local track=self.tracks.video[self.destination_track]
+    local destination=self.destination_track
+    if self.auto_extra_track then
+      ensure_track("video",#self.tracks.video+1)
+      destination=#self.tracks.video
+    end
+    local track=self.tracks.video[destination]
     if not track or track.locked then return nil end
     local duration=self.default_duration
     if self.marks.video then
@@ -171,9 +182,12 @@ local function fake(start_with_timeline)
     if self.failfuse then comp.fail=true end
     if self.corrupt_new_comp then comp.corrupt=true end
     local item=make_item("clip-"..self.created,self.seek,self.seek+duration,
-      self.wrong_track_type or "video",self.wrong_track_index or self.destination_track,comp)
+      self.wrong_track_type or "video",self.wrong_track_index or destination,comp)
     if self.missingcomp then item.missing=true end
     track.items[#track.items+1]=item
+    if self.mutate_existing_lock and self.tracks.video[1] then
+      self.tracks.video[1].locked=not self.tracks.video[1].locked
+    end
     self.last=item
     return item
   end
@@ -342,6 +356,24 @@ t8.wrong_track_type="audio"
 local wrong,wrongErr=svc.create(r8,"Wrong target")
 assert(wrong==nil and wrongErr:find("FUSION_INSERT_WRONG_TRACK",1,true))
 assert(#t8.tracks.video[1].items==0 and t8.deletes==1)
+
+-- If Resolve creates an extra destination track, reject the insertion and remove
+-- the now-empty auto-created track during rollback.
+local r9a,p9a,t9a=fake(true)
+t9a:AddTrack("video")
+t9a.auto_extra_track=true
+local extraTrack,extraTrackErr=svc.create(r9a,"Auto extra track")
+assert(extraTrack==nil and extraTrackErr:find("FUSION_INSERT_WRONG_TRACK",1,true))
+assert(t9a:GetTrackCount("video")==1 and t9a.deleted_tracks==1)
+
+-- If an insertion unexpectedly mutates a pre-existing track lock, rollback
+-- restores the lock instead of leaving editor state changed.
+local r9b,p9b,t9b=fake(true)
+t9b:AddTrack("video")
+t9b.mutate_existing_lock=true
+local lockResult,lockErr=svc.create(r9b,"Lock mutation")
+assert(lockResult==nil and lockErr:find("EXTERNAL_TIMELINE_CHANGED",1,true))
+assert(t9b.tracks.video[1].locked==false,"rollback must restore original lock state")
 
 -- If Resolve unexpectedly moves pre-existing media, report incomplete rollback
 -- instead of claiming safety.
