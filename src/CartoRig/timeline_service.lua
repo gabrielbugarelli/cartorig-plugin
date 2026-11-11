@@ -533,7 +533,6 @@ function M.create(resolve,title,opts)
   if not after then return fail(ctx,item,preserveErr) end
   local restored,restoreErr=restore_marks(timeline,ctx.original_marks)
   if not restored then return fail(ctx,item,restoreErr) end
-  ctx.original_marks=nil
   local opened,openErr=call(resolve,"OpenPage","fusion")
   if opened~=true then return fail(ctx,item,"FUSION_PAGE_UNAVAILABLE: "..tostring(openErr)) end
   local comp,compErr=access_comp(item)
@@ -544,6 +543,15 @@ function M.create(resolve,title,opts)
   local result,nodeErr=factory.create_scene(comp,title,{disallow_new_mediaout=true,localappdata=opts.localappdata})
   if not result then return fail(ctx,item,nodeErr) end
   if method(item,"SetName") then pcall(item.SetName,item,"CartoRig - "..title) end
+  -- Final editorial verification after Fusion graph authoring. Only the new
+  -- TimelineItem may differ from the pre-transaction snapshot.
+  local finalState,finalErr=compare_timeline(timeline,before,itemId)
+  if not finalState then return fail(ctx,item,"POST_AUTHORING_TIMELINE_CHANGED: "..tostring(finalErr)) end
+  local finalMarks,finalMarkErr=save_marks(timeline)
+  if not finalMarks then return fail(ctx,item,finalMarkErr) end
+  if not mark_states_equal(ctx.original_marks or {},finalMarks) then
+    return fail(ctx,item,"POST_AUTHORING_MARK_STATE_CHANGED: timeline In/Out differs after Fusion authoring")
+  end
   -- Insertion already happened at the desired playhead. Do not call
   -- SetCurrentTimecode while Fusion is active; Resolve documents it for Edit-like pages.
   return {
