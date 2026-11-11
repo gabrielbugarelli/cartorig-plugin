@@ -10,6 +10,8 @@ local OWNER=P.."Owned"
 local VERSION=P.."SchemaVersion"
 local TYPE=P.."ObjectType"
 local SOURCE=P.."DatasetSource"
+local TITLE=P.."Title"
+local DISPLAY=P.."DisplayName"
 local FUSES={
   WorldMap="Fuse.CartoRigWorldMap",
   Camera="Fuse.CartoRigCamera",
@@ -62,7 +64,7 @@ function factory.inspect(comp)
       local kind=get(tool,TYPE)
       if not kind then return nil,"STATE_INVALID: owned node has no type" end
       local obj={type=kind,name=attrs(tool).TOOLS_Name or "",id=get(tool,OBJECT),
-        scene_id=get(tool,SCENE_KEY)}
+        scene_id=get(tool,SCENE_KEY),display_name=get(tool,DISPLAY)}
       if not domain.is_uuid(obj.id) or not domain.is_uuid(obj.scene_id) then
         return nil,"STATE_INVALID: invalid node identity"
       end
@@ -103,8 +105,12 @@ function factory.inspect(comp)
       return nil,"STATE_INVALID: structural nodes missing or duplicated"
     end
   end
+  local title=get(comp,TITLE)
+  if compid and (type(title)~="string" or title:match("^%s*$")) then
+    return nil,"STATE_INVALID: Scene title is missing from persisted composition state"
+  end
   table.sort(objects,function(a,b) return a.name<b.name end)
-  return {scene_id=compid,objects=objects,has_scene=compid~=nil,existing_tools=list}
+  return {scene_id=compid,title=title,objects=objects,has_scene=compid~=nil,existing_tools=list}
 end
 
 -- A TimelineItem Fusion Composition usually already contains MediaOut1.
@@ -157,7 +163,8 @@ local function create_node(comp,kind,info,x,y,created)
     [OBJECT]=info.object_id,
     [TYPE]=kind,
     [SCENE_KEY]=info.scene_id,
-    [VERSION]="1.0.0"
+    [VERSION]="1.0.0",
+    [DISPLAY]=info.display_name
   }) do
     tool:SetData(key,value)
     if get(tool,key)~=value then error("NODE_METADATA_FAILED: "..kind.." / "..key) end
@@ -244,8 +251,13 @@ function factory.create_scene(comp,title,opts)
     comp:SetData(SCENE_KEY,state.scene_id)
     comp:SetData(VERSION,state.schema_version)
     comp:SetData(SOURCE,"Natural Earth 1:50m land")
-    if get(comp,SCENE_KEY)~=state.scene_id then
-      error("SCENE_STATE_FAILED: composition did not persist scene identity")
+    comp:SetData(TITLE,state.title)
+    if get(comp,SCENE_KEY)~=state.scene_id or get(comp,TITLE)~=state.title then
+      error("SCENE_STATE_FAILED: composition did not persist scene identity/title")
+    end
+    local observed,observedErr=factory.inspect(comp)
+    if not observed or not observed.has_scene or observed.scene_id~=state.scene_id or observed.title~=state.title then
+      error("SCENE_STATE_FAILED: post-create reconstruction failed: "..tostring(observedErr))
     end
   end)
   if not succeeded then
@@ -261,6 +273,7 @@ function factory.create_scene(comp,title,opts)
     pcall(function() comp:SetData(SCENE_KEY,nil) end)
     pcall(function() comp:SetData(VERSION,nil) end)
     pcall(function() comp:SetData(SOURCE,nil) end)
+    pcall(function() comp:SetData(TITLE,nil) end)
     pcall(function() comp:EndUndo(true) end)
     return nil,"SCENE_CREATE_FAILED: "..tostring(why)..(#cleanup>0 and
       "; cleanup may be incomplete: "..table.concat(cleanup,"; ") or "; created nodes removed")
