@@ -1,6 +1,5 @@
 -- CartoRig V1 | model of immutable object identity and scene invariants.
 -- Only the Fusion adapter may turn model proposals into physical native nodes.
-local api = require("CartoRig.blackmagic_api")
 local domain = {}
 local VALID_TYPES = {
   Scene = true, WorldMap = true, Camera = true,
@@ -40,8 +39,10 @@ function domain.slug(text)
   return table.concat(parts)
 end
 
--- Prefer Fusion's native UUID generator in the host. The pure Lua fallback is
--- retained only for source tests or environments where bmd.createuuid is absent.
+-- UUID generation is deliberately host-independent. bmd.createuuid is exposed
+-- in some Fusion builds but is not part of the Blackmagic documentation used by
+-- CartoRig, so production identity must not depend on it. This local Park-Miller
+-- PRNG avoids changing Lua's process-global math.random state.
 local function valid_uuid(s)
   if type(s) ~= "string" or #s ~= 36 then return false end
   if not s:match("^[0-9a-fA-F%-]+$") then return false end
@@ -50,30 +51,35 @@ local function valid_uuid(s)
          s:sub(15,15) == "4" and s:sub(20,20):match("[89aAbB]") ~= nil
 end
 
-local seeded = false
-local function seed()
-  if not seeded then
-    local clock = math.floor((os.clock() * 1000000) % 1000000)
-    math.randomseed((os.time() % 2147483647) + clock)
-    for _ = 1, 16 do math.random() end
-    seeded = true
+local rng_state=nil
+local function initial_seed()
+  local clock=math.floor((os.clock()*1000000)%2147483646)
+  local address=tostring({}):match("0x(%x+)")
+  local address_part=0
+  if address then
+    -- Only the low 7 hex digits are needed; this stays inside exact Lua-number
+    -- integer range and adds per-runtime variation without exposing the address.
+    address_part=tonumber(address:sub(-7),16) or 0
   end
+  local seed=(os.time()%2147483646 + clock + address_part)%2147483646
+  return seed+1
+end
+local function next_random()
+  if not rng_state then rng_state=initial_seed() end
+  rng_state=(rng_state*48271)%2147483647
+  return rng_state
+end
+local function nibble()
+  return next_random()%16
 end
 function domain.uuid()
-  local bmd = rawget(_G, "bmd")
-  local native = nil
-  if type(bmd) == "table" or type(bmd) == "userdata" then
-    native = api.call_function(bmd,"createuuid")
-    if valid_uuid(native) then return native end
-  end
-  seed()
-  local chars = {}
-  for i = 1, 32 do chars[i] = string.format("%x", math.random(0, 15)) end
-  chars[13] = "4"
-  chars[17] = string.format("%x", math.random(8, 11))
-  local hex = table.concat(chars)
-  return hex:sub(1,8) .. "-" .. hex:sub(9,12) .. "-" .. hex:sub(13,16) .. "-" ..
-         hex:sub(17,20) .. "-" .. hex:sub(21,32)
+  local chars={}
+  for i=1,32 do chars[i]=string.format("%x",nibble()) end
+  chars[13]="4"
+  chars[17]=string.format("%x",8+(nibble()%4))
+  local hex=table.concat(chars)
+  return hex:sub(1,8).."-"..hex:sub(9,12).."-"..hex:sub(13,16).."-"..
+         hex:sub(17,20).."-"..hex:sub(21,32)
 end
 
 function domain.is_uuid(s)
