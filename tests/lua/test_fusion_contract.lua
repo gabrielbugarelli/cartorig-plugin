@@ -13,7 +13,11 @@ function comp:AddTool(regid,x,y)
   function tool:SetData(key,value) self.data[key]=value end
   function tool:FindInput(name)
     local owner=self
-    return {GetConnectedOutput=function() return owner.links[name] end}
+    return {GetConnectedOutput=function()
+      local source=owner.links[name]
+      if not source then return nil end
+      return {GetTool=function() return source end}
+    end}
   end
   function tool:ConnectInput(name,target) self.links[name]=target;return true end
   function tool:Delete() self.deleted=true;return nil end -- documented Delete may be void
@@ -38,9 +42,21 @@ assert(fusion.get_data(background,"CartoRig.Test")=="value")
 
 assert(fusion.connect(media,"Input",background))
 local input=assert(fusion.find_input(media,"Input"))
-assert(fusion.connected_output(input)==background)
+local connected=assert(fusion.connected_output(input))
+assert(fusion.output_tool(connected)==background)
 assert(fusion.connect(media,"Input",nil))
 assert(fusion.connected_output(input)==nil)
+
+local decoy=assert(fusion.add_tool(comp,"Background",2,0))
+local originalConnect=media.ConnectInput
+function media:ConnectInput(name,target)
+  self.links[name]=target and decoy or nil
+  return true
+end
+local wrong,wrongErr=fusion.connect(media,"Input",background)
+assert(wrong==nil and wrongErr:find("FUSION_CONNECT_WRONG_SOURCE",1,true))
+media.ConnectInput=originalConnect
+assert(fusion.connect(media,"Input",nil))
 
 assert(fusion.start_undo(comp,"test"))
 assert(comp.undo==1)
