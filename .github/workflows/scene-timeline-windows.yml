@@ -6,7 +6,9 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # v2 avoids a stale/orphaned concurrency lock left by pre-foundation runs while
+  # preserving single-candidate cancellation semantics for all new executions.
+  group: ${{ github.workflow }}-${{ github.ref }}-v2
   cancel-in-progress: true
 jobs:
   package:
