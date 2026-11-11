@@ -39,7 +39,15 @@ foreach($item in $known){
     continue
   }
   try{
-    $sha=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+    # NSIS is 32-bit and can launch PowerShell without the Get-FileHash cmdlet.
+    # Compute via the .NET runtime present on supported Windows.
+    $stream=[IO.File]::OpenRead($path)
+    try {
+      $hasher=[Security.Cryptography.SHA256]::Create()
+      try {
+        $sha=([BitConverter]::ToString($hasher.ComputeHash($stream))).Replace('-','').ToLowerInvariant()
+      } finally { $hasher.Dispose() }
+    } finally { $stream.Dispose() }
     if($item.Hashes -contains $sha){
       Remove-Item -LiteralPath $path -Force -ErrorAction Stop
       if([IO.File]::Exists($path)){
