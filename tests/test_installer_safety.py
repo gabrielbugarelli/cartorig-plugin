@@ -69,7 +69,7 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertNotIn('WRONG_COMPOSITION',s)
         self.assertNotIn('SetActiveTool',s)
         self.assertIn('service.list_scenes,resolve',s)
-        self.assertIn('fusion.UIManager',s)
+        self.assertIn('api_member(fusion,"UIManager")',s)
         self.assertIn('status~=true',self.launcher)
 
     def test_resolve_api_receivers_are_validated_before_indexing(self):
