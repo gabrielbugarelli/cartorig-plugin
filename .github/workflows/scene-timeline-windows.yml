@@ -1,7 +1,7 @@
 name: cartorig-dev Scene Timeline Windows
 on:
   push:
-    branches: ['feat/scene-per-timeline-composition']
+    branches: ['feat/scene-per-timeline-composition', 'fix/resolve-context-type-guard-061']
   workflow_dispatch:
 permissions:
   contents: read
@@ -18,7 +18,7 @@ jobs:
       - name: Install free NSIS
         shell: pwsh
         run: choco install nsis --yes --no-progress --limit-output
-      - name: Compile historical 0.5.2 and new 0.6.0 installers
+      - name: Compile historical 0.5.2/0.6.0 and new 0.6.1 installers
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist,fixture | Out-Null
@@ -26,14 +26,17 @@ jobs:
           if (!(Test-Path $exe)) {throw 'NSIS unavailable'}
           $root=(Get-Location).Path
           $old=Join-Path $root 'fixture\cartorig-dev-0.5.2.exe'
-          $new=Join-Path $root 'dist\cartorig-dev-0.6.0-win64.exe'
+          $old060=Join-Path $root 'fixture\cartorig-dev-0.6.0.exe'
+          $new=Join-Path $root 'dist\cartorig-dev-0.6.1-win64.exe'
           & $exe /V2 "/DOUTPUTFILE=$old" packaging\legacy-preview-0.5.2.nsi
           if ($LASTEXITCODE -ne 0) {throw 'Legacy compile failed'}
+          & $exe /V2 "/DOUTPUTFILE=$old060" packaging\legacy-preview-0.6.0.nsi
+          if ($LASTEXITCODE -ne 0) {throw 'Authentic old 0.6.0 fixture compile failed'}
           & $exe /V3 "/DOUTPUTFILE=$new" packaging\cartorig-preview.nsi
           if ($LASTEXITCODE -ne 0 -or !(Test-Path $new)) {throw 'Preview compile failed'}
           $sha=(Get-FileHash -Algorithm SHA256 $new).Hash.ToLowerInvariant()
-          "$sha  cartorig-dev-0.6.0-win64.exe" | Set-Content -Encoding ascii dist/SHA256SUMS.txt
-          @{version='0.6.0';type='development-only';commit_sha="$env:GITHUB_SHA";sha256=$sha;script='Utility\cartorig-dev.lua'} |
+          "$sha  cartorig-dev-0.6.1-win64.exe" | Set-Content -Encoding ascii dist/SHA256SUMS.txt
+          @{version='0.6.1';type='development-only';commit_sha="$env:GITHUB_SHA";sha256=$sha;script='Utility\cartorig-dev.lua'} |
             ConvertTo-Json | Set-Content -Encoding utf8 dist/manifest.json
       - name: Validate old-to-new migration, single Utility menu, reinstall, uninstall
         shell: pwsh
@@ -43,8 +46,9 @@ jobs:
           $utility=Join-Path $root 'Utility\cartorig-dev.lua'
           $backup="$comp.migrated-060"
           $app=Join-Path $env:LOCALAPPDATA 'CartoRig\App'
-          $new=(Resolve-Path dist/cartorig-dev-0.6.0-win64.exe).Path
+          $new=(Resolve-Path dist/cartorig-dev-0.6.1-win64.exe).Path
           $old=(Resolve-Path fixture/cartorig-dev-0.5.2.exe).Path
+          $old060=(Resolve-Path fixture/cartorig-dev-0.6.0.exe).Path
           $uninstall=Join-Path $app 'Uninstall-CartoRig.exe'
           $module=Join-Path $app 'lua\CartoRig\timeline_service.lua'
           $ui=Join-Path $app 'lua\cartorig_scene_ui.lua'
@@ -54,6 +58,15 @@ jobs:
           $hash=(Get-FileHash -Algorithm SHA256 $foreign).Hash
           $p=Start-Process -FilePath $old -ArgumentList '/S' -Wait -PassThru
           if ($p.ExitCode -ne 0 -or !(Test-Path $comp)) {throw 'Cannot reproduce historical installation'}
+          # Reproduce the 0.6.0 installation that accepted numeric Resolve globals.
+          $p=Start-Process -FilePath $old060 -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or !(Test-Path $utility) -or (Test-Path $comp)) {
+            throw 'Could not reproduce historical 0.6.0 Utility installation'
+          }
+          $originalUi=(Get-FileHash host/legacy-scene-ui-0.6.0.lua -Algorithm SHA256).Hash
+          $originalService=(Get-FileHash src/CartoRig/legacy_timeline_service_0.6.0.lua -Algorithm SHA256).Hash
+          if ((Get-FileHash $ui -Algorithm SHA256).Hash -ne $originalUi) {throw 'Old 0.6.0 UI fixture was not genuinely installed'}
+          if ((Get-FileHash $module -Algorithm SHA256).Hash -ne $originalService) {throw 'Old 0.6.0 service fixture was not genuinely installed'}
           for ($i=0; $i -lt 2; $i++) {
             $p=Start-Process -FilePath $new -ArgumentList '/S' -Wait -PassThru
             if ($p.ExitCode -ne 0) {throw "Preview install iteration $i failed"}
@@ -65,7 +78,7 @@ jobs:
             if ($all.Count -ne 1 -or $all[0].FullName -ne $utility) {throw 'Not exactly one Scripts menu entry'}
             if ((Test-Path "$utility.pending") -or (Test-Path "$utility.backup")) {throw 'Launcher staging residue'}
             $record=[IO.File]::ReadAllText((Join-Path $app 'install-location.txt'))
-            if (!$record.Contains($utility) -or !$record.Contains('0.6.0')) {throw 'Installation record stale'}
+            if (!$record.Contains($utility) -or !$record.Contains('0.6.1')) {throw 'Installation record stale'}
             if ((Get-FileHash $foreign -Algorithm SHA256).Hash -ne $hash) {throw 'Unrelated script overwritten'}
           }
           $p=Start-Process -FilePath $uninstall -ArgumentList '/S' -Wait -PassThru
@@ -75,7 +88,7 @@ jobs:
           $p=Start-Process -FilePath $uninstall -ArgumentList '/S' -Wait -PassThru
           if ($p.ExitCode -ne 0 -or (Test-Path $utility)) {throw 'Clean uninstall failed'}
           if ((Get-FileHash $foreign -Algorithm SHA256).Hash -ne $hash) {throw 'Foreign script affected'}
-          'PASS: 0.5.2 migration to Utility, repeat install, one menu file, clean install/uninstall, foreign script preserved; Resolve host NOT RUN.' |
+          'PASS: 0.5.2 -> authentic buggy 0.6.0 -> 0.6.1 migration, repeat install, one menu file, clean install/uninstall, foreign script preserved; Resolve host NOT RUN.' |
             Set-Content dist/package-validation.txt
       - name: Include read-only installation diagnostic
         shell: pwsh
