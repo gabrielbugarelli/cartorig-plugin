@@ -33,6 +33,9 @@ class LuaRuntimeIntegration(unittest.TestCase):
     def test_single_menu_launcher_fail_safe(self):
         self.invoke("tests/lua/test_launcher.lua")
 
+    def test_resolve_handle_type_safety_regressions(self):
+        self.invoke("tests/lua/test_resolve_api_handles.lua")
+
     def test_factory_transactions_and_external_node_protection(self):
         self.invoke("tests/lua/test_node_factory.lua")
 
