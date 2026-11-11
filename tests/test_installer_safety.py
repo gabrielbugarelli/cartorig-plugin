@@ -67,8 +67,8 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertLess(source.index('UI missing; the existing menu script was preserved.'),marker)
         self.assertLess(source.index('NodeFactory missing; the existing menu script was preserved.'),marker)
         self.assertLess(source.index('Offline map data missing; the existing menu script was preserved.'),marker)
-        self.assertEqual(source.count('SetOutPath "$LOCALAPPDATA\\CartoRig\\App"'),3)
-        self.assertIn('files were changed',source)
+        self.assertIn('File "/oname=cartorig_scene_ui.lua"',source)
+        self.assertIn('Unmanaged',source)
 
     def test_update_and_uninstall_have_one_owned_scope(self):
         self.assertIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua"',self.nsi)
