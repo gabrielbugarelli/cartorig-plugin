@@ -86,7 +86,7 @@ Section "Install cartorig-dev"
   SetOutPath "$LOCALAPPDATA\CartoRig\App"
   File "/oname=graph_test.lua" "..\src\CartoRig\native_probe.lua"
   SetOutPath "$LOCALAPPDATA\CartoRig\App\lua"
-  File "/oname=cartorig_scene_ui.lua" "..\host\cartorig-dev-scene.lua"
+  File "/oname=cartorig_scene_ui.lua" "..\host\legacy-scene-ui-0.5.1.lua"
   File "/oname=THIRD_PARTY_NOTICES.txt" "..\THIRD_PARTY_NOTICES"
   SetOutPath "$LOCALAPPDATA\CartoRig\App\lua\CartoRig"
   File "/oname=domain.lua" "..\src\CartoRig\domain.lua"
@@ -110,7 +110,7 @@ Section "Install cartorig-dev"
     Abort
   SetOutPath "$R0"
   ClearErrors
-  File "/oname=cartorig-dev.lua.pending" "..\host\cartorig-dev-launcher.lua"
+  File "/oname=cartorig-dev.lua.pending" "..\host\legacy-launcher-0.5.1.lua"
   IfErrors 0 +3
     MessageBox MB_OK|MB_ICONSTOP "Cannot stage the new launcher; previous script preserved."
     Abort
