@@ -236,6 +236,44 @@ function M.create(resolve,title,opts)
     message="Scene created in its own Fusion Composition; host Viewer and save/reopen require verification",
   }
 end
+function M.list_scenes(resolve)
+  local manager=call(resolve,"GetProjectManager")
+  local project=manager and call(manager,"GetCurrentProject")
+  local timeline=project and call(project,"GetCurrentTimeline")
+  if not timeline then return {},nil end
+  local total,err=call(timeline,"GetTrackCount","video")
+  if type(total)~="number" then return nil,"TRACK_ACCESS_FAILED: "..tostring(err) end
+  local results={}
+  for track=1,total do
+    local clips=call(timeline,"GetItemListInTrack","video",track)
+    if type(clips)=="table" then
+      for _,item in pairs(clips) do
+        local number=call(item,"GetFusionCompCount")
+        if type(number)=="number" and number>=1 then
+          local comp=call(item,"GetFusionCompByIndex",1)
+          if comp then
+            local state=factory.inspect(comp)
+            if state and state.has_scene then
+              results[#results+1]={
+                scene_id=state.scene_id,
+                name=call(item,"GetName") or "CartoRig Scene",
+                track=track,
+                start_frame=call(item,"GetStart") or 0,
+                objects=state.objects
+              }
+            end
+          end
+        end
+      end
+    end
+  end
+  table.sort(results,function(a,b)
+    if a.start_frame~=b.start_frame then return a.start_frame<b.start_frame end
+    return a.track<b.track
+  end)
+  return results
+end
+
 function M.current_scene(resolve)
   local manager=call(resolve,"GetProjectManager")
   local project=manager and call(manager,"GetCurrentProject")
