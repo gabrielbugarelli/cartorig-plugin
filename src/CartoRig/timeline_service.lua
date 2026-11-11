@@ -190,7 +190,7 @@ local function snapshot_timeline(timeline)
   end
   local markers,markerEnd,markerErr=snapshot_markers(timeline,timelineStart)
   if not markers then return nil,markerErr end
-  local state={items={},counts={},locks={},markers=markers,maxend=markerEnd,timeline_start=timelineStart}
+  local state={items={},counts={},locks={},enabled={},names={},markers=markers,maxend=markerEnd,timeline_start=timelineStart}
   for _,trackType in ipairs(TRACK_TYPES) do
     local count,err=call(timeline,"GetTrackCount",trackType)
     if type(count)~="number" or count<0 or count~=math.floor(count) then
@@ -199,6 +199,8 @@ local function snapshot_timeline(timeline)
     end
     state.counts[trackType]=count
     state.locks[trackType]={}
+    state.enabled[trackType]={}
+    state.names[trackType]={}
     for track=1,count do
       local locked,lockErr=call(timeline,"GetIsTrackLocked",trackType,track)
       if type(locked)~="boolean" then
@@ -206,6 +208,18 @@ local function snapshot_timeline(timeline)
           " "..tostring(locked)..(lockErr and ("; "..tostring(lockErr)) or "")
       end
       state.locks[trackType][track]=locked
+      local enabled,enabledErr=call(timeline,"GetIsTrackEnabled",trackType,track)
+      if type(enabled)~="boolean" then
+        return nil,"TRACK_ENABLED_STATE_INVALID: "..trackType.." "..track.." returned "..type(enabled)..
+          " "..tostring(enabled)..(enabledErr and ("; "..tostring(enabledErr)) or "")
+      end
+      state.enabled[trackType][track]=enabled
+      local trackName,nameErr=call(timeline,"GetTrackName",trackType,track)
+      if type(trackName)~="string" then
+        return nil,"TRACK_NAME_INVALID: "..trackType.." "..track.." returned "..type(trackName)..
+          " "..tostring(trackName)..(nameErr and ("; "..tostring(nameErr)) or "")
+      end
+      state.names[trackType][track]=trackName
       local items,listErr=call(timeline,"GetItemListInTrack",trackType,track)
       if items==nil and listErr then return nil,"TRACK_READ_FAILED: "..tostring(listErr) end
       if items==nil then items={} end
@@ -236,6 +250,12 @@ local function compare_timeline(timeline,before,allowed_new_id)
     for track=1,before.counts[trackType] do
       if after.locks[trackType][track]~=before.locks[trackType][track] then
         return nil,"EXTERNAL_TIMELINE_CHANGED: lock state changed on "..trackType.." "..track
+      end
+      if after.enabled[trackType][track]~=before.enabled[trackType][track] then
+        return nil,"EXTERNAL_TIMELINE_CHANGED: enabled state changed on "..trackType.." "..track
+      end
+      if after.names[trackType][track]~=before.names[trackType][track] then
+        return nil,"EXTERNAL_TIMELINE_CHANGED: track name changed on "..trackType.." "..track
       end
     end
   end
@@ -406,17 +426,37 @@ local function rollback_context(ctx,item)
         end
       end
     end
-    -- Restore lock states only on tracks that existed before the transaction.
+    -- Restore metadata on tracks that existed before the transaction.
     for _,trackType in ipairs(TRACK_TYPES) do
       for index=1,(ctx.rollback_baseline.counts[trackType] or 0) do
-        local expected=ctx.rollback_baseline.locks[trackType][index]
-        local current,lockErr=call(ctx.timeline,"GetIsTrackLocked",trackType,index)
-        if type(current)~="boolean" then
+        local expectedLock=ctx.rollback_baseline.locks[trackType][index]
+        local currentLock,lockErr=call(ctx.timeline,"GetIsTrackLocked",trackType,index)
+        if type(currentLock)~="boolean" then
           problems[#problems+1]="cannot read lock state on "..trackType.." "..index..": "..tostring(lockErr)
-        elseif current~=expected then
-          local restored,restoreErr=call(ctx.timeline,"SetTrackLock",trackType,index,expected)
+        elseif currentLock~=expectedLock then
+          local restored,restoreErr=call(ctx.timeline,"SetTrackLock",trackType,index,expectedLock)
           if restored~=true then
             problems[#problems+1]="lock not restored on "..trackType.." "..index..": "..tostring(restoreErr)
+          end
+        end
+        local expectedEnabled=ctx.rollback_baseline.enabled[trackType][index]
+        local currentEnabled,enabledErr=call(ctx.timeline,"GetIsTrackEnabled",trackType,index)
+        if type(currentEnabled)~="boolean" then
+          problems[#problems+1]="cannot read enabled state on "..trackType.." "..index..": "..tostring(enabledErr)
+        elseif currentEnabled~=expectedEnabled then
+          local restored,restoreErr=call(ctx.timeline,"SetTrackEnable",trackType,index,expectedEnabled)
+          if restored~=true then
+            problems[#problems+1]="enabled state not restored on "..trackType.." "..index..": "..tostring(restoreErr)
+          end
+        end
+        local expectedName=ctx.rollback_baseline.names[trackType][index]
+        local currentName,nameErr=call(ctx.timeline,"GetTrackName",trackType,index)
+        if type(currentName)~="string" then
+          problems[#problems+1]="cannot read track name on "..trackType.." "..index..": "..tostring(nameErr)
+        elseif currentName~=expectedName then
+          local restored,restoreErr=call(ctx.timeline,"SetTrackName",trackType,index,expectedName)
+          if restored~=true then
+            problems[#problems+1]="track name not restored on "..trackType.." "..index..": "..tostring(restoreErr)
           end
         end
       end
