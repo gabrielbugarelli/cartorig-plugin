@@ -36,6 +36,9 @@ class LuaRuntimeIntegration(unittest.TestCase):
     def test_blackmagic_api_contract_boundary(self):
         self.invoke("tests/lua/test_blackmagic_api.lua")
 
+    def test_fusion_contract_boundary(self):
+        self.invoke("tests/lua/test_fusion_contract.lua")
+
     def test_resolve_handle_type_safety_regressions(self):
         self.invoke("tests/lua/test_resolve_api_handles.lua")
 
