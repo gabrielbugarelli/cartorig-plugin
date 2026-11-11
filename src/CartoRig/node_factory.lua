@@ -288,9 +288,25 @@ function factory.create_scene(comp,title,opts)
     end
     local ended,endErr=pcall(function() comp:EndUndo(false) end)
     if not ended then cleanup[#cleanup+1]="EndUndo(false): "..tostring(endErr) end
+    local remaining,inventoryErr=inventory(comp)
+    if not remaining then
+      cleanup[#cleanup+1]="post-rollback inventory unavailable: "..tostring(inventoryErr)
+    else
+      for _,createdTool in ipairs(created) do
+        for _,currentTool in pairs(remaining) do
+          if currentTool==createdTool then
+            cleanup[#cleanup+1]="created tool still present after rollback: "..tostring(attrs(createdTool).TOOLS_Name)
+            break
+          end
+        end
+      end
+    end
     local observed,inspectErr=factory.inspect(comp)
     if not observed or observed.has_scene then
       cleanup[#cleanup+1]="post-rollback graph invalid: "..tostring(inspectErr or "Scene still present")
+    end
+    if get(comp,SCENE_KEY)~=nil or get(comp,TITLE)~=nil then
+      cleanup[#cleanup+1]="composition identity/title metadata remained after rollback"
     end
     return #cleanup==0,table.concat(cleanup,"; ")
   end
