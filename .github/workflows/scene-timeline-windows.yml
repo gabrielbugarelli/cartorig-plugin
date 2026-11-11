@@ -118,7 +118,7 @@ jobs:
           for ($i=0; $i -lt 2; $i++) {
             $p=Start-Process -FilePath $new -ArgumentList '/S' -Wait -PassThru
             if ($p.ExitCode -ne 0) {throw "Preview install iteration $i failed"}
-            if (!(Test-Path $utility) -or (Test-Path $comp) -or !(Test-Path $backup)) {throw 'Utility migration failed'}
+            if (!(Test-Path $utility) -or (Test-Path $comp) -or (Test-Path $backup)) {throw 'Utility migration or verified backup retirement failed'}
             if ((Get-FileHash $utility -Algorithm SHA256).Hash -ne (Get-FileHash host/cartorig-dev-launcher.lua -Algorithm SHA256).Hash) {throw 'Launcher hash mismatch'}
             if (!(Test-Path $module) -or (Get-FileHash $module -Algorithm SHA256).Hash -ne (Get-FileHash src/CartoRig/timeline_service.lua -Algorithm SHA256).Hash) {throw 'TimelineService mismatch'}
             if (!(Test-Path $ui) -or (Get-FileHash $ui -Algorithm SHA256).Hash -ne (Get-FileHash host/cartorig-dev-scene.lua -Algorithm SHA256).Hash) {throw 'Scene UI mismatch'}
@@ -164,8 +164,8 @@ jobs:
           if (Test-Path $utility) {throw 'Utility activated despite unrecognized legacy pending launcher'}
           Remove-Item -LiteralPath $unknownPending -Force
           $p=Start-Process -FilePath $new -ArgumentList '/S' -Wait -PassThru
-          if ($p.ExitCode -ne 0 -or !(Test-Path $utility) -or (Test-Path $comp) -or !(Test-Path $backup)) {
-            throw 'Verified 0.5.2 legacy launcher did not migrate to 0.6.3'
+          if ($p.ExitCode -ne 0 -or !(Test-Path $utility) -or (Test-Path $comp) -or (Test-Path $backup)) {
+            throw 'Verified 0.5.2 legacy launcher did not migrate cleanly to 0.6.3'
           }
           $p=Start-Process -FilePath $uninstall -ArgumentList '/S' -Wait -PassThru
           if ($p.ExitCode -ne 0 -or (Test-Path $utility) -or (Test-Path $backup)) {throw 'Direct migration uninstall failed'}
