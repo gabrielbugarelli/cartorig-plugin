@@ -55,7 +55,7 @@ local function fake(start_with_timeline)
     tracks={video={},audio={},subtitle={}},
     seek=clock,created=0,deletes=0,deleted_tracks=0,
     destination_track=1,marks={video={["in"]=4,["out"]=8}},
-    default_duration=120
+    timeline_markers={},default_duration=120
   }
   local function to_tc(n)
     local f=n%24;local s=math.floor(n/24)%60
@@ -108,6 +108,15 @@ local function fake(start_with_timeline)
     self.seek=frame
     return true
   end
+  function timeline:GetMarkers()
+    local out={}
+    for frameId,info in pairs(self.timeline_markers) do
+      local copy={}
+      for key,value in pairs(info) do copy[key]=value end
+      out[frameId]=copy
+    end
+    return out
+  end
   function timeline:GetMarkInOut()
     local out={}
     if self.marks.video then
@@ -149,6 +158,14 @@ local function fake(start_with_timeline)
         end
       end
     end
+    local movedMarkers={}
+    for frameId,info in pairs(self.timeline_markers) do
+      local absolute=clock+frameId
+      local newFrame=frameId
+      if absolute>=self.seek or self.force_global_shift then newFrame=frameId+duration end
+      movedMarkers[newFrame]=info
+    end
+    self.timeline_markers=movedMarkers
     local comp={}
     function comp:GetToolList() return {} end
     if self.failfuse then comp.fail=true end
@@ -248,10 +265,15 @@ local r2,p2,t2=fake(true)
 add_item(t2,"video",1,86400,86500,"video-editorial")
 local audio=add_item(t2,"audio",1,86420,87000,"audio-editorial")
 local subtitle=add_item(t2,"subtitle",1,86900,87100,"subtitle-editorial")
+-- Timeline markers are offsets from timeline start. This marker ends after all clips.
+t2.timeline_markers[900]={color="Blue",name="Editorial Marker",note="keep",duration=20,customData="external"}
+local beforeMarker=t2.timeline_markers[900]
 local beforeSeek=t2.seek
 local appended,appendErr=svc.create(r2,"After all media")
 assert(appended,appendErr)
-assert(appended.start_frame==87100,"must append after subtitle/audio global end")
+assert(appended.start_frame==87320,"must append after subtitle/audio and marker global end")
+assert(t2.timeline_markers[900] and t2.timeline_markers[900].name=="Editorial Marker",
+  "timeline marker must remain at the same offset")
 assert(audio.start==86420 and audio.finish==87000)
 assert(subtitle.start==86900 and subtitle.finish==87100)
 assert(t2.marks.video and t2.marks.video["in"]==4 and t2.marks.video["out"]==8)
@@ -326,6 +348,7 @@ assert(#t8.tracks.video[1].items==0 and t8.deletes==1)
 local r9,p9,t9=fake(true)
 t9:AddTrack("video")
 local moved=add_item(t9,"video",1,86400,86500,"must-not-move")
+t9.timeline_markers[300]={color="Red",name="Must not move",note="",duration=1,customData="marker"}
 t9.force_global_shift=true
 local unsafe,unsafeErr=svc.create(r9,"Unsafe ripple")
 assert(unsafe==nil and unsafeErr:find("EXTERNAL_TIMELINE_CHANGED",1,true))
