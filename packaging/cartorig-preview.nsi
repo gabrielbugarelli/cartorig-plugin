@@ -1,7 +1,7 @@
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !ifndef OUTPUTFILE
-  !define OUTPUTFILE "cartorig-dev-0.6.3-win64.exe"
+  !define OUTPUTFILE "cartorig-dev-0.6.4-win64.exe"
 !endif
 !ifndef BUILDSHA
   !define BUILDSHA "development-unpinned"
@@ -308,18 +308,18 @@ MigrateCartoRigDone:
   FileOpen $R1 "$LOCALAPPDATA\CartoRig\App\install-location.txt" w
   FileWrite $R1 "Launcher: $R2\cartorig-dev.lua$\r$\n"
   FileWrite $R1 "UI: $LOCALAPPDATA\CartoRig\App\lua\cartorig_scene_ui.lua$\r$\n"
-  FileWrite $R1 "Version: 0.6.3$\r$\n"
+  FileWrite $R1 "Version: 0.6.4$\r$\n"
   FileWrite $R1 "Build commit: ${BUILDSHA}$\r$\n"
   FileWrite $R1 "$R9$\r$\n"
   FileClose $R1
   FileOpen $R1 "$LOCALAPPDATA\CartoRig\App\build-info.txt" w
-  FileWrite $R1 "version=0.6.3$\r$\n"
+  FileWrite $R1 "version=0.6.4$\r$\n"
   FileWrite $R1 "commit=${BUILDSHA}$\r$\n"
   FileClose $R1
   ; Menu enumeration is NOT verified by this installer or the Windows Actions runner.
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "DisplayName" "cartorig-dev (Development Preview)"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "UninstallString" '"$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"'
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "DisplayVersion" "0.6.3"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "DisplayVersion" "0.6.4"
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "NoModify" 1
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "NoRepair" 1
 SectionEnd
