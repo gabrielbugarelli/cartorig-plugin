@@ -147,7 +147,7 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('Replace("`r`n","`n")',verifier)
         self.assertIn('0.6.3 changed conflicting external Comp/cartorig-dev.lua',self.win)
         self.assertIn('0.6.3 changed unrecognized/modified legacy Comp launcher',self.win)
-        self.assertIn('Verified 0.5.2 legacy launcher did not migrate to 0.6.3',self.win)
+        self.assertIn('Verified 0.5.2 legacy launcher did not migrate cleanly to 0.6.3',self.win)
     def test_shared_resolve_files_require_content_ownership(self):
         s=self.nsi
         verifier=self.shared
