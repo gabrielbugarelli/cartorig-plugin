@@ -317,18 +317,45 @@ end
 local function save_marks(timeline)
   local marks,err=call(timeline,"GetMarkInOut")
   if marks==nil and err then return nil,"MARK_STATE_UNAVAILABLE: "..tostring(err) end
-  if marks~=nil and type(marks)~="table" then
+  if marks==nil then return {} end
+  if type(marks)~="table" then
     return nil,"MARK_STATE_INVALID: GetMarkInOut returned "..type(marks)
   end
-  return marks or {}
+  for kind,range in pairs(marks) do
+    if kind~="video" and kind~="audio" then
+      return nil,"MARK_STATE_UNSUPPORTED: unexpected mark type "..tostring(kind)
+    end
+    if type(range)~="table" or type(range["in"])~="number" or type(range["out"])~="number" then
+      return nil,"MARK_STATE_INVALID: "..tostring(kind).." mark range is incomplete"
+    end
+  end
+  return marks
 end
-local function restore_video_marks(timeline,marks)
-  local cleared,clearErr=call(timeline,"ClearMarkInOut","video")
-  if cleared~=true then return nil,"MARK_RESTORE_FAILED: ClearMarkInOut(video): "..tostring(clearErr) end
-  local video=marks and marks.video
-  if type(video)=="table" and type(video["in"])=="number" and type(video["out"])=="number" then
-    local restored,restoreErr=call(timeline,"SetMarkInOut",video["in"],video["out"],"video")
-    if restored~=true then return nil,"MARK_RESTORE_FAILED: SetMarkInOut(video): "..tostring(restoreErr) end
+local function mark_states_equal(a,b)
+  for _,kind in ipairs({"video","audio"}) do
+    local left=a and a[kind] or nil
+    local right=b and b[kind] or nil
+    if (left==nil)~=(right==nil) then return false end
+    if left and (left["in"]~=right["in"] or left["out"]~=right["out"]) then return false end
+  end
+  return true
+end
+local function restore_marks(timeline,marks)
+  local cleared,clearErr=call(timeline,"ClearMarkInOut","all")
+  if cleared~=true then return nil,"MARK_RESTORE_FAILED: ClearMarkInOut(all): "..tostring(clearErr) end
+  for _,kind in ipairs({"video","audio"}) do
+    local range=marks and marks[kind]
+    if range then
+      local restored,restoreErr=call(timeline,"SetMarkInOut",range["in"],range["out"],kind)
+      if restored~=true then
+        return nil,"MARK_RESTORE_FAILED: SetMarkInOut("..kind.."): "..tostring(restoreErr)
+      end
+    end
+  end
+  local observed,observedErr=save_marks(timeline)
+  if not observed then return nil,observedErr end
+  if not mark_states_equal(marks or {},observed) then
+    return nil,"MARK_RESTORE_FAILED: readback differs from pre-transaction In/Out state"
   end
   return true
 end
@@ -386,7 +413,7 @@ local function rollback_context(ctx,item)
   -- Existing timelines must be restored before any verification. A timeline
   -- created solely for this failed command is deleted instead of being edited.
   if not ctx.created_timeline and ctx.timeline and ctx.original_marks then
-    local ok,err=restore_video_marks(ctx.timeline,ctx.original_marks)
+    local ok,err=restore_marks(ctx.timeline,ctx.original_marks)
     if not ok then problems[#problems+1]=err end
   end
   if not ctx.created_timeline and ctx.timeline and type(ctx.original_timecode)=="string" then
@@ -504,7 +531,7 @@ function M.create(resolve,title,opts)
   end
   local after,preserveErr=compare_timeline(timeline,before,itemId)
   if not after then return fail(ctx,item,preserveErr) end
-  local restored,restoreErr=restore_video_marks(timeline,ctx.original_marks)
+  local restored,restoreErr=restore_marks(timeline,ctx.original_marks)
   if not restored then return fail(ctx,item,restoreErr) end
   ctx.original_marks=nil
   local opened,openErr=call(resolve,"OpenPage","fusion")
