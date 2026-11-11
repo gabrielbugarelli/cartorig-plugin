@@ -41,7 +41,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) {throw 'Authentic old 0.6.1 fixture compile failed'}
           & $exe /V2 "/DOUTPUTFILE=$old062" packaging\legacy-preview-0.6.2.nsi
           if ($LASTEXITCODE -ne 0) {throw 'Authentic old 0.6.2 fixture compile failed'}
-          & $exe /V3 "/DOUTPUTFILE=$new" packaging\cartorig-preview.nsi
+          & $exe /V3 "/DOUTPUTFILE=$new" "/DBUILDSHA=$env:GITHUB_SHA" packaging\cartorig-preview.nsi
           if ($LASTEXITCODE -ne 0 -or !(Test-Path $new)) {throw 'Preview compile failed'}
           $sha=(Get-FileHash -Algorithm SHA256 $new).Hash.ToLowerInvariant()
           "$sha  cartorig-dev-0.6.3-win64.exe" | Set-Content -Encoding ascii dist/SHA256SUMS.txt
@@ -129,7 +129,9 @@ jobs:
             if ($all.Count -ne 1 -or $all[0].FullName -ne $utility) {throw 'Not exactly one Scripts menu entry'}
             if ((Test-Path "$utility.pending") -or (Test-Path "$utility.backup")) {throw 'Launcher staging residue'}
             $record=[IO.File]::ReadAllText((Join-Path $app 'install-location.txt'))
-            if (!$record.Contains($utility) -or !$record.Contains('0.6.3')) {throw 'Installation record stale'}
+            if (!$record.Contains($utility) -or !$record.Contains('0.6.3') -or !$record.Contains($env:GITHUB_SHA)) {throw 'Installation record stale or missing build commit'}
+            $buildInfo=[IO.File]::ReadAllText((Join-Path $app 'build-info.txt'))
+            if (!$buildInfo.Contains('version=0.6.3') -or !$buildInfo.Contains("commit=$env:GITHUB_SHA")) {throw 'Installed build-info does not identify exact Actions commit'}
             if ((Get-FileHash $foreign -Algorithm SHA256).Hash -ne $hash) {throw 'Unrelated script overwritten'}
           }
           # The current Utility install does not own an active Comp/cartorig-dev.lua.
