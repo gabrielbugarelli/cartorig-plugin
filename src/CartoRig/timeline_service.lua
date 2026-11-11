@@ -2,42 +2,26 @@
 -- Resolve timeline edits are fail-closed: snapshot all tracks, append after the
 -- global end, verify the new item, and rollback only resources created here.
 local factory=require("CartoRig.node_factory")
+local api=require("CartoRig.blackmagic_api")
 local M={}
 
 local TRACK_TYPES={"video","audio","subtitle"}
+local MARKER_FIELDS={color=true,duration=true,note=true,name=true,customData=true}
 
-local function lookup(o,name)
-  local kind=type(o)
-  if kind~="userdata" and kind~="table" then
-    return nil,"API_INVALID_RECEIVER: "..tostring(name).." needs an object, got "..kind
+local call=api.call
+local strict=api.strict
+local require_handle=api.require_object
+local function method(o,name) return api.method(o,name)~=nil end
+
+local function track_items(timeline,trackType,trackIndex)
+  local raw,err=call(timeline,"GetItemListInTrack",trackType,trackIndex)
+  if raw==nil and err then
+    return nil,"TRACK_READ_FAILED: "..tostring(err)
   end
-  local ok,fn=pcall(function() return o[name] end)
-  if not ok then return nil,"API_LOOKUP_FAILED: "..tostring(name)..": "..tostring(fn) end
-  if type(fn)~="function" then
-    return nil,"API_METHOD_UNAVAILABLE: "..tostring(name).." on "..kind.." (member type "..type(fn)..")"
-  end
-  return fn
-end
-local function method(o,name) return lookup(o,name)~=nil end
-local function call(o,name,...)
-  local fn,err=lookup(o,name)
-  if not fn then return nil,err end
-  local ok,value=pcall(fn,o,...)
-  if not ok then return nil,"API_CALL_FAILED: "..name..": "..tostring(value) end
-  return value
-end
-local function strict(o,name,...)
-  local value,err=call(o,name,...)
-  if value==nil or value==false then return nil,err or "API_REJECTED: "..name end
-  return value
-end
-local function require_handle(value,returned_by,required_method)
-  local _,err=lookup(value,required_method)
-  if err then
-    return nil,"API_INVALID_HANDLE: "..tostring(returned_by).." returned "..type(value)..
-      "; expected object implementing "..required_method.."; "..tostring(err)
-  end
-  return value
+  local items,listErr=api.sequence(raw or {},
+    "GetItemListInTrack("..tostring(trackType)..","..tostring(trackIndex)..")")
+  if not items then return nil,listErr end
+  return items
 end
 
 local function frame_base(fps)
@@ -139,23 +123,24 @@ local function scalar_signature(value)
   return nil,"MARKER_VALUE_INVALID: unsupported marker field type "..kind
 end
 local function marker_signature(info)
-  if type(info)~="table" then return nil,"MARKER_INVALID: marker info is "..type(info) end
+  local normalized,normalizeErr=api.named_dict(info,"marker information",MARKER_FIELDS)
+  if not normalized then return nil,normalizeErr end
   local keys={}
-  for key,_ in pairs(info) do keys[#keys+1]=key end
-  table.sort(keys,function(a,b) return tostring(a)<tostring(b) end)
+  for key,_ in pairs(normalized) do keys[#keys+1]=key end
+  table.sort(keys)
   local parts={}
   for _,key in ipairs(keys) do
-    local value,err=scalar_signature(info[key])
+    local value,err=scalar_signature(normalized[key])
     if not value then return nil,err end
-    parts[#parts+1]=type(key)..":"..tostring(key).."="..value
+    parts[#parts+1]=key.."="..value
   end
   return table.concat(parts,"|")
 end
 local function snapshot_markers(timeline,start_frame)
-  local markers,err=call(timeline,"GetMarkers")
-  if markers==nil and err then return nil,nil,"MARKER_READ_FAILED: "..tostring(err) end
-  if markers==nil then markers={} end
-  if type(markers)~="table" then return nil,nil,"MARKER_READ_INVALID: GetMarkers returned "..type(markers) end
+  local raw,err=call(timeline,"GetMarkers")
+  if raw==nil and err then return nil,nil,"MARKER_READ_FAILED: "..tostring(err) end
+  local markers,dictErr=api.numeric_dict(raw or {},"GetMarkers")
+  if not markers then return nil,nil,dictErr end
   local snapshot,maxend={},nil
   for frameId,info in pairs(markers) do
     if type(frameId)~="number" or frameId<0 or frameId~=math.floor(frameId) then
@@ -211,13 +196,9 @@ local function snapshot_timeline(timeline)
           " "..tostring(trackName)..(nameErr and ("; "..tostring(nameErr)) or "")
       end
       state.names[trackType][track]=trackName
-      local items,listErr=call(timeline,"GetItemListInTrack",trackType,track)
-      if items==nil and listErr then return nil,"TRACK_READ_FAILED: "..tostring(listErr) end
-      if items==nil then items={} end
-      if type(items)~="table" then
-        return nil,"TRACK_READ_INVALID: "..trackType.." "..track.." returned "..type(items)
-      end
-      for index,item in pairs(items) do
+      local items,listErr=track_items(timeline,trackType,track)
+      if not items then return nil,listErr end
+      for index,item in ipairs(items) do
         local id,idErr=item_id(item,trackType.." "..track.." item "..tostring(index))
         if not id then return nil,idErr end
         if state.items[id] then return nil,"TRACK_ID_COLLISION: duplicate TimelineItem UUID "..id end
@@ -330,19 +311,17 @@ local function ensure_video_track(ctx)
 end
 
 local function save_marks(timeline)
-  local marks,err=call(timeline,"GetMarkInOut")
-  if marks==nil and err then return nil,"MARK_STATE_UNAVAILABLE: "..tostring(err) end
-  if marks==nil then return {} end
-  if type(marks)~="table" then
-    return nil,"MARK_STATE_INVALID: GetMarkInOut returned "..type(marks)
-  end
+  local raw,err=call(timeline,"GetMarkInOut")
+  if raw==nil and err then return nil,"MARK_STATE_UNAVAILABLE: "..tostring(err) end
+  local marks,dictErr=api.named_dict(raw or {},"GetMarkInOut",{video=true,audio=true})
+  if not marks then return nil,dictErr end
   for kind,range in pairs(marks) do
-    if kind~="video" and kind~="audio" then
-      return nil,"MARK_STATE_UNSUPPORTED: unexpected mark type "..tostring(kind)
-    end
-    if type(range)~="table" or type(range["in"])~="number" or type(range["out"])~="number" then
+    local normalized,rangeErr=api.named_dict(range,"GetMarkInOut."..kind,{["in"]=true,["out"]=true})
+    if not normalized then return nil,rangeErr end
+    if type(normalized["in"])~="number" or type(normalized["out"])~="number" then
       return nil,"MARK_STATE_INVALID: "..tostring(kind).." mark range is incomplete"
     end
+    marks[kind]=normalized
   end
   return marks
 end
@@ -404,15 +383,15 @@ local function rollback_context(ctx,item)
         problems[#problems+1]="cannot read "..trackType.." track count during rollback: "..tostring(countErr)
       else
         for index=current,expected+1,-1 do
-          local items,itemErr=call(ctx.timeline,"GetItemListInTrack",trackType,index)
-          local empty=(items==nil and itemErr==nil) or (type(items)=="table" and next(items)==nil)
+          local items,itemErr=track_items(ctx.timeline,trackType,index)
+          local empty=items~=nil and #items==0
           if empty then
             local removed,removeErr=call(ctx.timeline,"DeleteTrack",trackType,index)
             if removed~=true then
               problems[#problems+1]="extra "..trackType.." track "..index.." not removed: "..tostring(removeErr)
             end
           else
-            problems[#problems+1]="extra "..trackType.." track "..index.." retained because it is non-empty or unreadable"
+            problems[#problems+1]="extra "..trackType.." track "..index.." retained because it is non-empty or unreadable: "..tostring(itemErr)
           end
         end
       end
@@ -632,11 +611,9 @@ function M.list_scenes(resolve)
   end
   local results,warnings={},{}
   for track=1,total do
-    local clips,clipErr=call(timeline,"GetItemListInTrack","video",track)
-    if clips==nil and clipErr then return nil,"TRACK_LIST_FAILED: V"..track..": "..tostring(clipErr) end
-    if clips==nil then clips={} end
-    if type(clips)~="table" then return nil,"TRACK_LIST_INVALID: V"..track.." returned "..type(clips) end
-    for _,item in pairs(clips) do
+    local clips,clipErr=track_items(timeline,"video",track)
+    if not clips then return nil,"TRACK_LIST_FAILED: V"..track..": "..tostring(clipErr) end
+    for _,item in ipairs(clips) do
       local itemHandle,itemHandleErr=require_handle(item,"GetItemListInTrack","GetFusionCompCount")
       if not itemHandle then return nil,itemHandleErr end
       local count,numErr=call(item,"GetFusionCompCount")
