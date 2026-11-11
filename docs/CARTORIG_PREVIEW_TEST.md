@@ -8,7 +8,7 @@
 2. In the [GitHub Actions Windows preview build](https://github.com/gabrielbugarelli/cartorig-plugin/actions/workflows/cartorig-preview-windows.yml), open a **successful run** associated with the intended commit. Download the **cartorig-preview-...** artifact ZIP; extract the ZIP.
 3. Run `cartorig-dev-0.4-win64.exe` and complete the Windows installer wizard. No terminal, Python, SDK, compiler, geodata or manual file copying is required.
 4. Restart Resolve. Only **cartorig-dev** should appear under `Workspace → Scripts → Comp`.
-5. If `CartoRig Host Probe` or `CartoRig Native Integration Probe` were previously installed by our 0.1/0.2 installers, the 0.3 installer calls **their own uninstallers** to remove the old scripts and obsolete Installed Apps registrations. It does not remove scripts, projects or folders belonging to other software.
+5. If `CartoRig Host Probe` or `CartoRig Native Integration Probe` were previously installed by our 0.1/0.2 installers, the 0.4 installer calls **their own uninstallers** to remove the old scripts and obsolete Installed Apps registrations. It does not remove scripts, projects or folders belonging to other software.
 6. Subsequent CartoRig preview installations replace the existing CartoRig installation in place. If an unmanaged script already exists at `Comp/cartorig-dev.lua`, installation stops rather than overwriting it.
 
 ## Run a controlled test
@@ -25,7 +25,7 @@ Do not run experimental node creation on important project files. The diagnostic
 
 ## Uninstall
 
-Open **Windows → Installed Apps → cartorig-dev (Development Preview) → Uninstall**. The uninstaller removes only the `CartoRig.lua` entry and its own local runtime/docs; it leaves external scripts, Fusion projects and Resolve untouched.
+Open **Windows → Installed Apps → cartorig-dev (Development Preview) → Uninstall**. The uninstaller removes only the `cartorig-dev.lua` entry and its own local runtime/docs; it leaves external scripts, Fusion projects and Resolve untouched.
 
 ## Verification boundaries
 
