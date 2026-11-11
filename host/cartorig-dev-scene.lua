@@ -1,191 +1,142 @@
--- CartoRig developer entry (SINGLE Scripts menu item).
--- Scene is the structural UI Manager; editing controls belong to real Fusion nodes.
-local app=rawget(_G,"fusion") or rawget(_G,"fu")
+-- cartorig-dev: Scene UI Manager only. One Create Scene = one timeline Fusion clip.
+-- No prior Fusion Composition or manual wiring; no Open Scene button.
 local bmd=rawget(_G,"bmd")
-if not app or not bmd or not bmd.UIDispatcher then
- local reason="CartoRig BLOCKED: Fusion/UIManager is unavailable"
- print(reason);return false,reason
+local resolve=rawget(_G,"resolve")
+if not resolve and bmd and type(bmd.scriptapp)=="function" then
+  local ok,result=pcall(bmd.scriptapp,"Resolve")
+  if ok then resolve=result end
+end
+if not resolve then
+  local err="RESOLVE_UNAVAILABLE: open a Resolve project (not standalone Fusion)"
+  print(err);return false,err
+end
+local fusion=rawget(_G,"fusion") or rawget(_G,"fu")
+if not fusion and type(resolve.Fusion)=="function" then
+  local ok,result=pcall(function() return resolve:Fusion() end)
+  if ok then fusion=result end
+end
+if not bmd or type(bmd.UIDispatcher)~="function" or not fusion then
+  local err="UI_UNAVAILABLE: Resolve Fusion UIManager and UIDispatcher are required"
+  print(err);return false,err
 end
 local localapp=os.getenv("LOCALAPPDATA")
 if not localapp or localapp=="" then
- local reason="CartoRig BLOCKED: LOCALAPPDATA missing"
- print(reason);return false,reason
+  local err="LOCALAPPDATA_UNAVAILABLE: runtime folder missing"
+  print(err);return false,err
 end
 package.path=localapp.."\\CartoRig\\App\\lua\\?.lua;"..
- localapp.."\\CartoRig\\App\\lua\\?\\init.lua;"..package.path
-local loaded,factory=pcall(require,"CartoRig.node_factory")
-if not loaded then
- local reason="CartoRig BLOCKED: Scene/NodeFactory module not installed: "..tostring(factory)
- print(reason);return false,reason
+  localapp.."\\CartoRig\\App\\lua\\?\\init.lua;"..package.path
+local ok,service=pcall(require,"CartoRig.timeline_service")
+if not ok or type(service)~="table" then
+  local err="TIMELINE_SERVICE_MISSING: "..tostring(service)
+  print(err);return false,err
 end
-local diagnostic_ok,diagnostic=pcall(dofile,localapp.."\\CartoRig\\App\\graph_test.lua")
-local ui=app.UIManager
+local ui=fusion.UIManager
 if type(ui)=="function" then
- local ok,value=pcall(function() return app:UIManager() end)
- if ok then ui=value end
+  local worked,result=pcall(function() return fusion:UIManager() end)
+  if worked then ui=result end
 end
 if not ui then
- local reason="CartoRig BLOCKED: UIManager unavailable"
- print(reason);return false,reason
+  local err="UI_MANAGER_UNAVAILABLE: Fusion UIManager is unavailable"
+  print(err);return false,err
 end
-local disp=bmd.UIDispatcher(ui)
-if not disp then
- local reason="CartoRig BLOCKED: UIDispatcher could not be constructed"
- print(reason);return false,reason
-end
-local function current_comp()
- local ok,value=pcall(function() return app:GetCurrentComp() end)
- if ok and value then return value end
- return rawget(_G,"comp")
-end
-local bound_comp=current_comp()
-if not bound_comp then
- local reason="CartoRig BLOCKED: open Fusion Composition first"
- print(reason);return false,reason
+local okd,disp=pcall(function() return bmd.UIDispatcher(ui) end)
+if not okd or not disp then
+  local err="DISPATCHER_FAILED: cannot start Scene UI"
+  print(err);return false,err
 end
 local window=disp:AddWindow({
- ID="CartoRigDevWindow",WindowTitle="cartorig-dev",Geometry={200,140,770,610}
+  ID="CartoRigDevSceneWindow", WindowTitle="cartorig-dev",
+  Geometry={220,120,810,630}
 },ui:VGroup{
- ui:Label{Text="Scene — CartoRig V1 development",WordWrap=true},
- ui:Label{Text="Scene is structural only. Select a real CartoRig node in Fusion's Node Editor to edit its Inspector.",WordWrap=true},
- ui:HGroup{
-  ui:Label{Text="Scene title"},
-  ui:LineEdit{ID="SceneTitle",Text="Map Scene",Weight=1},
-  ui:Button{ID="CreateScene",Text="Create Scene"},
-  ui:Button{ID="OpenScene",Text="Open Scene"},
- },
- ui:TextEdit{ID="SceneList",ReadOnly=true,Weight=1},
- ui:Label{ID="Status",Text="No structural changes have been made.",WordWrap=true},
- ui:Label{Text="Developer diagnostics (not the CartoRig product)",WordWrap=true},
- ui:CheckBox{ID="Scratch",Text="I confirm this is a disposable test project"},
- ui:HGroup{
-  ui:Button{ID="Compatibility",Text="Check Compatibility"},
-  ui:Button{ID="CreateTest",Text="Create Test Nodes"},
-  ui:Button{ID="VerifyTest",Text="Verify Test Nodes"},
- },
- ui:HGroup{
-  ui:Button{ID="SaveReport",Text="Save Report"},
-  ui:Button{ID="Close",Text="Close"}
- }
+  ui:Label{Text="CartoRig — Scene",WordWrap=true},
+  ui:Label{Text="Create Scene adds an independent Fusion Composition to the timeline. Open the scene node directly in Fusion to edit its Inspector.",WordWrap=true},
+  ui:HGroup{
+    ui:Label{Text="Scene name"},
+    ui:LineEdit{ID="SceneTitle",Text="Map Scene",Weight=1},
+    ui:Button{ID="CreateScene",Text="Create Scene"}
+  },
+  ui:Label{Text="Scenes in the active timeline (structural list only)",WordWrap=true},
+  ui:TextEdit{ID="SceneList",ReadOnly=true,Weight=1},
+  ui:Label{ID="Status",Text="No scene has been created in this session.",WordWrap=true},
+  ui:HGroup{
+    ui:Button{ID="SaveReport",Text="Save Report"},
+    ui:Button{ID="Close",Text="Close"}
+  }
 })
 if not window then
- local reason="CartoRig BLOCKED: Scene UI did not initialize"
- print(reason);return false,reason
+  local err="SCENE_WINDOW_FAILED: UIManager did not create a Scene window"
+  print(err);return false,err
 end
 local items=window:GetItems()
 local report=""
-local function comp_guard()
- local now=current_comp()
- if not now or tostring(now)~=tostring(bound_comp) then
-  return nil,"WRONG_COMPOSITION: active Fusion composition changed; close/reopen Scene"
- end
- return now
+local function record(action,success,details)
+  local text=tostring(details or "")
+  report=table.concat({
+    "cartorig-dev | Timeline Scene service",
+    "UTC: "..os.date("!%Y-%m-%dT%H:%M:%SZ"),
+    "Action: "..tostring(action),
+    "Status: "..(success and "COMMAND_COMPLETED" or "BLOCKED/FAILED"),
+    "Details: "..text,
+    "Fusion host Viewer/Inspector and Save/Reopen: requires editor confirmation",
+    "V1 acceptance A01-B20: 40 NOT RUN"
+  },"\n").."\n"
+  items.Status.Text=(success and "Scene created. " or "Scene not created. ")..text
 end
-local function write(action,result,err)
- local lines={
-  "cartorig-dev | Scene / Milestone A",
-  "UTC: "..os.date("!%Y-%m-%dT%H:%M:%SZ"),
-  "Action: "..action,
-  "Result: "..(result and "COMMAND_COMPLETED" or "BLOCKED/FAILED"),
- }
- if err then lines[#lines+1]="Error: "..tostring(err) end
- if result then
-  local keys={}
-  for key in pairs(result) do keys[#keys+1]=key end
-  table.sort(keys)
-  for _,key in ipairs(keys) do
-    if type(result[key])~="table" then
-      lines[#lines+1]=tostring(key)..": "..tostring(result[key])
-    end
+local function refresh()
+  local ok2,scenes,err=pcall(service.list_scenes,resolve)
+  if not ok2 or not scenes then
+    items.SceneList.PlainText="Timeline scene listing unavailable: "..tostring(err or scenes)
+    return
   end
- end
- lines[#lines+1]="Studio 20 Viewer / Inspector and save-reopen: VERIFY MANUALLY"
- lines[#lines+1]="V1 acceptance A01-B20: 40 NOT RUN"
- report=table.concat(lines,"\n").."\n"
- items.Status.Text=(result and "Operation completed. Inspector requires direct Node Editor selection." or
-   "BLOCKED/FAILED: "..tostring(err))
-end
-local function show_state(state)
- local lines={}
- if not state or not state.has_scene then
-  lines[1]="No CartoRig scene is stored in this composition."
- else
-  lines[#lines+1]="Scene ID: "..tostring(state.scene_id)
-  lines[#lines+1]="Objects (structural listing only; no Fusion selection):"
-  for _,object in ipairs(state.objects) do
-   lines[#lines+1]="  "..object.name.." ("..object.type..") | "..object.id
+  if #scenes==0 then
+    items.SceneList.PlainText="No CartoRig scenes in the active timeline."
+    return
   end
- end
- items.SceneList.PlainText=table.concat(lines,"\n")
-end
-local function guarded(action,method)
- local comp,err=comp_guard()
- if not comp then write(action,nil,err);return end
- local ok,result,message=pcall(method,comp)
- if not ok then write(action,nil,"FUSION_API_ERROR: "..tostring(result))
- else write(action,result,message) end
+  local lines={}
+  for n,scene in ipairs(scenes) do
+    lines[#lines+1]=string.format("%d. %s  |  Track V%d  |  Frame %s",
+      n,tostring(scene.name),scene.track,tostring(scene.start_frame))
+    lines[#lines+1]="   Scene UUID: "..tostring(scene.scene_id)
+    lines[#lines+1]="   Objects: "..tostring(#scene.objects)
+  end
+  items.SceneList.PlainText=table.concat(lines,"\n")
 end
 function window.On.CreateScene.Clicked(ev)
- guarded("Create Scene",function(comp)
-  local title=items.SceneTitle.Text or "Map Scene"
-  local created,err=factory.create_scene(comp,title)
-  if not created then return nil,err end
-  local state=assert(factory.inspect(comp))
-  show_state(state)
-  return {scene_id=created.scene_id,physical_author_nodes=created.created_author_nodes,
-    output_connected=created.output_connected,source="Natural Earth 1:50m Land",
-    message="Select CR_Camera_Main or CR_WorldMap_Main in Fusion to edit Control."}
- end)
-end
-function window.On.OpenScene.Clicked(ev)
- guarded("Open Scene",function(comp)
-  local state,err=factory.inspect(comp)
-  if not state then return nil,err end
-  show_state(state)
-  if not state.has_scene then return nil,"NO_SCENE: use Create Scene" end
-  return {scene_id=state.scene_id,object_count=#state.objects,
-    note="Reading Scene does not select or alter Fusion tools"}
- end)
-end
-function window.On.Compatibility.Clicked(ev)
- guarded("Compatibility",function(comp)
-  local list=comp:GetToolList(false)
-  local count=0
-  for _ in pairs(list) do count=count+1 end
-  return {existing_native_tool_count=count,
-   fuse_scene="CartoRigScene",fuse_worldmap="CartoRigWorldMap",
-   fuse_camera="CartoRigCamera",note="Registration checked when Create Scene is executed"}
- end)
-end
-function window.On.CreateTest.Clicked(ev)
- if not items.Scratch.Checked then
-  write("Create Test Nodes",nil,"Disposable test project confirmation required");return
- end
- if not diagnostic_ok or not diagnostic then
-  write("Create Test Nodes",nil,"Developer diagnostic module unavailable");return
- end
- guarded("Create Test Nodes",function(comp) return diagnostic.create(comp,true) end)
-end
-function window.On.VerifyTest.Clicked(ev)
- if not diagnostic_ok or not diagnostic then
-  write("Verify Test Nodes",nil,"Developer diagnostic module unavailable");return
- end
- guarded("Verify Test Nodes",function(comp) return diagnostic.verify(comp) end)
+  local title=items.SceneTitle.Text
+  if type(title)~="string" or title:match("^%s*$") then
+    record("Create Scene",false,"A scene name is required")
+    return
+  end
+  -- No comp argument and no selected-Fusion-tool assumption: timeline service
+  -- creates a fresh TimelineItem and passes its comp to the NodeFactory.
+  local ok2,value,err=pcall(service.create,resolve,title)
+  if not ok2 then
+    record("Create Scene",false,"Resolve API failure: "..tostring(value))
+    return
+  end
+  if not value then
+    record("Create Scene",false,tostring(err))
+    refresh()
+    return
+  end
+  record("Create Scene",true,"Scene "..tostring(value.scene_id)..
+    ", individual Fusion Composition frames "..tostring(value.start_frame)..
+    "–"..tostring(value.end_frame).."; Fusion page opened: "..tostring(value.fusion_page_opened))
+  refresh()
 end
 function window.On.SaveReport.Clicked(ev)
- local temp=os.getenv("TEMP") or os.getenv("TMP")
- if not temp then items.Status.Text="ERROR: TEMP not available";return end
- local filepath=temp.."\\cartorig-dev-Test-"..os.date("!%Y%m%d-%H%M%S")..".txt"
- local stream,err=io.open(filepath,"wb")
- if not stream then items.Status.Text="ERROR: "..tostring(err);return end
- stream:write(report);stream:close()
- items.Status.Text="Report saved: "..filepath
+  local temp=os.getenv("TEMP") or os.getenv("TMP")
+  if not temp then items.Status.Text="Cannot locate Windows TEMP";return end
+  local dest=temp.."\\cartorig-dev-Scene-"..os.date("!%Y%m%d-%H%M%S")..".txt"
+  local file,err=io.open(dest,"wb")
+  if not file then items.Status.Text="Cannot save report: "..tostring(err);return end
+  file:write(report);file:close()
+  items.Status.Text="Report saved: "..dest
 end
 function window.On.Close.Clicked(ev) disp:ExitLoop() end
-function window.On.CartoRigDevWindow.Close(ev) disp:ExitLoop() end
-local initial,err=factory.inspect(bound_comp)
-if initial then show_state(initial)
-else items.SceneList.PlainText="STATE ERROR: "..tostring(err) end
+function window.On.CartoRigDevSceneWindow.Close(ev) disp:ExitLoop() end
+refresh()
 window:Show()
 disp:RunLoop()
 window:Hide()
