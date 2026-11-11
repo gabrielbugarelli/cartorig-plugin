@@ -117,7 +117,7 @@ Section "Install cartorig-dev"
   IfFileExists "$R0\cartorig-dev.lua.pending" +3 0
     MessageBox MB_OK|MB_ICONSTOP "Staged launcher missing; previous script preserved."
     Abort
-  IfFileExists "$R0\cartorig-dev.lua" 0 +5
+  IfFileExists "$R0\cartorig-dev.lua" 0 +6
     ClearErrors
     Rename "$R0\cartorig-dev.lua" "$R0\cartorig-dev.lua.backup"
     IfErrors 0 +3
