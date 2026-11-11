@@ -3,6 +3,9 @@
 !ifndef OUTPUTFILE
   !define OUTPUTFILE "cartorig-dev-0.6.3-win64.exe"
 !endif
+!ifndef BUILDSHA
+  !define BUILDSHA "development-unpinned"
+!endif
 Unicode true
 Name "cartorig-dev"
 OutFile "${OUTPUTFILE}"
@@ -296,7 +299,12 @@ MigrateCartoRigDone:
   FileWrite $R1 "Launcher: $R2\cartorig-dev.lua$\r$\n"
   FileWrite $R1 "UI: $LOCALAPPDATA\CartoRig\App\lua\cartorig_scene_ui.lua$\r$\n"
   FileWrite $R1 "Version: 0.6.3$\r$\n"
+  FileWrite $R1 "Build commit: ${BUILDSHA}$\r$\n"
   FileWrite $R1 "$R9$\r$\n"
+  FileClose $R1
+  FileOpen $R1 "$LOCALAPPDATA\CartoRig\App\build-info.txt" w
+  FileWrite $R1 "version=0.6.3$\r$\n"
+  FileWrite $R1 "commit=${BUILDSHA}$\r$\n"
   FileClose $R1
   ; Menu enumeration is NOT verified by this installer or the Windows Actions runner.
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "DisplayName" "cartorig-dev (Development Preview)"
@@ -338,6 +346,7 @@ Section "Uninstall"
   ${EndIf}
   Delete "$LOCALAPPDATA\CartoRig\App\lua\cartorig_scene_ui.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\install-location.txt"
+  Delete "$LOCALAPPDATA\CartoRig\App\build-info.txt"
   Delete "$LOCALAPPDATA\CartoRig\App\last-error.txt"
   Delete "$LOCALAPPDATA\CartoRig\App\cleanup-verified-legacy.ps1"
   Delete "$LOCALAPPDATA\CartoRig\App\legacy-cleanup.txt"
