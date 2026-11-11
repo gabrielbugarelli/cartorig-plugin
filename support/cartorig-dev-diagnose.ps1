@@ -36,7 +36,13 @@ $files=@(
   (Status "NODE_FACTORY" (Join-Path $app 'lua\CartoRig\node_factory.lua')),
   (Status "UNINSTALLER" (Join-Path $app 'Uninstall-CartoRig.exe')),
   (Status "INSTALL_RECORD" (Join-Path $app 'install-location.txt')),
-  (Status "STARTUP_ERROR" (Join-Path $app 'last-error.txt'))
+  (Status "STARTUP_ERROR" (Join-Path $app 'last-error.txt')),
+  (Status "LEGACY_CARTORIG_SCRIPT" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\CartoRig.lua')),
+  (Status "LEGACY_HOST_PROBE" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\CartoRig Host Probe.lua')),
+  (Status "LEGACY_NATIVE_PROBE" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\CartoRig Native Integration Probe.lua')),
+  (Status "LEGACY_NATIVE_LIBRARY" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\CartoRigProbe\native_probe.lua')),
+  (Status "LAUNCHER_PENDING" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\cartorig-dev.lua.pending')),
+  (Status "LAUNCHER_BACKUP" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\cartorig-dev.lua.backup'))
 )
 $primary=$files[0].Present;$ui=$files[4].Present
 $other=$files[1].Present -or $files[2].Present -or $files[3].Present
@@ -45,6 +51,13 @@ if(!$primary){
   $classification=if($other){"OTHER_DEFAULT_SCRIPTS_LOCATION"}else{"SCRIPT_MISSING_IN_DEFAULT_DIRECTORIES"}
 }elseif(!$ui){
   $classification="LAUNCHER_PRESENT_UI_MISSING"
+}
+$legacy=@($files | Where-Object { $_.Name -like 'LEGACY_*' -and $_.Present })
+$staged=@($files | Where-Object { $_.Name -like 'LAUNCHER_*' -and $_.Present })
+if (!$primary -and $legacy.Count -gt 0) {
+  $classification="MISSING_LAUNCHER_LEGACY_FILES_CAN_BLOCK_INSTALLER"
+} elseif (!$primary -and $staged.Count -gt 0) {
+  $classification="MISSING_LAUNCHER_STAGING_RESIDUE"
 }
 $processStatus="NOT_CHECKED"
 if(!$SkipProcessCheck){
