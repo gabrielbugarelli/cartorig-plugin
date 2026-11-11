@@ -23,7 +23,7 @@ jobs:
       - name: Install free NSIS
         shell: pwsh
         run: choco install nsis --yes --no-progress --limit-output
-      - name: Compile historical 0.5.2/0.6.0/0.6.1/0.6.2 and new 0.6.3 installers
+      - name: Compile historical 0.5.2/0.6.0/0.6.1/0.6.2/0.6.3 and new 0.6.4 installers
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist,fixture | Out-Null
@@ -34,7 +34,8 @@ jobs:
           $old060=Join-Path $root 'fixture\cartorig-dev-0.6.0.exe'
           $old061=Join-Path $root 'fixture\cartorig-dev-0.6.1.exe'
           $old062=Join-Path $root 'fixture\cartorig-dev-0.6.2.exe'
-          $new=Join-Path $root 'dist\cartorig-dev-0.6.3-win64.exe'
+          $old063=Join-Path $root 'fixture\cartorig-dev-0.6.3.exe'
+          $new=Join-Path $root 'dist\cartorig-dev-0.6.4-win64.exe'
           & $exe /V2 "/DOUTPUTFILE=$old" packaging\legacy-preview-0.5.2.nsi
           if ($LASTEXITCODE -ne 0) {throw 'Legacy compile failed'}
           & $exe /V2 "/DOUTPUTFILE=$old060" packaging\legacy-preview-0.6.0.nsi
@@ -43,11 +44,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) {throw 'Authentic old 0.6.1 fixture compile failed'}
           & $exe /V2 "/DOUTPUTFILE=$old062" packaging\legacy-preview-0.6.2.nsi
           if ($LASTEXITCODE -ne 0) {throw 'Authentic old 0.6.2 fixture compile failed'}
+          & $exe /V2 "/DOUTPUTFILE=$old063" "/DBUILDSHA=86bc10e8f7dd2b7f3d85f79184a8e937edca6099" packaging\legacy-preview-0.6.3.nsi
+          if ($LASTEXITCODE -ne 0) {throw 'Authentic old 0.6.3 fixture compile failed'}
           & $exe /V3 "/DOUTPUTFILE=$new" "/DBUILDSHA=$env:GITHUB_SHA" packaging\cartorig-preview.nsi
           if ($LASTEXITCODE -ne 0 -or !(Test-Path $new)) {throw 'Preview compile failed'}
           $sha=(Get-FileHash -Algorithm SHA256 $new).Hash.ToLowerInvariant()
-          "$sha  cartorig-dev-0.6.3-win64.exe" | Set-Content -Encoding ascii dist/SHA256SUMS.txt
-          @{version='0.6.3';type='development-only';commit_sha="$env:GITHUB_SHA";sha256=$sha;script='Utility\cartorig-dev.lua'} |
+          "$sha  cartorig-dev-0.6.4-win64.exe" | Set-Content -Encoding ascii dist/SHA256SUMS.txt
+          @{version='0.6.4';type='development-only';commit_sha="$env:GITHUB_SHA";sha256=$sha;script='Utility\cartorig-dev.lua'} |
             ConvertTo-Json | Set-Content -Encoding utf8 dist/manifest.json
       - name: Validate old-to-new migration, single Utility menu, reinstall, uninstall
         shell: pwsh
@@ -57,11 +60,12 @@ jobs:
           $utility=Join-Path $root 'Utility\cartorig-dev.lua'
           $backup="$comp.migrated-060"
           $app=Join-Path $env:LOCALAPPDATA 'CartoRig\App'
-          $new=(Resolve-Path dist/cartorig-dev-0.6.3-win64.exe).Path
+          $new=(Resolve-Path dist/cartorig-dev-0.6.4-win64.exe).Path
           $old=(Resolve-Path fixture/cartorig-dev-0.5.2.exe).Path
           $old060=(Resolve-Path fixture/cartorig-dev-0.6.0.exe).Path
           $old061=(Resolve-Path fixture/cartorig-dev-0.6.1.exe).Path
           $old062=(Resolve-Path fixture/cartorig-dev-0.6.2.exe).Path
+          $old063=(Resolve-Path fixture/cartorig-dev-0.6.3.exe).Path
           $uninstall=Join-Path $app 'Uninstall-CartoRig.exe'
           $module=Join-Path $app 'lua\CartoRig\timeline_service.lua'
           $ui=Join-Path $app 'lua\cartorig_scene_ui.lua'
@@ -104,8 +108,40 @@ jobs:
           if ((Get-FileHash (Join-Path $app 'lua\CartoRig\node_factory.lua') -Algorithm SHA256).Hash -ne $factory062) {
             throw 'Old 0.6.2 NodeFactory fixture was not genuinely installed'
           }
+
+          # Reproduce the exact 0.6.3 candidate that passed Actions and then
+          # failed in Resolve Studio 20.3.1 because GetItemListInTrack() carried
+          # an internal __flags member that pairs() treated as TimelineItem.
+          $p=Start-Process -FilePath $old063 -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or !(Test-Path $utility)) {
+            throw 'Could not reproduce historical 0.6.3 Utility installation'
+          }
+          $service063=(Get-FileHash src/CartoRig/legacy_timeline_service_0.6.3.lua -Algorithm SHA256).Hash
+          $factory063=(Get-FileHash src/CartoRig/legacy_node_factory_0.6.3.lua -Algorithm SHA256).Hash
+          $ui063=(Get-FileHash host/legacy-scene-ui-0.6.3.lua -Algorithm SHA256).Hash
+          if ((Get-FileHash $module -Algorithm SHA256).Hash -ne $service063) {
+            throw 'Old 0.6.3 TimelineService fixture was not genuinely installed'
+          }
+          if ((Get-FileHash (Join-Path $app 'lua\CartoRig\node_factory.lua') -Algorithm SHA256).Hash -ne $factory063) {
+            throw 'Old 0.6.3 NodeFactory fixture was not genuinely installed'
+          }
+          if ((Get-FileHash $ui -Algorithm SHA256).Hash -ne $ui063) {
+            throw 'Old 0.6.3 Scene UI fixture was not genuinely installed'
+          }
+          if (Test-Path (Join-Path $app 'lua\CartoRig\blackmagic_api.lua')) {
+            throw 'Historical 0.6.3 unexpectedly contains new Blackmagic API boundary'
+          }
+          if (Test-Path (Join-Path $app 'lua\CartoRig\fusion_contract.lua')) {
+            throw 'Historical 0.6.3 unexpectedly contains new Fusion contract boundary'
+          }
+          $oldBuild=[IO.File]::ReadAllText((Join-Path $app 'build-info.txt'))
+          if (!$oldBuild.Contains('version=0.6.3') -or
+              !$oldBuild.Contains('commit=86bc10e8f7dd2b7f3d85f79184a8e937edca6099')) {
+            throw 'Historical 0.6.3 build identity is not the actual failed host candidate'
+          }
+
           # A same-name Comp script appearing beside the managed Utility entry is
-          # not owned by 0.6.3. Upgrade must stop before changing either file.
+          # not owned by 0.6.4. Upgrade must stop before changing either file.
           $conflictComp=Join-Path $root 'Comp\cartorig-dev.lua'
           [IO.File]::WriteAllText($conflictComp,'external duplicate cartorig-dev; preserve me')
           $conflictHash=(Get-FileHash $conflictComp -Algorithm SHA256).Hash
@@ -113,7 +149,7 @@ jobs:
           $preUpgradeServiceHash=(Get-FileHash $module -Algorithm SHA256).Hash
           $blocked=Start-Process -FilePath $new -ArgumentList '/S' -Wait -PassThru
           if (!(Test-Path $conflictComp) -or (Get-FileHash $conflictComp -Algorithm SHA256).Hash -ne $conflictHash) {
-            throw '0.6.3 changed conflicting external Comp/cartorig-dev.lua'
+            throw '0.6.4 changed conflicting external Comp/cartorig-dev.lua'
           }
           if ((Get-FileHash $utility -Algorithm SHA256).Hash -ne $preUpgradeUtilityHash -or
               (Get-FileHash $module -Algorithm SHA256).Hash -ne $preUpgradeServiceHash) {
@@ -126,20 +162,24 @@ jobs:
             if (!(Test-Path $utility) -or (Test-Path $comp) -or (Test-Path $backup)) {throw 'Utility migration or verified backup retirement failed'}
             if ((Get-FileHash $utility -Algorithm SHA256).Hash -ne (Get-FileHash host/cartorig-dev-launcher.lua -Algorithm SHA256).Hash) {throw 'Launcher hash mismatch'}
             if (!(Test-Path $module) -or (Get-FileHash $module -Algorithm SHA256).Hash -ne (Get-FileHash src/CartoRig/timeline_service.lua -Algorithm SHA256).Hash) {throw 'TimelineService mismatch'}
+            $apiBoundary=Join-Path $app 'lua\CartoRig\blackmagic_api.lua'
+            $fusionBoundary=Join-Path $app 'lua\CartoRig\fusion_contract.lua'
+            if (!(Test-Path $apiBoundary) -or (Get-FileHash $apiBoundary -Algorithm SHA256).Hash -ne (Get-FileHash src/CartoRig/blackmagic_api.lua -Algorithm SHA256).Hash) {throw 'Blackmagic API boundary mismatch'}
+            if (!(Test-Path $fusionBoundary) -or (Get-FileHash $fusionBoundary -Algorithm SHA256).Hash -ne (Get-FileHash src/CartoRig/fusion_contract.lua -Algorithm SHA256).Hash) {throw 'Fusion contract boundary mismatch'}
             if (!(Test-Path $ui) -or (Get-FileHash $ui -Algorithm SHA256).Hash -ne (Get-FileHash host/cartorig-dev-scene.lua -Algorithm SHA256).Hash) {throw 'Scene UI mismatch'}
             $all=@(Get-ChildItem -Path $root -Recurse -File -Filter cartorig-dev.lua)
             if ($all.Count -ne 1 -or $all[0].FullName -ne $utility) {throw 'Not exactly one Scripts menu entry'}
             if ((Test-Path "$utility.pending") -or (Test-Path "$utility.backup")) {throw 'Launcher staging residue'}
             $record=[IO.File]::ReadAllText((Join-Path $app 'install-location.txt'))
-            if (!$record.Contains($utility) -or !$record.Contains('0.6.3') -or !$record.Contains($env:GITHUB_SHA)) {throw 'Installation record stale or missing build commit'}
+            if (!$record.Contains($utility) -or !$record.Contains('0.6.4') -or !$record.Contains($env:GITHUB_SHA)) {throw 'Installation record stale or missing build commit'}
             $buildInfo=[IO.File]::ReadAllText((Join-Path $app 'build-info.txt'))
-            if (!$buildInfo.Contains('version=0.6.3') -or !$buildInfo.Contains("commit=$env:GITHUB_SHA")) {throw 'Installed build-info does not identify exact Actions commit'}
+            if (!$buildInfo.Contains('version=0.6.4') -or !$buildInfo.Contains("commit=$env:GITHUB_SHA")) {throw 'Installed build-info does not identify exact Actions commit'}
             if ((Get-FileHash $foreign -Algorithm SHA256).Hash -ne $hash) {throw 'Unrelated script overwritten'}
           }
           # The current Utility install does not own an active Comp/cartorig-dev.lua.
           # A same-name script created after installation must survive uninstall.
           $foreignComp=Join-Path $root 'Comp\cartorig-dev.lua'
-          [IO.File]::WriteAllText($foreignComp,'external same-name script, not owned by 0.6.3')
+          [IO.File]::WriteAllText($foreignComp,'external same-name script, not owned by 0.6.4')
           $foreignCompHash=(Get-FileHash $foreignComp -Algorithm SHA256).Hash
           $p=Start-Process -FilePath $uninstall -ArgumentList '/S' -Wait -PassThru
           if ($p.ExitCode -ne 0 -or (Test-Path $utility) -or (Test-Path $backup) -or (Test-Path $module)) {throw 'Upgrade uninstall failed'}
@@ -210,13 +250,13 @@ jobs:
             throw 'Blocked staging verification changed recognized active legacy launcher'
           }
           if (!(Test-Path $unknownPending) -or (Get-FileHash $unknownPending -Algorithm SHA256).Hash -ne $unknownPendingHash) {
-            throw '0.6.3 deleted or changed unrecognized legacy pending launcher'
+            throw '0.6.4 deleted or changed unrecognized legacy pending launcher'
           }
           if (Test-Path $utility) {throw 'Utility activated despite unrecognized legacy pending launcher'}
           Remove-Item -LiteralPath $unknownPending -Force
           $p=Start-Process -FilePath $new -ArgumentList '/S' -Wait -PassThru
           if ($p.ExitCode -ne 0 -or !(Test-Path $utility) -or (Test-Path $comp) -or (Test-Path $backup)) {
-            throw 'Verified 0.5.2 legacy launcher did not migrate cleanly to 0.6.3'
+            throw 'Verified 0.5.2 legacy launcher did not migrate cleanly to 0.6.4'
           }
           $p=Start-Process -FilePath $uninstall -ArgumentList '/S' -Wait -PassThru
           if ($p.ExitCode -ne 0 -or (Test-Path $utility) -or (Test-Path $backup)) {throw 'Direct migration uninstall failed'}
@@ -229,13 +269,13 @@ jobs:
           $modifiedLegacyHash=(Get-FileHash $comp -Algorithm SHA256).Hash
           $blockedLegacy=Start-Process -FilePath $new -ArgumentList '/S' -Wait -PassThru
           if (!(Test-Path $comp) -or (Get-FileHash $comp -Algorithm SHA256).Hash -ne $modifiedLegacyHash) {
-            throw '0.6.3 changed unrecognized/modified legacy Comp launcher'
+            throw '0.6.4 changed unrecognized/modified legacy Comp launcher'
           }
-          if (Test-Path $utility) {throw '0.6.3 activated Utility despite unverified legacy Comp launcher'}
+          if (Test-Path $utility) {throw '0.6.4 activated Utility despite unverified legacy Comp launcher'}
           $p=Start-Process -FilePath $uninstall -ArgumentList '/S' -Wait -PassThru
           if ((Test-Path $utility)) {throw 'Cleanup after modified legacy fixture failed'}
 
-          'PASS: historical migration through 0.6.3, exact legacy/shared SHA ownership, duplicate-entry blocking, modified Utility/Fuse preservation, clean install/uninstall, same-name and unrelated foreign scripts preserved; Resolve host NOT RUN.' |
+          'PASS: historical migration through 0.6.4, exact legacy/shared SHA ownership, duplicate-entry blocking, modified Utility/Fuse preservation, clean install/uninstall, same-name and unrelated foreign scripts preserved; Resolve host NOT RUN.' |
             Set-Content dist/package-validation.txt
       - name: Include read-only installation diagnostic
         shell: pwsh
