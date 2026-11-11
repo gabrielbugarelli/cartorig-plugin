@@ -303,8 +303,8 @@ local function rollback_context(ctx,item)
     local ok,err=call(ctx.timeline,"SetCurrentTimecode",ctx.original_timecode)
     if ok~=true then problems[#problems+1]="playhead not restored: "..tostring(err) end
   end
-  if not ctx.created_timeline and ctx.timeline and ctx.baseline then
-    local restored,err=compare_timeline(ctx.timeline,ctx.baseline,nil)
+  if not ctx.created_timeline and ctx.timeline and ctx.rollback_baseline then
+    local restored,err=compare_timeline(ctx.timeline,ctx.rollback_baseline,nil)
     if not restored then problems[#problems+1]="external timeline not restored: "..tostring(err) end
   end
   if ctx.created_timeline and ctx.media_pool and ctx.timeline then
@@ -346,10 +346,16 @@ function M.create(resolve,title,opts)
   ctx.original_page=call(resolve,"GetCurrentPage")
   local timeline,terr=ensure_timeline(ctx)
   if not timeline then return fail(ctx,nil,terr) end
+  -- Snapshot before CartoRig adds a missing video track. This is the state a
+  -- failed transaction must restore exactly.
+  local rollbackBaseline,snapErr=snapshot_timeline(timeline)
+  if not rollbackBaseline then return fail(ctx,nil,snapErr) end
+  ctx.rollback_baseline=rollbackBaseline
   local okTrack,trackErr=ensure_video_track(ctx)
   if not okTrack then return fail(ctx,nil,trackErr) end
-  local before,snapErr=snapshot_timeline(timeline)
-  if not before then return fail(ctx,nil,snapErr) end
+  -- Working baseline includes any video track that a successful Scene needs.
+  local before,workErr=snapshot_timeline(timeline)
+  if not before then return fail(ctx,nil,workErr) end
   ctx.baseline=before
   local start=call(timeline,"GetStartFrame")
   local fps=call(timeline,"GetSetting","timelineFrameRate")
