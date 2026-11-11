@@ -222,13 +222,16 @@ local function fake(start_with_timeline)
     return timeline
   end
   function mediaPool:DeleteTimelines(items)
-    if items[1]~=timeline then return false end
+    if items[1]~=timeline or project.fail_delete_timeline then return false end
     project.deleted_timeline=true
     if project.timeline==timeline then project.timeline=nil end
     return true
   end
   function project:GetCurrentTimeline() return self.timeline end
-  function project:SetCurrentTimeline(tl) self.timeline=tl;return true end
+  function project:SetCurrentTimeline(tl)
+    if self.fail_select then return false end
+    self.timeline=tl;return true
+  end
   function project:GetMediaPool() return mediaPool end
   function project:GetTimelineCount() return self.timeline and 1 or 0 end
   local manager={GetCurrentProject=function() return project end}
@@ -338,6 +341,23 @@ local noClip,noClipErr=svc.create(r5,"No insert")
 assert(noClip==nil and noClipErr:find("FUSION_INSERT_FAILED",1,true))
 assert(t5:GetTrackCount("video")==0 and t5.deleted_tracks==1)
 assert(#t5.tracks.audio[1].items==1)
+
+-- A newly created timeline that cannot be selected is still owned by the
+-- transaction and must be deleted before returning failure.
+local r5b,p5b,t5b=fake(false)
+p5b.fail_select=true
+r5b.page="color"
+local selectFailed,selectErr=svc.create(r5b,"Cannot select")
+assert(selectFailed==nil and selectErr:find("TIMELINE_SELECT_FAILED",1,true))
+assert(p5b.deleted_timeline==true and p5b.timeline==nil)
+assert(r5b.page=="color")
+
+-- If even that created timeline cannot be deleted, report rollback incomplete.
+local r5c,p5c,t5c=fake(false)
+p5c.fail_select=true
+p5c.fail_delete_timeline=true
+local deleteFailed,deleteErr=svc.create(r5c,"Cannot delete")
+assert(deleteFailed==nil and deleteErr:find("ROLLBACK_INCOMPLETE",1,true))
 
 -- A timeline created only for a failed command is removed.
 local r6,p6,t6=fake(false)
