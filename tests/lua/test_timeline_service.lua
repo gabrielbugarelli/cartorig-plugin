@@ -258,6 +258,8 @@ end
 assert(svc.timecode_add("01:00:00:00",120,24)=="01:00:05:00")
 assert(svc.timecode_add("00:00:59;29",1,29.97)=="00:01:00;02")
 assert(svc.timecode_add("00:09:59;29",1,29.97)=="00:10:00;00")
+assert(svc.timecode_add("00:09:59;29",1,"29.97 DF")=="00:10:00;00")
+assert(svc.timecode_add("01:00:00:00",24,"24 NDF")=="01:00:01:00")
 assert(svc.timecode_add("00:00:00;00",1,25)==nil)
 
 -- Five clicks from a project with no current timeline.
