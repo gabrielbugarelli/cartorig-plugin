@@ -5,12 +5,16 @@ local dataPath="tests/fixtures/local-data-test\\CartoRig\\App\\data\\ne_50m_land
 local f=assert(io.open(dataPath,"wb"))
 f:write(string.rep("x",510000));f:close()
 local function fake()
- local comp={tools={},data={},added={},deleted=0,undo=0}
+ local comp={tools={},data={},added={},deleted=0,undo=0,undo_keeps={}}
  function comp:GetToolList() return self.tools end
  function comp:GetData(key) return self.data[key] end
  function comp:SetData(key,v) self.data[key]=v end
  function comp:StartUndo() self.undo=self.undo+1 end
- function comp:EndUndo() self.undo=self.undo-1 end
+ function comp:EndUndo(keep)
+  self.undo=self.undo-1
+  self.undo_keeps[#self.undo_keeps+1]=keep
+  if self.fail_end_undo and keep==true then error("synthetic EndUndo failure") end
+ end
  function comp:AddTool(regid,x,y)
   if type(x)~="number" or type(y)~="number" then error("AddTool 3-arg expected") end
   if self.fail==regid then return nil end
@@ -59,8 +63,14 @@ for _,node in pairs(comp.tools) do
  if node.name=="CR_WorldMap_Main" then world=node end
 end
 assert(camera and world and camera.links.Input==world)
-assert(factory.inspect(comp).has_scene)
-assert(#factory.inspect(comp).objects==3)
+local persisted=assert(factory.inspect(comp))
+assert(persisted.has_scene and persisted.title=="Brazil Map")
+assert(#persisted.objects==3)
+local sceneDisplay
+for _,o in ipairs(persisted.objects) do
+ if o.type=="Scene" then sceneDisplay=o.display_name end
+end
+assert(sceneDisplay=="Brazil Map","Scene display name must persist independently of timeline clip name")
 -- Additional authoring nodes must not invalidate the three singleton structural
 -- nodes. Multiple Countries/States/Markers/etc. are expected by the product.
 local countries={}
@@ -105,6 +115,18 @@ assert(not result and error:match("SCENE_CREATE_FAILED"))
 assert(#failed.tools==1 and failed.deleted==1)
 assert(c.links.Input==nil)
 assert(failed:GetData("CartoRig.V1.SceneId")==nil and failed.undo==0)
+local undo_failed,undo_media=fake()
+undo_failed.fail_end_undo=true
+local undoResult,undoReason=factory.create_scene(undo_failed,"Undo failure",{localappdata=ROOT})
+assert(undoResult==nil and undoReason:match("UNDO_ERROR"))
+assert(#undo_failed.tools==1 and undo_failed.tools[1]==undo_media,
+ "Undo-finalization failure must remove all CartoRig nodes")
+assert(undo_media.links.Input==nil)
+assert(undo_failed:GetData("CartoRig.V1.SceneId")==nil)
+assert(undo_failed:GetData("CartoRig.V1.Title")==nil)
+assert(undo_failed.undo_keeps[#undo_failed.undo_keeps]==false,
+ "failed transaction must close/discard its Undo record with EndUndo(false)")
+
 local busy,foreign_media=fake()
 local external=busy:AddTool("Loader",9,9)
 foreign_media:ConnectInput("Input",external)
