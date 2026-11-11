@@ -1,5 +1,6 @@
 -- Isolated unit fakes: verifies safety and domain logic, NOT Fusion host acceptance.
 local factory=require("CartoRig.node_factory")
+local domain=require("CartoRig.domain")
 local dataPath="tests/fixtures/local-data-test\\CartoRig\\App\\data\\ne_50m_land.lua"
 local f=assert(io.open(dataPath,"wb"))
 f:write(string.rep("x",510000));f:close()
@@ -60,6 +61,20 @@ end
 assert(camera and world and camera.links.Input==world)
 assert(factory.inspect(comp).has_scene)
 assert(#factory.inspect(comp).objects==3)
+-- Additional authoring nodes must not invalidate the three singleton structural
+-- nodes. Multiple Countries/States/Markers/etc. are expected by the product.
+for n=1,2 do
+ local country=comp:AddTool("Fuse.CartoRigCountry",10+n,4)
+ country:SetAttrs({TOOLS_Name="CR_Country_Test_"..n})
+ country:SetData("CartoRig.V1.Owned",true)
+ country:SetData("CartoRig.V1.ObjectId",domain.uuid())
+ country:SetData("CartoRig.V1.ObjectType","Country")
+ country:SetData("CartoRig.V1.SceneId",made.scene_id)
+ country:SetData("CartoRig.V1.SchemaVersion","1.0.0")
+end
+local expanded=assert(factory.inspect(comp))
+assert(expanded.has_scene and #expanded.objects==5,
+ "Two extra Country nodes must coexist with the structural Scene/WorldMap/Camera")
 local sid=made.scene_id
 assert(sid==comp:GetData("CartoRig.V1.SceneId"))
 assert(factory.create_scene(comp,"Do not duplicate",{localappdata=ROOT})==nil)
@@ -85,8 +100,11 @@ local from_new,reason=factory.create_scene(busy,"Avoid touching external",{local
 assert(from_new==nil and reason:match("MEDIAOUT_ALREADY_CONNECTED"))
 assert(#busy.tools==2 and foreign_media.links.Input==external)
 local no_new,d=fake()
-d:ConnectInput("Input",no_new:AddTool("Loader",3,3))
-assert(factory.create_scene(no_new,"No managed output",{localappdata=ROOT,disallow_new_mediaout=true})==nil)
-assert(#no_new.tools==2)
+d:Delete()
+local noOutput,outputReason=factory.create_scene(no_new,"No managed output",
+ {localappdata=ROOT,disallow_new_mediaout=true})
+assert(noOutput==nil and outputReason:match("MEDIAOUT_UNAVAILABLE"))
+assert(#no_new.tools==0,
+ "disallow_new_mediaout must fail before creating any author node or replacement MediaOut")
 os.remove(dataPath)
 print("node_factory: PASS (mocked host only; creation, isolation, UUIDs, rollback, output links)")
