@@ -18,6 +18,9 @@ assert_error(value2,err2,"API_INVALID_RECEIVER")
 
 local object={Ping=function(self,x) return x+1 end}
 assert(api.call(object,"Ping",4)==5)
+local module={Dot=function(x) return x*2 end}
+assert(api.call_function(module,"Dot",6)==12,
+  "bmd-style module functions must not receive an implicit self argument")
 local missing,missingErr=api.call(object,"Missing")
 assert_error(missing,missingErr,"API_METHOD_UNAVAILABLE")
 
