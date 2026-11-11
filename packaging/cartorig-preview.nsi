@@ -36,6 +36,12 @@ Section "Install cartorig-dev"
       MessageBox MB_OK|MB_ICONSTOP "Existing Utility cartorig-dev.lua is unmanaged. No files were changed." /SD IDOK
       Abort
     ${EndIf}
+    ClearErrors
+    ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\verify-managed-shared.ps1" -Path "$R2\cartorig-dev.lua" -Kind launcher' $0
+    ${If} $0 != 0
+      MessageBox MB_OK|MB_ICONSTOP "Existing Utility cartorig-dev.lua was modified or is not a recognized CartoRig launcher. It was preserved and upgrade stopped." /SD IDOK
+      Abort
+    ${EndIf}
     ${If} ${FileExists} "$R0\cartorig-dev.lua"
       MessageBox MB_OK|MB_ICONSTOP "Both Utility and Comp cartorig-dev.lua exist. The Comp file is preserved as unverified; resolve the duplicate before upgrading." /SD IDOK
       Abort
@@ -45,6 +51,7 @@ Section "Install cartorig-dev"
   InitPluginsDir
   SetOutPath "$PLUGINSDIR"
   File "/oname=verify-managed-comp-launcher.ps1" "..\support\verify-managed-comp-launcher.ps1"
+  File "/oname=verify-managed-shared.ps1" "..\support\verify-managed-shared.ps1"
   ; A persistent migration backup is removed only when its exact source bytes
   ; prove that it is a historical CartoRig launcher and Utility is already active.
   ${If} ${FileExists} "$R0\cartorig-dev.lua.migrated-060"
@@ -72,19 +79,37 @@ Section "Install cartorig-dev"
   ; uninstaller may own these filenames.
   ${If} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigScene.fuse"
     ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
-      MessageBox MB_OK|MB_ICONSTOP "External CartoRig Fuse installation exists. No files changed." /SD IDOK
+      MessageBox MB_OK|MB_ICONSTOP "External CartoRig Scene Fuse exists without CartoRig ownership. No files changed." /SD IDOK
+      Abort
+    ${EndIf}
+    ClearErrors
+    ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\verify-managed-shared.ps1" -Path "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigScene.fuse" -Kind scene-fuse' $0
+    ${If} $0 != 0
+      MessageBox MB_OK|MB_ICONSTOP "External CartoRig Scene Fuse was modified or is not a recognized CartoRig file. It was preserved and upgrade stopped." /SD IDOK
       Abort
     ${EndIf}
   ${EndIf}
   ${If} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigWorldMap.fuse"
     ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
-      MessageBox MB_OK|MB_ICONSTOP "External CartoRig WorldMap Fuse found. No files changed." /SD IDOK
+      MessageBox MB_OK|MB_ICONSTOP "External CartoRig WorldMap Fuse exists without CartoRig ownership. No files changed." /SD IDOK
+      Abort
+    ${EndIf}
+    ClearErrors
+    ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\verify-managed-shared.ps1" -Path "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigWorldMap.fuse" -Kind worldmap-fuse' $0
+    ${If} $0 != 0
+      MessageBox MB_OK|MB_ICONSTOP "External CartoRig WorldMap Fuse was modified or is not a recognized CartoRig file. It was preserved and upgrade stopped." /SD IDOK
       Abort
     ${EndIf}
   ${EndIf}
   ${If} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigCamera.fuse"
     ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
-      MessageBox MB_OK|MB_ICONSTOP "External CartoRig Camera Fuse found. No files changed." /SD IDOK
+      MessageBox MB_OK|MB_ICONSTOP "External CartoRig Camera Fuse exists without CartoRig ownership. No files changed." /SD IDOK
+      Abort
+    ${EndIf}
+    ClearErrors
+    ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\verify-managed-shared.ps1" -Path "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigCamera.fuse" -Kind camera-fuse' $0
+    ${If} $0 != 0
+      MessageBox MB_OK|MB_ICONSTOP "External CartoRig Camera Fuse was modified or is not a recognized CartoRig file. It was preserved and upgrade stopped." /SD IDOK
       Abort
     ${EndIf}
   ${EndIf}
@@ -147,6 +172,7 @@ Section "Install cartorig-dev"
   SetOutPath "$LOCALAPPDATA\CartoRig\App"
   File "/oname=graph_test.lua" "..\src\CartoRig\native_probe.lua"
   File "/oname=cleanup-verified-legacy.ps1" "..\support\cleanup-verified-legacy.ps1"
+  File "/oname=verify-managed-shared.ps1" "..\support\verify-managed-shared.ps1"
   SetOutPath "$LOCALAPPDATA\CartoRig\App\lua"
   File "/oname=cartorig_scene_ui.lua" "..\host\cartorig-dev-scene.lua"
   SetOutPath "$LOCALAPPDATA\CartoRig\App"
@@ -273,17 +299,53 @@ SectionEnd
 
 Section "Uninstall"
   StrCpy $INSTDIR "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts"
-  Delete "$INSTDIR\Utility\cartorig-dev.lua"
-  Delete "$INSTDIR\Utility\cartorig-dev.lua.pending"
-  Delete "$INSTDIR\Utility\cartorig-dev.lua.backup"
+  ; Shared Resolve files are deleted only when their content is a known CartoRig
+  ; version. A user-modified/replaced file is deliberately preserved.
+  ${If} ${FileExists} "$LOCALAPPDATA\CartoRig\App\verify-managed-shared.ps1"
+    ${If} ${FileExists} "$INSTDIR\Utility\cartorig-dev.lua"
+      ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$LOCALAPPDATA\CartoRig\App\verify-managed-shared.ps1" -Path "$INSTDIR\Utility\cartorig-dev.lua" -Kind launcher' $0
+      ${If} $0 == 0
+        Delete "$INSTDIR\Utility\cartorig-dev.lua"
+      ${EndIf}
+    ${EndIf}
+    ${If} ${FileExists} "$INSTDIR\Utility\cartorig-dev.lua.pending"
+      ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$LOCALAPPDATA\CartoRig\App\verify-managed-shared.ps1" -Path "$INSTDIR\Utility\cartorig-dev.lua.pending" -Kind launcher' $0
+      ${If} $0 == 0
+        Delete "$INSTDIR\Utility\cartorig-dev.lua.pending"
+      ${EndIf}
+    ${EndIf}
+    ${If} ${FileExists} "$INSTDIR\Utility\cartorig-dev.lua.backup"
+      ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$LOCALAPPDATA\CartoRig\App\verify-managed-shared.ps1" -Path "$INSTDIR\Utility\cartorig-dev.lua.backup" -Kind launcher' $0
+      ${If} $0 == 0
+        Delete "$INSTDIR\Utility\cartorig-dev.lua.backup"
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
   Delete "$LOCALAPPDATA\CartoRig\App\lua\cartorig_scene_ui.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\install-location.txt"
   Delete "$LOCALAPPDATA\CartoRig\App\last-error.txt"
   Delete "$LOCALAPPDATA\CartoRig\App\cleanup-verified-legacy.ps1"
   Delete "$LOCALAPPDATA\CartoRig\App\legacy-cleanup.txt"
-  Delete "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigScene.fuse"
-  Delete "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigWorldMap.fuse"
-  Delete "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigCamera.fuse"
+  ${If} ${FileExists} "$LOCALAPPDATA\CartoRig\App\verify-managed-shared.ps1"
+    ${If} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigScene.fuse"
+      ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$LOCALAPPDATA\CartoRig\App\verify-managed-shared.ps1" -Path "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigScene.fuse" -Kind scene-fuse' $0
+      ${If} $0 == 0
+        Delete "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigScene.fuse"
+      ${EndIf}
+    ${EndIf}
+    ${If} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigWorldMap.fuse"
+      ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$LOCALAPPDATA\CartoRig\App\verify-managed-shared.ps1" -Path "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigWorldMap.fuse" -Kind worldmap-fuse' $0
+      ${If} $0 == 0
+        Delete "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigWorldMap.fuse"
+      ${EndIf}
+    ${EndIf}
+    ${If} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigCamera.fuse"
+      ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$LOCALAPPDATA\CartoRig\App\verify-managed-shared.ps1" -Path "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigCamera.fuse" -Kind camera-fuse' $0
+      ${If} $0 == 0
+        Delete "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigCamera.fuse"
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\domain.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\geo.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\catalog.lua"
@@ -297,6 +359,7 @@ Section "Uninstall"
   Delete "$LOCALAPPDATA\CartoRig\App\graph_test.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\README.txt"
   Delete "$LOCALAPPDATA\CartoRig\App\LICENSE.txt"
+  Delete "$LOCALAPPDATA\CartoRig\App\verify-managed-shared.ps1"
   Delete "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
   RMDir "$LOCALAPPDATA\CartoRig\App"
   RMDir "$LOCALAPPDATA\CartoRig"
