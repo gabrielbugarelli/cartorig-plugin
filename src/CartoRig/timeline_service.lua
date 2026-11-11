@@ -112,6 +112,7 @@ local function project_and_timeline(resolve)
   project,perr=require_handle(project,"GetCurrentProject","GetCurrentTimeline")
   if not project then return nil,nil,nil,perr end
   local timeline,terr=call(project,"GetCurrentTimeline")
+  if terr then return nil,nil,nil,"TIMELINE_ACCESS_FAILED: "..tostring(terr) end
   if timeline==false or timeline==0 then
     return nil,nil,nil,"TIMELINE_INVALID: GetCurrentTimeline returned "..type(timeline).." value "..tostring(timeline)
   end
@@ -295,10 +296,12 @@ function M.list_scenes(resolve)
   manager,err=require_handle(manager,"GetProjectManager","GetCurrentProject")
   if not manager then return nil,err end
   local project,perr=call(manager,"GetCurrentProject")
+  if perr then return nil,"PROJECT_ACCESS_FAILED: "..tostring(perr) end
   if project==nil or project==false then return {},nil end
   project,perr=require_handle(project,"GetCurrentProject","GetCurrentTimeline")
   if not project then return nil,perr end
   local timeline,terr=call(project,"GetCurrentTimeline")
+  if terr then return nil,"TIMELINE_ACCESS_FAILED: "..tostring(terr) end
   if timeline==nil then return {},nil end
   if timeline==false then return nil,"TIMELINE_UNAVAILABLE: "..tostring(terr) end
   timeline,terr=require_handle(timeline,"GetCurrentTimeline","GetTrackCount")
@@ -310,7 +313,9 @@ function M.list_scenes(resolve)
   local results={}
   for track=1,total do
     local clips,cliperr=call(timeline,"GetItemListInTrack","video",track)
-    if clips==nil then
+    if clips==nil and cliperr then
+      return nil,"TRACK_LIST_FAILED: V"..track..": "..tostring(cliperr)
+    elseif clips==nil then
       -- Some Resolve versions return nil for an empty track; this is not an error.
       clips={}
     elseif type(clips)~="table" then
