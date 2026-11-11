@@ -212,11 +212,7 @@ local function project_context(resolve)
   if not project then return nil,"NO_PROJECT: open a Resolve project ("..tostring(perr)..")" end
   project,perr=require_handle(project,"GetCurrentProject","GetCurrentTimeline")
   if not project then return nil,perr end
-  local mediaPool,merr=strict(project,"GetMediaPool")
-  if not mediaPool then return nil,"NO_MEDIA_POOL: "..tostring(merr) end
-  mediaPool,merr=require_handle(mediaPool,"GetMediaPool","CreateEmptyTimeline")
-  if not mediaPool then return nil,merr end
-  return {project=project,media_pool=mediaPool}
+  return {project=project}
 end
 local function ensure_timeline(ctx)
   local timeline,err=call(ctx.project,"GetCurrentTimeline")
@@ -227,6 +223,11 @@ local function ensure_timeline(ctx)
     ctx.timeline=timeline
     return timeline
   end
+  local mediaPool,merr=strict(ctx.project,"GetMediaPool")
+  if not mediaPool then return nil,"NO_MEDIA_POOL: "..tostring(merr) end
+  mediaPool,merr=require_handle(mediaPool,"GetMediaPool","CreateEmptyTimeline")
+  if not mediaPool then return nil,merr end
+  ctx.media_pool=mediaPool
   local count=call(ctx.project,"GetTimelineCount")
   local name="CartoRig Scenes"..(type(count)=="number" and count>0 and (" "..tostring(count+1)) or "")
   local created,cerr=strict(ctx.media_pool,"CreateEmptyTimeline",name)
@@ -342,7 +343,7 @@ function M.create(resolve,title,opts)
   if type(title)~="string" or title:match("^%s*$") then return nil,"INVALID_TITLE: Scene title is required" end
   local base,err=project_context(resolve)
   if not base then return nil,err end
-  local ctx={resolve=resolve,project=base.project,media_pool=base.media_pool}
+  local ctx={resolve=resolve,project=base.project}
   ctx.original_page=call(resolve,"GetCurrentPage")
   local timeline,terr=ensure_timeline(ctx)
   if not timeline then return fail(ctx,nil,terr) end
