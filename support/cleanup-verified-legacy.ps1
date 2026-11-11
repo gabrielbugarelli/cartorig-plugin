@@ -22,7 +22,7 @@ $known=@(
   )},
   @{Name="CartoRigProbe\native_probe.lua"; Hashes=@(
     "612d8b0d53201d3ef7688771d8cc1a35d2bae5258077943b67d7ba1154900cae",
-    "26858bf3fb0af3c3eff86b852902f13fa363"
+    "26858bf3fb0af3c3eff86b852aebd78e7247e2d264fb2cd9de852902f13fa363"
   )}
 )
 $lines=New-Object System.Collections.Generic.List[string]
