@@ -109,10 +109,12 @@ local function refresh()
     return
   end
   if #scenes==0 then
-    items.SceneList.PlainText="No CartoRig scenes in the active timeline."
+    items.SceneList.PlainText=(err and ("No readable CartoRig scenes. Warning: "..tostring(err))
+      or "No CartoRig scenes in the active timeline.")
     return
   end
   local lines={}
+  if err then lines[#lines+1]="Warning: "..tostring(err) end
   for n,scene in ipairs(scenes) do
     lines[#lines+1]=string.format("%d. %s  |  Track V%d  |  Frame %s",
       n,tostring(scene.name),scene.track,tostring(scene.start_frame))
