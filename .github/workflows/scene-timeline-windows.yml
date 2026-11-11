@@ -118,12 +118,16 @@ jobs:
           }
           $service063=(Get-FileHash src/CartoRig/legacy_timeline_service_0.6.3.lua -Algorithm SHA256).Hash
           $factory063=(Get-FileHash src/CartoRig/legacy_node_factory_0.6.3.lua -Algorithm SHA256).Hash
+          $domain063=(Get-FileHash src/CartoRig/legacy_domain_0.6.3.lua -Algorithm SHA256).Hash
           $ui063=(Get-FileHash host/legacy-scene-ui-0.6.3.lua -Algorithm SHA256).Hash
           if ((Get-FileHash $module -Algorithm SHA256).Hash -ne $service063) {
             throw 'Old 0.6.3 TimelineService fixture was not genuinely installed'
           }
           if ((Get-FileHash (Join-Path $app 'lua\CartoRig\node_factory.lua') -Algorithm SHA256).Hash -ne $factory063) {
             throw 'Old 0.6.3 NodeFactory fixture was not genuinely installed'
+          }
+          if ((Get-FileHash (Join-Path $app 'lua\CartoRig\domain.lua') -Algorithm SHA256).Hash -ne $domain063) {
+            throw 'Old 0.6.3 Domain fixture was not genuinely installed'
           }
           if ((Get-FileHash $ui -Algorithm SHA256).Hash -ne $ui063) {
             throw 'Old 0.6.3 Scene UI fixture was not genuinely installed'
