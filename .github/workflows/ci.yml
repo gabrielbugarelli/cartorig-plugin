@@ -26,6 +26,7 @@ jobs:
           luac5.1 -p "host/CartoRig.lua"
           luac5.1 -p "host/cartorig-dev.lua"
           luac5.1 -p "host/cartorig-dev-scene.lua"
+          luac5.1 -p "host/cartorig-dev-launcher.lua"
           for fuse in fuses/*.fuse; do luac5.1 -p "$fuse"; done
           luac5.1 -p data/ne_50m_land.lua
       - name: Verify exact normative file and 40-test inventory
