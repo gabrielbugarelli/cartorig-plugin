@@ -30,6 +30,9 @@ class LuaRuntimeIntegration(unittest.TestCase):
     def test_defensive_fusion_bridge_mock_unit(self):
         self.invoke("tests/lua/test_native_probe.lua")
 
+    def test_single_menu_launcher_fail_safe(self):
+        self.invoke("tests/lua/test_launcher.lua")
+
     def test_factory_transactions_and_external_node_protection(self):
         self.invoke("tests/lua/test_node_factory.lua")
 

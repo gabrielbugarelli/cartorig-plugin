@@ -1,7 +1,7 @@
 name: cartorig-dev Windows
 on:
   push:
-    branches: ['feat/milestone-a-structural-fuses-scene']
+    branches: ['feat/milestone-a-structural-fuses-scene', 'fix/cartorig-dev-launcher-upgrade']
   workflow_dispatch:
 permissions:
   contents: read
@@ -29,7 +29,8 @@ jobs:
           $legacyGraph = Join-Path $root 'fixture\OldGraph.exe'
           $legacyPreview = Join-Path $root 'fixture\OldPreview.exe'
           $legacyDev = Join-Path $root 'fixture\OldDev.exe'
-          $candidate = Join-Path $root 'dist\cartorig-dev-0.5-win64.exe'
+          $legacy05 = Join-Path $root 'fixture\OldDev05.exe'
+          $candidate = Join-Path $root 'dist\cartorig-dev-0.5.1-win64.exe'
           & $nsis '/V2' "/DOUTPUTFILE=$legacyHost" 'packaging\host-probe.nsi'
           if ($LASTEXITCODE -ne 0) { throw "Legacy host fixture compile failed" }
           & $nsis '/V2' "/DOUTPUTFILE=$legacyGraph" 'packaging\native-integration.nsi'
@@ -38,20 +39,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Legacy CartoRig 0.3 fixture compile failed" }
           & $nsis '/V2' "/DOUTPUTFILE=$legacyDev" 'packaging\legacy-preview-0.4.nsi'
           if ($LASTEXITCODE -ne 0) { throw "Legacy cartorig-dev 0.4 fixture compile failed" }
+          & $nsis '/V2' "/DOUTPUTFILE=$legacy05" 'packaging\legacy-preview-0.5.nsi'
+          if ($LASTEXITCODE -ne 0) { throw "Legacy cartorig-dev 0.5 fixture compile failed" }
           & $nsis '/V3' "/DOUTPUTFILE=$candidate" 'packaging\cartorig-preview.nsi'
           if ($LASTEXITCODE -ne 0) { throw "CartoRig preview installer compile failed" }
           if (-not (Test-Path $candidate)) { throw "Missing GUI installer" }
           $size = (Get-Item $candidate).Length
           if ($size -le 0 -or $size -gt 5MB) { throw "Preview package exceeds conservative free budget" }
           $hash = (Get-FileHash -Algorithm SHA256 $candidate).Hash.ToLowerInvariant()
-          "$hash  cartorig-dev-0.5-win64.exe" | Set-Content -Encoding ascii 'dist\SHA256SUMS.txt'
+          "$hash  cartorig-dev-0.5.1-win64.exe" | Set-Content -Encoding ascii 'dist\SHA256SUMS.txt'
           @{
             kind = 'cartorig-dev-test-build-not-v1'
-            version = '0.5.0'
+            version = '0.5.1'
             commit_sha = "$env:GITHUB_SHA"
             run_id = "$env:GITHUB_RUN_ID"
             run_attempt = "$env:GITHUB_RUN_ATTEMPT"
-            installer = 'cartorig-dev-0.5-win64.exe'
+            installer = 'cartorig-dev-0.5.1-win64.exe'
             sha256 = $hash
           } | ConvertTo-Json | Set-Content -Encoding utf8 'dist\manifest.json'
       - name: Test migration of both old menus, repeated upgrade, other scripts, and uninstall
@@ -69,7 +72,14 @@ jobs:
           $single = Join-Path $scripts 'cartorig-dev.lua'
           $module = Join-Path $env:LOCALAPPDATA 'CartoRig\App\graph_test.lua'
           $remove = Join-Path $env:LOCALAPPDATA 'CartoRig\App\Uninstall-CartoRig.exe'
-          $setup = (Resolve-Path 'dist\cartorig-dev-0.5-win64.exe').Path
+          $setup = (Resolve-Path 'dist\cartorig-dev-0.5.1-win64.exe').Path
+          $legacy05Setup = (Resolve-Path 'fixture\OldDev05.exe').Path
+          $sourceLauncher = 'host\cartorig-dev-launcher.lua'
+          $sourceUI = 'host\cartorig-dev-scene.lua'
+          $uiInstalled = Join-Path $env:LOCALAPPDATA 'CartoRig\App\lua\cartorig_scene_ui.lua'
+          $installRecord = Join-Path $env:LOCALAPPDATA 'CartoRig\App\install-location.txt'
+          $expectedLauncherHash = (Get-FileHash -Algorithm SHA256 $sourceLauncher).Hash
+          $expectedUiHash = (Get-FileHash -Algorithm SHA256 $sourceUI).Hash
           $fuses = @('CartoRigScene.fuse','CartoRigCamera.fuse','CartoRigWorldMap.fuse')
           $fuseDir = Join-Path $env:APPDATA 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses'
           $appDir = Join-Path $env:LOCALAPPDATA 'CartoRig\App'
@@ -85,10 +95,20 @@ jobs:
           $oldDev = (Resolve-Path 'fixture\OldDev.exe').Path
           $oldDevRun = Start-Process -FilePath $oldDev -ArgumentList '/S' -Wait -PassThru
           if ($oldDevRun.ExitCode -ne 0 -or -not (Test-Path $single)) { throw "Legacy 0.4 installation failed" }
+          $old05 = Start-Process -FilePath $legacy05Setup -ArgumentList '/S' -Wait -PassThru
+          if ($old05.ExitCode -ne 0 -or -not (Test-Path $single)) { throw "Legacy 0.5 installation failed" }
+          $priorHash=(Get-FileHash -Algorithm SHA256 $single).Hash
+          if ($priorHash -eq $expectedLauncherHash) { throw "Legacy 0.5 does not reproduce old script" }
           for ($i = 0; $i -lt 2; $i++) {
             $p = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
             if ($p.ExitCode -ne 0) { throw "Preview installation/upgrade failed" }
             if (-not (Test-Path $single) -or -not (Test-Path $module) -or -not (Test-Path $remove)) { throw "Missing CartoRig program after upgrade" }
+            if ((Get-FileHash -Algorithm SHA256 $single).Hash -ne $expectedLauncherHash) { throw "Launcher missing or not exact source bytes" }
+            if (-not (Test-Path $uiInstalled) -or (Get-FileHash -Algorithm SHA256 $uiInstalled).Hash -ne $expectedUiHash) { throw "UI runtime missing or corrupt" }
+            if (-not (Test-Path $installRecord)) { throw "No installation location diagnostic" }
+            $record=[IO.File]::ReadAllText($installRecord)
+            if (-not $record.Contains($single) -or -not $record.Contains($uiInstalled) -or -not $record.Contains('0.5.1')) { throw "Installer wrote an inconsistent location record" }
+            if ((Test-Path "$single.pending") -or (Test-Path "$single.backup")) { throw "Staged launcher or backup leaked to completed installation" }
             foreach ($name in $fuses) {
               $path = Join-Path $fuseDir $name
               if (-not (Test-Path $path)) { throw "Missing physical Fusion Fuse $name" }
@@ -105,10 +125,18 @@ jobs:
           }
           $p = Start-Process -FilePath $remove -ArgumentList '/S' -Wait -PassThru
           if ($p.ExitCode -ne 0 -or (Test-Path $single) -or (Test-Path $module) -or (Test-Path $landData)) { throw "Uninstaller failed" }
+          if ((Test-Path $uiInstalled) -or (Test-Path $installRecord)) { throw "Uninstaller left launcher runtime files" }
+          # Fresh install must also publish the same launcher, with no predecessor.
+          $fresh = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
+          if ($fresh.ExitCode -ne 0 -or -not (Test-Path $single)) { throw "Clean installer failed to provide script entry" }
+          if ((Get-FileHash -Algorithm SHA256 $single).Hash -ne $expectedLauncherHash) { throw "Clean installer launcher hash mismatch" }
+          if ((Get-FileHash -Algorithm SHA256 $uiInstalled).Hash -ne $expectedUiHash) { throw "Clean installer UI hash mismatch" }
+          $cleanup=Start-Process -FilePath $remove -ArgumentList '/S' -Wait -PassThru
+          if ($cleanup.ExitCode -ne 0 -or (Test-Path $single)) { throw "Fresh install cleanup failed" }
           foreach ($name in $fuses) { if (Test-Path (Join-Path $fuseDir $name)) { throw "Fuse not removed: $name" } }
           if (-not (Test-Path $other) -or [IO.File]::ReadAllText($other) -ne $otherContent) { throw "External script damaged after uninstall" }
           if ((Test-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev') -or (Test-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRig')) { throw "Preview Installed Apps entry not removed" }
-          "PASS: Windows 0.1/0.2/0.3/0.4 migration to cartorig-dev, single menu, second install, uninstall, foreign-script protection. Resolve host still NOT RUN." | Set-Content 'dist\package-validation.txt'
+          "PASS: Windows 0.1/0.2/0.3/0.4/0.5 migration to 0.5.1 with staged launcher, single menu, second install, uninstall, foreign-script protection. Resolve host still NOT RUN." | Set-Content 'dist\package-validation.txt'
       - name: Upload approved preview package (not a stable release)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
