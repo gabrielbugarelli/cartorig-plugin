@@ -23,7 +23,7 @@ local function fake()
    return {GetConnectedOutput=function() return parent.links[port] end}
   end
   function tool:ConnectInput(port,other)
-   if comp.fail_link==port then return false end
+   if comp.fail_link==port and self.regid=="MediaOut" then return false end
    self.links[port]=other
    return true
   end
@@ -64,6 +64,12 @@ local sid=made.scene_id
 assert(sid==comp:GetData("CartoRig.V1.SceneId"))
 assert(factory.create_scene(comp,"Do not duplicate",{localappdata=ROOT})==nil)
 assert(#comp.tools==5)
+local rejected,rm=fake()
+rejected.fail_link="Input"
+local result2,reason2=factory.create_scene(rejected,"Connection failure",{localappdata=ROOT})
+assert(not result2 and reason2:match("SCENE_CREATE_FAILED"))
+assert(#rejected.tools==1 and rm.links.Input==nil)
+assert(rejected:GetData("CartoRig.V1.SceneId")==nil)
 local failed,c=fake()
 failed.fail="CartoRigCamera"
 local result,error=factory.create_scene(failed,"Failure",{localappdata=ROOT})

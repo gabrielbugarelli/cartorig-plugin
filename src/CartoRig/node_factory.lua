@@ -199,8 +199,10 @@ function factory.create_scene(comp,title,opts)
       output:SetData(P.."OwnedHelper",true)
       output:SetData(SCENE_KEY,state.scene_id)
     end
-    connect(output,"Input",nodes.Scene)
+    -- Mark the previously empty external output before trying the write;
+    -- if ConnectInput partially mutates it and then fails, rollback disconnects it.
     if existing_media then modified_external=existing_media end
+    connect(output,"Input",nodes.Scene)
     comp:SetData(SCENE_KEY,state.scene_id)
     comp:SetData(VERSION,state.schema_version)
     comp:SetData(SOURCE,"Natural Earth 1:50m land")
