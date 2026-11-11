@@ -13,6 +13,17 @@ for _,o in ipairs(state.objects) do
   seen[o.object_id]=true
 end
 assert(d.is_uuid(state.scene_id))
+local original_bmd=rawget(_G,"bmd")
+local native_calls=0
+_G.bmd={createuuid=function()
+  native_calls=native_calls+1
+  return "12345678-1234-4123-8123-123456789abc"
+end}
+assert(d.uuid()=="12345678-1234-4123-8123-123456789abc")
+assert(native_calls==1,"domain.uuid must prefer bmd.createuuid inside Fusion")
+_G.bmd={createuuid=function() return "invalid-host-uuid" end}
+assert(d.is_uuid(d.uuid()),"invalid native UUID must fall back to valid UUID v4")
+_G.bmd=original_bmd
 assert(d.slug("São Paulo")=="SaoPaulo")
 assert(d.slug("Mato Grosso")=="MatoGrosso")
 assert(d.slug("///")==nil)
