@@ -18,9 +18,9 @@ Source of truth: `CartoRig_Especificacao_de_Produto_e_Implementacao_V1.md`, exac
 
 ### A — Core
 
-1. Validate the exact supported Resolve Studio 20 Fusion scripting/SDK interface on a legitimately licensed Windows host; document real exposed APIs and limitations.
+1. Validate Resolve Timeline InsertFusionCompositionIntoTimeline/GetFusionCompByIndex and Fusion scripting/SDK interfaces on a legitimately licensed Windows host; document real exposed APIs and limitations.
 2. Implement local Natural Earth datasets, versioned indexes and search with aliases, hierarchy, geometry availability, canonical identifiers and checksums.
-3. Implement native scene identity/state persistence, Scene UI Manager lifecycle/CRUD transactions, and real physical `Scene`, `WorldMap`, `Camera`, `Country` and `State` nodes.
+3. Implement exactly one independent Fusion Composition timeline clip per Create Scene, no Open Scene button, native scene identity/state persistence, Scene UI Manager lifecycle/CRUD transactions, and real physical `Scene`, `WorldMap`, `Camera`, `Country` and `State` nodes.
 4. Connect via managed compositing graph; show correct node Inspector `Control`/`Motion` grouping after direct Node Editor selection; render reproducibly with Scene closed.
 5. Tests: A01–A05, A15, A16, A19 and B01–B03, B06, B18 plus shared contracts. Gate requires real host evidence.
 
