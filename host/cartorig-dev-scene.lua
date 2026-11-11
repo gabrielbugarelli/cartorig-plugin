@@ -1,68 +1,100 @@
 -- cartorig-dev: Scene UI Manager only. One Create Scene = one timeline Fusion clip.
 -- No prior Fusion Composition or manual wiring; scene listing is automatic.
--- The host can expose a global named "resolve" whose value is a number.
--- In Lua, 0 is truthy: never accept globals solely by their truthiness.
-local function api_member(o,key)
-  local kind=type(o)
-  if kind~="table" and kind~="userdata" then return nil end
-  local ok,v=pcall(function() return o[key] end)
-  if ok then return v end
-  return nil
+-- Resolve/Fusion handles are validated through the same Blackmagic API boundary
+-- used by TimelineService. Do not accept globals solely by Lua truthiness.
+local localapp=os.getenv("LOCALAPPDATA")
+if localapp and localapp~="" then
+  package.path=localapp.."\\CartoRig\\App\\lua\\?.lua;"..
+    localapp.."\\CartoRig\\App\\lua\\?\\init.lua;"..package.path
 end
-local function api_method(o,name)
-  return type(api_member(o,name))=="function"
+local api_ok,api=pcall(require,"CartoRig.blackmagic_api")
+if not api_ok or type(api)~="table" then
+  local err="BLACKMAGIC_API_BOUNDARY_MISSING: "..tostring(api)
+  print(err);return false,err
 end
+
 local bmd=rawget(_G,"bmd")
 local supplied_resolve=rawget(_G,"resolve")
-local resolve=api_method(supplied_resolve,"GetProjectManager") and supplied_resolve or nil
+local resolve=nil
+local _,globalResolveErr=api.method(supplied_resolve,"GetProjectManager")
+if not globalResolveErr then resolve=supplied_resolve end
+
 local fallback_type="not attempted"
-if not resolve and api_method(bmd,"scriptapp") then
-  local ok,result=pcall(function() return bmd.scriptapp("Resolve") end)
-  fallback_type=ok and type(result) or "exception"
-  if ok and api_method(result,"GetProjectManager") then
-    resolve=result
+local fallback_error=nil
+if not resolve then
+  local _,scriptappErr=api.method(bmd,"scriptapp")
+  if not scriptappErr then
+    local result,callErr=api.call_function(bmd,"scriptapp","Resolve")
+    fallback_type=type(result)
+    fallback_error=callErr
+    local _,resultErr=api.method(result,"GetProjectManager")
+    if not resultErr then resolve=result end
+  else
+    fallback_error=scriptappErr
   end
 end
 if not resolve then
   local err="RESOLVE_CONTEXT_INVALID: global resolve type "..type(supplied_resolve)..
     "; bmd.scriptapp('Resolve') returned "..fallback_type..
+    (fallback_error and ("; "..tostring(fallback_error)) or "")..
     ". Resolve scripting handle unavailable."
   print(err);return false,err
 end
+
 local fusion=rawget(_G,"fusion")
-if not api_member(fusion,"UIManager") then fusion=rawget(_G,"fu") end
-if not api_member(fusion,"UIManager") and api_method(resolve,"Fusion") then
-  local ok,result=pcall(function() return resolve:Fusion() end)
-  if ok and api_member(result,"UIManager") then fusion=result end
+local uiValue=api.get(fusion,"UIManager","fusion.UIManager")
+if uiValue==nil then
+  fusion=rawget(_G,"fu")
+  uiValue=api.get(fusion,"UIManager","fu.UIManager")
 end
-if not api_method(bmd,"UIDispatcher") or not api_member(fusion,"UIManager") then
+if uiValue==nil then
+  local _,fusionMethodErr=api.method(resolve,"Fusion")
+  if not fusionMethodErr then
+    local result,callErr=api.call(resolve,"Fusion")
+    if result then
+      local candidate=api.get(result,"UIManager","Resolve.Fusion.UIManager")
+      if candidate~=nil then
+        fusion=result
+        uiValue=candidate
+      elseif callErr then
+        fallback_error=callErr
+      end
+    end
+  end
+end
+
+local _,dispatcherErr=api.method(bmd,"UIDispatcher")
+if dispatcherErr or uiValue==nil then
   local err="UI_UNAVAILABLE: Resolve Fusion UIManager or UIDispatcher is missing"
   print(err);return false,err
 end
-local localapp=os.getenv("LOCALAPPDATA")
+
 if not localapp or localapp=="" then
   local err="LOCALAPPDATA_UNAVAILABLE: runtime folder missing"
   print(err);return false,err
 end
-package.path=localapp.."\\CartoRig\\App\\lua\\?.lua;"..
-  localapp.."\\CartoRig\\App\\lua\\?\\init.lua;"..package.path
+
 local ok,service=pcall(require,"CartoRig.timeline_service")
 if not ok or type(service)~="table" then
   local err="TIMELINE_SERVICE_MISSING: "..tostring(service)
   print(err);return false,err
 end
-local ui=api_member(fusion,"UIManager")
+local ui=uiValue
 if type(ui)=="function" then
-  local worked,result=pcall(function() return fusion:UIManager() end)
-  if worked then ui=result end
+  local result,uiErr=api.call(fusion,"UIManager")
+  if not result then
+    local err="UI_MANAGER_UNAVAILABLE: "..tostring(uiErr)
+    print(err);return false,err
+  end
+  ui=result
 end
 if type(ui)~="table" and type(ui)~="userdata" then
   local err="UI_MANAGER_UNAVAILABLE: expected UIManager object; got "..type(ui)
   print(err);return false,err
 end
-local okd,disp=pcall(function() return bmd.UIDispatcher(ui) end)
-if not okd or not disp then
-  local err="DISPATCHER_FAILED: cannot start Scene UI"
+local disp,dispErr=api.call_function(bmd,"UIDispatcher",ui)
+if not disp then
+  local err="DISPATCHER_FAILED: "..tostring(dispErr or "cannot start Scene UI")
   print(err);return false,err
 end
 local window=disp:AddWindow({
