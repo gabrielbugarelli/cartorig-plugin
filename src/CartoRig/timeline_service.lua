@@ -142,6 +142,29 @@ local function project_and_timeline(resolve)
   end
   return project,timeline,made
 end
+local function item_bounds(item,context)
+  local valid,invalid=require_handle(item,context or "TimelineItem","GetStart")
+  if not valid then return nil,nil,invalid end
+  local start,startErr=call(item,"GetStart",false)
+  local finish,endErr=call(item,"GetEnd",false)
+  if type(start)~="number" or type(finish)~="number" then
+    local name=call(item,"GetName")
+    return nil,nil,
+      "TRACK_POSITION_INVALID: "..tostring(context or "TimelineItem")..
+      " name="..tostring(name)..
+      " GetStart(false)="..tostring(start).." ["..type(start).."]"..
+      " GetEnd(false)="..tostring(finish).." ["..type(finish).."]"..
+      (startErr and (" start_error="..tostring(startErr)) or "")..
+      (endErr and (" end_error="..tostring(endErr)) or "")
+  end
+  if finish<start then
+    return nil,nil,
+      "TRACK_POSITION_INVALID: "..tostring(context or "TimelineItem")..
+      " end before start ("..tostring(start).." > "..tostring(finish)..")"
+  end
+  return start,finish
+end
+
 local function track_snapshot(timeline)
   local tracks,err=call(timeline,"GetTrackCount","video")
   if type(tracks)~="number" then
@@ -166,11 +189,8 @@ local function track_snapshot(timeline)
       return nil,"TRACK_READ_INVALID: V"..track.." returned "..type(items)
     end
     for _,item in pairs(items) do
-      local start=call(item,"GetStart")
-      local finish=call(item,"GetEnd")
-      if type(start)~="number" or type(finish)~="number" or finish<start then
-        return nil,"TRACK_POSITION_INVALID: cannot safely append"
-      end
+      local start,finish,posErr=item_bounds(item,"V"..track.." item")
+      if not start then return nil,posErr end
       local identity=call(item,"GetUniqueId")
       local id=type(identity)=="string" and identity or tostring(item)
       if before[id] then return nil,"TRACK_ID_COLLISION: refuse unsafe insertion" end
@@ -255,10 +275,12 @@ function M.create(resolve,title,opts)
   end
   local item,insertErr=call(timeline,"InsertFusionCompositionIntoTimeline")
   if not item then return nil,"FUSION_INSERT_FAILED: "..tostring(insertErr) end
-  local at=call(item,"GetStart")
-  local finish=call(item,"GetEnd")
-  if type(at)~="number" or type(finish)~="number" or at<target or finish<=at then
-    return result_error(timeline,item,"FUSION_INSERT_POSITION_INVALID: insertion outside append boundary")
+  local at,finish,posErr=item_bounds(item,"new Fusion Composition")
+  if not at then return result_error(timeline,item,posErr) end
+  if at<target or finish<=at then
+    return result_error(timeline,item,
+      "FUSION_INSERT_POSITION_INVALID: expected start >= "..tostring(target)..
+      ", got "..tostring(at).."–"..tostring(finish))
   end
   local retained,why=verify_preserved(timeline,previous)
   if not retained then return result_error(timeline,item,why) end
@@ -353,7 +375,11 @@ function M.list_scenes(resolve)
             scene_id=state.scene_id,
             name=call(item,"GetName") or "CartoRig Scene",
             track=track,
-            start_frame=call(item,"GetStart") or 0,
+            start_frame=(function()
+              local start,_,positionError=item_bounds(item,"scene list V"..track)
+              if not start then error(positionError) end
+              return start
+            end)(),
             objects=state.objects
           }
         end
