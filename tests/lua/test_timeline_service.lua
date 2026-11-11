@@ -34,7 +34,10 @@ local function make_item(id,start_frame,end_frame,track_type,track_index,comp)
     assert(subframe_precision==false,"GetEnd must receive explicit false")
     return self.finish
   end
-  function item:GetUniqueId() return self.bad_id and nil or self.identity end
+  function item:GetUniqueId()
+    if self.bad_id then return nil end
+    return self.identity
+  end
   function item:GetTrackTypeAndIndex() return {self.track_type,self.track_index} end
   function item:GetFusionCompCount()
     if self.missing then return 0 end
