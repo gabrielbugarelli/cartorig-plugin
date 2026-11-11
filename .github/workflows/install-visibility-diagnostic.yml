@@ -50,7 +50,17 @@ jobs:
           [IO.File]::WriteAllText($other,'-- synthetic alternate-location fixture')
           Run-Diagnostic
           Assert-Result 'OTHER_DEFAULT_SCRIPTS_LOCATION'
-          Write-Output "PASS: read-only diagnostic correctly identifies all four states. Resolve UI/menu NOT RUN."
+          Remove-Item -LiteralPath $other -Force
+          $legacy=Join-Path $roaming 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\CartoRig Host Probe.lua'
+          [IO.File]::WriteAllText($legacy,'-- synthetic legacy script fixture')
+          Run-Diagnostic
+          Assert-Result 'MISSING_LAUNCHER_LEGACY_FILES_CAN_BLOCK_INSTALLER'
+          Remove-Item -LiteralPath $legacy -Force
+          $pending="$script.pending"
+          [IO.File]::WriteAllText($pending,'-- synthetic pending launcher fixture')
+          Run-Diagnostic
+          Assert-Result 'MISSING_LAUNCHER_STAGING_RESIDUE'
+          Write-Output "PASS: diagnostic identifies six filesystem states. Real Resolve UI/menu NOT RUN."
       - name: Prepare standalone diagnostic kit without Fusion menu installation
         shell: pwsh
         run: |
