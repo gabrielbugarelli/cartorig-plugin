@@ -138,6 +138,7 @@ local function fake(start_with_timeline)
   end
   function timeline:ClearMarkInOut(kind)
     if self.fail_mark_clear then return false end
+    if self.fail_clear_missing and kind~="all" and self.marks[kind]==nil then return false end
     if kind=="all" then self.marks={} else self.marks[kind]=nil end
     return true
   end
@@ -311,6 +312,16 @@ function strictItem:GetEnd(flag) if flag~=false then return nil end return oldEn
 local strictCreated,strictError=svc.create(r2,"Explicit subframe flag")
 assert(strictCreated,strictError)
 assert(strictCreated.start_frame==90120)
+
+-- Empty In/Out state must not call ClearMarkInOut(video). Some host builds can
+-- reject clearing a range that does not exist.
+local r2b,p2b,t2b=fake(true)
+t2b:AddTrack("video")
+t2b.marks={}
+t2b.fail_clear_missing=true
+local emptyMarks,emptyMarksErr=svc.create(r2b,"No marks")
+assert(emptyMarks,emptyMarksErr)
+assert(next(t2b.marks)==nil,"empty In/Out state must remain empty after Scene creation")
 
 -- Locked destination track: no clip, no page/playhead/marks side effects.
 local r3,p3,t3=fake(true)
