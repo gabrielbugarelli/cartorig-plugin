@@ -135,8 +135,57 @@ local function item_track(item,context)
   return location[1],location[2]
 end
 
+local function scalar_signature(value)
+  local kind=type(value)
+  if kind=="nil" or kind=="boolean" or kind=="number" or kind=="string" then
+    return kind..":"..tostring(value)
+  end
+  return nil,"MARKER_VALUE_INVALID: unsupported marker field type "..kind
+end
+local function marker_signature(info)
+  if type(info)~="table" then return nil,"MARKER_INVALID: marker info is "..type(info) end
+  local keys={}
+  for key,_ in pairs(info) do keys[#keys+1]=key end
+  table.sort(keys,function(a,b) return tostring(a)<tostring(b) end)
+  local parts={}
+  for _,key in ipairs(keys) do
+    local value,err=scalar_signature(info[key])
+    if not value then return nil,err end
+    parts[#parts+1]=type(key)..":"..tostring(key).."="..value
+  end
+  return table.concat(parts,"|")
+end
+local function snapshot_markers(timeline,start_frame)
+  local markers,err=call(timeline,"GetMarkers")
+  if markers==nil and err then return nil,nil,"MARKER_READ_FAILED: "..tostring(err) end
+  if markers==nil then markers={} end
+  if type(markers)~="table" then return nil,nil,"MARKER_READ_INVALID: GetMarkers returned "..type(markers) end
+  local snapshot,maxend={},nil
+  for frameId,info in pairs(markers) do
+    if type(frameId)~="number" or frameId<0 or frameId~=math.floor(frameId) then
+      return nil,nil,"MARKER_POSITION_INVALID: expected non-negative integer offset, got "..tostring(frameId)
+    end
+    local signature,sigErr=marker_signature(info)
+    if not signature then return nil,nil,sigErr end
+    local duration=type(info.duration)=="number" and info.duration or 1
+    if duration<1 then duration=1 end
+    if duration~=math.floor(duration) then
+      return nil,nil,"MARKER_DURATION_INVALID: marker "..tostring(frameId).." duration "..tostring(duration)
+    end
+    snapshot[frameId]=signature
+    maxend=math.max(maxend or start_frame,start_frame+frameId+duration)
+  end
+  return snapshot,maxend
+end
+
 local function snapshot_timeline(timeline)
-  local state={items={},counts={},locks={},maxend=nil}
+  local timelineStart,startErr=call(timeline,"GetStartFrame")
+  if type(timelineStart)~="number" or timelineStart~=math.floor(timelineStart) then
+    return nil,"TIMELINE_START_INVALID: "..tostring(startErr or timelineStart)
+  end
+  local markers,markerEnd,markerErr=snapshot_markers(timeline,timelineStart)
+  if not markers then return nil,markerErr end
+  local state={items={},counts={},locks={},markers=markers,maxend=markerEnd,timeline_start=timelineStart}
   for _,trackType in ipairs(TRACK_TYPES) do
     local count,err=call(timeline,"GetTrackCount",trackType)
     if type(count)~="number" or count<0 or count~=math.floor(count) then
@@ -183,6 +232,16 @@ local function compare_timeline(timeline,before,allowed_new_id)
       if after.locks[trackType][track]~=before.locks[trackType][track] then
         return nil,"EXTERNAL_TIMELINE_CHANGED: lock state changed on "..trackType.." "..track
       end
+    end
+  end
+  for frameId,oldSignature in pairs(before.markers or {}) do
+    if after.markers[frameId]~=oldSignature then
+      return nil,"EXTERNAL_TIMELINE_CHANGED: timeline marker changed or vanished at offset "..tostring(frameId)
+    end
+  end
+  for frameId,_ in pairs(after.markers or {}) do
+    if not (before.markers or {})[frameId] then
+      return nil,"EXTERNAL_TIMELINE_CHANGED: unexpected timeline marker at offset "..tostring(frameId)
     end
   end
   for id,old in pairs(before.items) do
@@ -367,7 +426,7 @@ function M.create(resolve,title,opts)
   local before,workErr=snapshot_timeline(timeline)
   if not before then return fail(ctx,nil,workErr) end
   ctx.baseline=before
-  local start=call(timeline,"GetStartFrame")
+  local start=before.timeline_start
   local fps=call(timeline,"GetSetting","timelineFrameRate")
   local starttc=call(timeline,"GetStartTimecode")
   if type(start)~="number" or not frame_base(fps) or type(starttc)~="string" then
