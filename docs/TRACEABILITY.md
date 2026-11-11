@@ -6,6 +6,8 @@ Fonte normativa: `docs/CartoRig_Especificacao_de_Produto_e_Implementacao_V1.md` 
 
 Critério `DONE`: node real, UI na superfície contratada, render e persistência, segurança de dependências, teste no host real e evidência aprovada pelo GitHub Actions **do mesmo commit/build**.
 
+**Fundação 0.6.3 (candidata, host ainda não executado):** o código implementa criação automática de uma Fusion Composition por `Create Scene`, transação fail-closed da timeline, Scene/WorldMap/Camera físicos, MediaOut existente obrigatório, persistência de `scene_id`/título, reconstrução estrutural, identidade de build e instalação/migração com ownership por hash. Isso é cobertura de implementação e testes não-host; **não altera nenhum A/B para PASS**. Country/State, catálogo Admin 0/Admin 1, render/Inspector e save/reopen real ainda impedem concluir o Marco A.
+
 | Teste | Marco | Ação normativa | Resultado normativo | Implementação | Teste executável | Evidência Actions | Commit / PR | Status |
 |---|---|---|---|---|---|---|---|---|
 | A01 | A | Abrir CartoRig sem composição preparada; Create Scene 5 vezes | Cinco Fusion Compositions próprias com UUIDs independentes e pipeline WorldMap→Camera→Scene→MediaOut funcional, sem wiring manual | PENDING | PENDING | PENDING | PENDING | NOT RUN |
