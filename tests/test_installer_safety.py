@@ -41,7 +41,7 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('WorldMap Fuse missing',s)
         self.assertIn('Camera Fuse missing',s)
         self.assertIn('Delete "$INSTDIR\\Utility\\cartorig-dev.lua"',s)
-        self.assertIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua.migrated-060"',s)
+        self.assertNotIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua.migrated-060"',s)
         self.assertIn('Delete "$LOCALAPPDATA\\CartoRig\\App\\lua\\CartoRig\\timeline_service.lua"',s)
         self.assertNotIn('RMDir /r "$APPDATA\\Blackmagic Design',s)
 
@@ -118,6 +118,8 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('Comp\\cartorig-dev.lua is not an exact recognized CartoRig 0.5.1/0.5.2 launcher',s)
         self.assertIn('cartorig-dev.lua.backup is unrecognized',s)
         self.assertIn('cartorig-dev.lua.pending is unrecognized',s)
+        self.assertIn('Comp migration backup is unrecognized',s)
+        self.assertIn('Delete "$R0\\cartorig-dev.lua.migrated-060"',s)
         self.assertLess(s.index('verify-managed-comp-launcher.ps1'),
                         s.index('Delete "$R0\\cartorig-dev.lua.backup"'))
         self.assertIn('Both Utility and Comp cartorig-dev.lua exist',s)
@@ -132,7 +134,7 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertNotIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua"',s)
         self.assertNotIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua.pending"',s)
         self.assertNotIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua.backup"',s)
-        self.assertIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua.migrated-060"',s)
+        self.assertNotIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua.migrated-060"',s)
         self.assertIn('Uninstaller deleted or changed unowned Comp/cartorig-dev.lua',self.win)
 
     def test_historical_062_fixture_is_pinned_before_reviewed_063(self):
