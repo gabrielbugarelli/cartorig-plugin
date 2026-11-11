@@ -159,6 +159,8 @@ jobs:
           $cleanupLogPath = Join-Path $appDir 'legacy-cleanup.txt'
           if (-not (Test-Path $cleanupLogPath)) { throw "Missing verified cleanup report" }
           $cleanupLog = [IO.File]::ReadAllText($cleanupLogPath)
+          Write-Output "NSIS install-location diagnostic: $installLog"
+          Write-Output "SHA-verified cleanup diagnostic: $cleanupLog"
           if (-not $installLog.Contains('Verified legacy cleanup completed')) { throw "Installer did not report verified cleanup" }
           if (-not $cleanupLog.Contains('PRESERVED_UNKNOWN: CartoRig.lua')) { throw "Unknown script was not explicitly preserved" }
           Remove-Item -LiteralPath $old1,$old2,$legacySingle -Force
