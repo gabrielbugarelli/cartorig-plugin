@@ -41,12 +41,32 @@ Section "Install cartorig-dev"
       Abort
     ${EndIf}
   ${EndIf}
-  ; Never overwrite a previous interrupted migration backup owned by someone else.
+  ; Stage the verifier before any legacy Comp mutation.
+  InitPluginsDir
+  SetOutPath "$PLUGINSDIR"
+  File "/oname=verify-managed-comp-launcher.ps1" "..\support\verify-managed-comp-launcher.ps1"
+  ; A persistent migration backup is removed only when its exact source bytes
+  ; prove that it is a historical CartoRig launcher and Utility is already active.
   ${If} ${FileExists} "$R0\cartorig-dev.lua.migrated-060"
     ${If} ${FileExists} "$R0\cartorig-dev.lua"
       MessageBox MB_OK|MB_ICONSTOP "Conflicting Comp launcher and migration backup found. Update stopped." /SD IDOK
       Abort
     ${EndIf}
+    ${IfNot} ${FileExists} "$R2\cartorig-dev.lua"
+      MessageBox MB_OK|MB_ICONSTOP "Comp migration backup exists without an active Utility launcher. It was preserved; repair manually before upgrade." /SD IDOK
+      Abort
+    ${EndIf}
+    ClearErrors
+    ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\verify-managed-comp-launcher.ps1" -Path "$R0\cartorig-dev.lua.migrated-060"' $0
+    ${If} $0 != 0
+      MessageBox MB_OK|MB_ICONSTOP "Comp migration backup is unrecognized. It was preserved and the upgrade was stopped." /SD IDOK
+      Abort
+    ${EndIf}
+    ClearErrors
+    Delete "$R0\cartorig-dev.lua.migrated-060"
+    IfErrors 0 +3
+      MessageBox MB_OK|MB_ICONSTOP "Verified migration backup could not be removed. Upgrade stopped without changing it." /SD IDOK
+      Abort
   ${EndIf}
   ; Refuse to overwrite external Fuse tools: only the CartoRig managed
   ; uninstaller may own these filenames.
@@ -72,10 +92,6 @@ Section "Install cartorig-dev"
   ; Verify active/backup/pending source bytes BEFORE any delete or rename.
   ${If} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
     ${IfNot} ${FileExists} "$R2\cartorig-dev.lua"
-      InitPluginsDir
-      SetOutPath "$PLUGINSDIR"
-      File "/oname=verify-managed-comp-launcher.ps1" "..\support\verify-managed-comp-launcher.ps1"
-
       ${If} ${FileExists} "$R0\cartorig-dev.lua"
         ClearErrors
         ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\verify-managed-comp-launcher.ps1" -Path "$R0\cartorig-dev.lua"' $0
@@ -224,6 +240,11 @@ MigrateCartoRigFailed:
     MessageBox MB_OK|MB_ICONSTOP "Cannot retire old Comp entry. Utility installation rolled back." /SD IDOK
     Abort
 MigrateCartoRigDone:
+    ClearErrors
+    Delete "$R0\cartorig-dev.lua.migrated-060"
+    IfErrors 0 +3
+      MessageBox MB_OK|MB_ICONSTOP "Verified legacy launcher migrated, but its temporary backup could not be removed." /SD IDOK
+      Abort
   ${EndIf}
   Delete "$R2\cartorig-dev.lua.backup"
   ; Only remove historical diagnostic scripts when their exact SHA-256 matches
@@ -252,7 +273,6 @@ SectionEnd
 
 Section "Uninstall"
   StrCpy $INSTDIR "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts"
-  Delete "$INSTDIR\Comp\cartorig-dev.lua.migrated-060"
   Delete "$INSTDIR\Utility\cartorig-dev.lua"
   Delete "$INSTDIR\Utility\cartorig-dev.lua.pending"
   Delete "$INSTDIR\Utility\cartorig-dev.lua.backup"
