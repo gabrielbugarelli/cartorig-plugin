@@ -147,7 +147,7 @@ Section "Install cartorig-dev"
   ; This avoids disappearing from all menus during a failed migration.
   SetOutPath "$R2"
   ClearErrors
-  File "/oname=cartorig-dev.lua.pending" "..\host\cartorig-dev-launcher.lua"
+  File "/oname=cartorig-dev.lua.pending" "..\host\legacy-launcher-0.5.2.lua"
   IfErrors 0 +3
     MessageBox MB_OK|MB_ICONSTOP "Cannot stage Utility launcher; previous entry preserved."
     Abort
