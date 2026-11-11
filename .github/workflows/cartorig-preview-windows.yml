@@ -1,7 +1,7 @@
 name: cartorig-dev Windows
 on:
   push:
-    branches: ['feat/milestone-a-structural-fuses-scene', 'fix/cartorig-dev-launcher-upgrade']
+    branches: ['feat/milestone-a-structural-fuses-scene', 'fix/cartorig-dev-launcher-upgrade', 'fix/cartorig-dev-recovery-and-startup']
   workflow_dispatch:
 permissions:
   contents: read
@@ -30,7 +30,8 @@ jobs:
           $legacyPreview = Join-Path $root 'fixture\OldPreview.exe'
           $legacyDev = Join-Path $root 'fixture\OldDev.exe'
           $legacy05 = Join-Path $root 'fixture\OldDev05.exe'
-          $candidate = Join-Path $root 'dist\cartorig-dev-0.5.1-win64.exe'
+          $legacy051 = Join-Path $root 'fixture\OldDev051.exe'
+          $candidate = Join-Path $root 'dist\cartorig-dev-0.5.2-win64.exe'
           & $nsis '/V2' "/DOUTPUTFILE=$legacyHost" 'packaging\host-probe.nsi'
           if ($LASTEXITCODE -ne 0) { throw "Legacy host fixture compile failed" }
           & $nsis '/V2' "/DOUTPUTFILE=$legacyGraph" 'packaging\native-integration.nsi'
@@ -41,20 +42,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Legacy cartorig-dev 0.4 fixture compile failed" }
           & $nsis '/V2' "/DOUTPUTFILE=$legacy05" 'packaging\legacy-preview-0.5.nsi'
           if ($LASTEXITCODE -ne 0) { throw "Legacy cartorig-dev 0.5 fixture compile failed" }
+          & $nsis '/V2' "/DOUTPUTFILE=$legacy051" 'packaging\legacy-preview-0.5.1.nsi'
+          if ($LASTEXITCODE -ne 0) { throw "Legacy cartorig-dev 0.5.1 fixture compile failed" }
           & $nsis '/V3' "/DOUTPUTFILE=$candidate" 'packaging\cartorig-preview.nsi'
           if ($LASTEXITCODE -ne 0) { throw "CartoRig preview installer compile failed" }
           if (-not (Test-Path $candidate)) { throw "Missing GUI installer" }
           $size = (Get-Item $candidate).Length
           if ($size -le 0 -or $size -gt 5MB) { throw "Preview package exceeds conservative free budget" }
           $hash = (Get-FileHash -Algorithm SHA256 $candidate).Hash.ToLowerInvariant()
-          "$hash  cartorig-dev-0.5.1-win64.exe" | Set-Content -Encoding ascii 'dist\SHA256SUMS.txt'
+          "$hash  cartorig-dev-0.5.2-win64.exe" | Set-Content -Encoding ascii 'dist\SHA256SUMS.txt'
           @{
             kind = 'cartorig-dev-test-build-not-v1'
-            version = '0.5.1'
+            version = '0.5.2'
             commit_sha = "$env:GITHUB_SHA"
             run_id = "$env:GITHUB_RUN_ID"
             run_attempt = "$env:GITHUB_RUN_ATTEMPT"
-            installer = 'cartorig-dev-0.5.1-win64.exe'
+            installer = 'cartorig-dev-0.5.2-win64.exe'
             sha256 = $hash
           } | ConvertTo-Json | Set-Content -Encoding utf8 'dist\manifest.json'
       - name: Test migration of both old menus, repeated upgrade, other scripts, and uninstall
@@ -72,8 +75,9 @@ jobs:
           $single = Join-Path $scripts 'cartorig-dev.lua'
           $module = Join-Path $env:LOCALAPPDATA 'CartoRig\App\graph_test.lua'
           $remove = Join-Path $env:LOCALAPPDATA 'CartoRig\App\Uninstall-CartoRig.exe'
-          $setup = (Resolve-Path 'dist\cartorig-dev-0.5.1-win64.exe').Path
+          $setup = (Resolve-Path 'dist\cartorig-dev-0.5.2-win64.exe').Path
           $legacy05Setup = (Resolve-Path 'fixture\OldDev05.exe').Path
+          $legacy051Setup = (Resolve-Path 'fixture\OldDev051.exe').Path
           $sourceLauncher = 'host\cartorig-dev-launcher.lua'
           $sourceUI = 'host\cartorig-dev-scene.lua'
           $uiInstalled = Join-Path $env:LOCALAPPDATA 'CartoRig\App\lua\cartorig_scene_ui.lua'
@@ -83,6 +87,8 @@ jobs:
           $fuses = @('CartoRigScene.fuse','CartoRigCamera.fuse','CartoRigWorldMap.fuse')
           $fuseDir = Join-Path $env:APPDATA 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses'
           $appDir = Join-Path $env:LOCALAPPDATA 'CartoRig\App'
+          $legacyCleaner = Join-Path $appDir 'cleanup-verified-legacy.ps1'
+          $expectedCleanerHash = (Get-FileHash -Algorithm SHA256 'support\cleanup-verified-legacy.ps1').Hash
           $landData = Join-Path $appDir 'data\ne_50m_land.lua'
           foreach ($legacy in @('fixture\OldHost.exe', 'fixture\OldGraph.exe')) {
             $process = Start-Process -FilePath (Resolve-Path $legacy).Path -ArgumentList '/S' -Wait -PassThru
@@ -97,6 +103,8 @@ jobs:
           if ($oldDevRun.ExitCode -ne 0 -or -not (Test-Path $single)) { throw "Legacy 0.4 installation failed" }
           $old05 = Start-Process -FilePath $legacy05Setup -ArgumentList '/S' -Wait -PassThru
           if ($old05.ExitCode -ne 0 -or -not (Test-Path $single)) { throw "Legacy 0.5 installation failed" }
+          $old051 = Start-Process -FilePath $legacy051Setup -ArgumentList '/S' -Wait -PassThru
+          if ($old051.ExitCode -ne 0 -or -not (Test-Path $single)) { throw "Legacy 0.5.1 installation failed" }
           $priorHash=(Get-FileHash -Algorithm SHA256 $single).Hash
           if ($priorHash -eq $expectedLauncherHash) { throw "Legacy 0.5 does not reproduce old script" }
           for ($i = 0; $i -lt 2; $i++) {
@@ -107,7 +115,7 @@ jobs:
             if (-not (Test-Path $uiInstalled) -or (Get-FileHash -Algorithm SHA256 $uiInstalled).Hash -ne $expectedUiHash) { throw "UI runtime missing or corrupt" }
             if (-not (Test-Path $installRecord)) { throw "No installation location diagnostic" }
             $record=[IO.File]::ReadAllText($installRecord)
-            if (-not $record.Contains($single) -or -not $record.Contains($uiInstalled) -or -not $record.Contains('0.5.1')) { throw "Installer wrote an inconsistent location record" }
+            if (-not $record.Contains($single) -or -not $record.Contains($uiInstalled) -or -not $record.Contains('0.5.2')) { throw "Installer wrote an inconsistent location record" }
             if ((Test-Path "$single.pending") -or (Test-Path "$single.backup")) { throw "Staged launcher or backup leaked to completed installation" }
             foreach ($name in $fuses) {
               $path = Join-Path $fuseDir $name
@@ -117,12 +125,70 @@ jobs:
             if (-not (Test-Path $landData) -or (Get-Item $landData).Length -lt 500000) { throw "Natural Earth 1:50m land data missing" }
             if ((Get-FileHash -Algorithm SHA256 $landData).Hash -ne (Get-FileHash -Algorithm SHA256 'data\ne_50m_land.lua').Hash) { throw "Natural Earth geometry does not match source" }
             if (-not (Test-Path (Join-Path $appDir 'lua\CartoRig\node_factory.lua'))) { throw "NodeFactory missing" }
+            if (-not (Test-Path $legacyCleaner)) { throw "Legacy cleanup helper missing" }
+            if ((Get-FileHash -Algorithm SHA256 $legacyCleaner).Hash -ne $expectedCleanerHash) { throw "Legacy cleanup helper corrupted" }
             if ((Test-Path $old1) -or (Test-Path $old2) -or (Test-Path $oldLib) -or (Test-Path $legacySingle)) { throw "Old Scripts menu entries were not removed" }
             $installed = @(Get-ChildItem $scripts -File -Filter '*.lua' | Where-Object { $_.Name -like 'CartoRig*' -or $_.Name -like 'cartorig-dev*' })
             if ($installed.Count -ne 1 -or $installed[0].Name -ne 'cartorig-dev.lua') { throw "CartoRig Scripts menu has multiple entries" }
             if (-not (Test-Path $other) -or [IO.File]::ReadAllText($other) -ne $otherContent) { throw "Foreign script changed" }
             if ((Test-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigHostProbe') -or (Test-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigNativeIntegrationProbe') -or (Test-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRig')) { throw "Legacy Installed Apps registrations remain" }
           }
+          # Interrupted update: launcher absent, old backup and pending file remain.
+          $recoverySourceHash = (Get-FileHash -Algorithm SHA256 $single).Hash
+          Move-Item -LiteralPath $single -Destination "$single.backup"
+          [IO.File]::WriteAllText("$single.pending", '-- incomplete prior CartoRig staging fixture')
+          $recovery = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
+          if ($recovery.ExitCode -ne 0 -or -not (Test-Path $single)) { throw "Interrupted update failed to recover launcher" }
+          if ((Test-Path "$single.backup") -or (Test-Path "$single.pending")) { throw "Interrupted update left staging files" }
+          if ((Get-FileHash -Algorithm SHA256 $single).Hash -ne $expectedLauncherHash) { throw "Recovered launcher does not match current source" }
+
+          # Stale backup alongside a valid launcher must not abort another upgrade.
+          Copy-Item -LiteralPath $single -Destination "$single.backup"
+          $repeat = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
+          if ($repeat.ExitCode -ne 0 -or (Test-Path "$single.backup")) { throw "Stale backup recovery failed" }
+          if ((Get-FileHash -Algorithm SHA256 $single).Hash -ne $expectedLauncherHash) { throw "Stale backup recovery lost launcher" }
+
+          # Unknown orphaned previous diagnostic scripts must not block an upgrade.
+          # They must also not be deleted without proof of ownership.
+          [IO.File]::WriteAllText($old1,'-- orphaned file not owned by the new installer')
+          [IO.File]::WriteAllText($old2,'-- orphaned diagnostic belonging to an unknown owner')
+          [IO.File]::WriteAllText($legacySingle,'-- unrelated legacy file (keep it)')
+          $orphanUpgrade = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
+          if ($orphanUpgrade.ExitCode -ne 0 -or -not (Test-Path $single)) { throw "Orphaned legacy scripts incorrectly blocked new launcher" }
+          if ((Get-FileHash -Algorithm SHA256 $single).Hash -ne $expectedLauncherHash) { throw "Orphan upgrade damaged current launcher" }
+          foreach ($orphan in @($old1,$old2,$legacySingle)) {
+            if (-not (Test-Path $orphan)) { throw "Installer deleted an unmanaged orphaned script" }
+          }
+          $installLog = [IO.File]::ReadAllText($installRecord)
+          $cleanupLogPath = Join-Path $appDir 'legacy-cleanup.txt'
+          if (-not (Test-Path $cleanupLogPath)) { throw "Missing verified cleanup report" }
+          $cleanupLog = [IO.File]::ReadAllText($cleanupLogPath)
+          Write-Output "NSIS install-location diagnostic: $installLog"
+          Write-Output "SHA-verified cleanup diagnostic: $cleanupLog"
+          if (-not $installLog.Contains('Verified legacy cleanup completed')) { throw "Installer did not report verified cleanup" }
+          if (-not $cleanupLog.Contains('PRESERVED_UNKNOWN: CartoRig.lua')) { throw "Unknown script was not explicitly preserved" }
+          Remove-Item -LiteralPath $old1,$old2,$legacySingle -Force
+
+          # Historical originals must be removed ONLY when contents exactly match
+          # approved SHA-256 checksums, including the previous nested Lua module.
+          Copy-Item -LiteralPath 'host\CartoRig Host Probe.lua' -Destination $old1
+          Copy-Item -LiteralPath 'host\CartoRig Native Integration Probe.lua' -Destination $old2
+          Copy-Item -LiteralPath 'host\CartoRig.lua' -Destination $legacySingle
+          New-Item -ItemType Directory -Force (Split-Path -Parent $oldLib) | Out-Null
+          Copy-Item -LiteralPath 'src\CartoRig\native_probe.lua' -Destination $oldLib
+          $verified = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
+          if ($verified.ExitCode -ne 0 -or -not (Test-Path $single)) { throw "Verified legacy cleanup interrupted launcher upgrade" }
+          $verifiedLog = [IO.File]::ReadAllText($cleanupLogPath)
+          Write-Output "Validated legacy cleanup report: $verifiedLog"
+          if (Test-Path $oldLib) { Write-Output "Remaining native library hash: $((Get-FileHash -Algorithm SHA256 $oldLib).Hash.ToLowerInvariant())" }
+          foreach ($owned in @($old1,$old2,$legacySingle,$oldLib)) {
+            if (Test-Path $owned) { throw "Verified historical CartoRig script not removed: $owned" }
+          }
+          foreach ($historical in @('CartoRig Host Probe.lua','CartoRig Native Integration Probe.lua','CartoRig.lua','CartoRigProbe\native_probe.lua')) {
+            if (-not $verifiedLog.Contains("REMOVED_VERIFIED: $historical")) { throw "Missing verified removal evidence: $historical" }
+          }
+          if ((Get-FileHash -Algorithm SHA256 $single).Hash -ne $expectedLauncherHash) { throw "Historical cleanup damaged active launcher" }
+
           $p = Start-Process -FilePath $remove -ArgumentList '/S' -Wait -PassThru
           if ($p.ExitCode -ne 0 -or (Test-Path $single) -or (Test-Path $module) -or (Test-Path $landData)) { throw "Uninstaller failed" }
           if ((Test-Path $uiInstalled) -or (Test-Path $installRecord)) { throw "Uninstaller left launcher runtime files" }
@@ -136,7 +202,14 @@ jobs:
           foreach ($name in $fuses) { if (Test-Path (Join-Path $fuseDir $name)) { throw "Fuse not removed: $name" } }
           if (-not (Test-Path $other) -or [IO.File]::ReadAllText($other) -ne $otherContent) { throw "External script damaged after uninstall" }
           if ((Test-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev') -or (Test-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRig')) { throw "Preview Installed Apps entry not removed" }
-          "PASS: Windows 0.1/0.2/0.3/0.4/0.5 migration to 0.5.1 with staged launcher, single menu, second install, uninstall, foreign-script protection. Resolve host still NOT RUN." | Set-Content 'dist\package-validation.txt'
+          "PASS: 0.1-0.5.1 migration, verified-only legacy cleanup, unknown-script protection, interrupted upgrade recovery, clean install/uninstall; live Resolve menu NOT RUN." | Set-Content 'dist\package-validation.txt'
+      - name: Include read-only Windows diagnostic in the same artifact
+        shell: pwsh
+        run: |
+          Copy-Item -LiteralPath support/cartorig-dev-diagnose.ps1,support/verificar-cartorig-dev.cmd,support/README.md -Destination dist/
+          foreach ($name in @('cartorig-dev-diagnose.ps1','verificar-cartorig-dev.cmd','README.md')) {
+            if (-not (Test-Path "dist/$name")) { throw "Diagnostic kit missing: $name" }
+          }
       - name: Upload approved preview package (not a stable release)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

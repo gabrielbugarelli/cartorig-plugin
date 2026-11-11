@@ -3,29 +3,46 @@
 local app=rawget(_G,"fusion") or rawget(_G,"fu")
 local bmd=rawget(_G,"bmd")
 if not app or not bmd or not bmd.UIDispatcher then
- print("CartoRig BLOCKED: Fusion/UIManager is unavailable");return
+ local reason="CartoRig BLOCKED: Fusion/UIManager is unavailable"
+ print(reason);return false,reason
 end
 local localapp=os.getenv("LOCALAPPDATA")
-if not localapp then print("CartoRig BLOCKED: LOCALAPPDATA missing");return end
+if not localapp or localapp=="" then
+ local reason="CartoRig BLOCKED: LOCALAPPDATA missing"
+ print(reason);return false,reason
+end
 package.path=localapp.."\\CartoRig\\App\\lua\\?.lua;"..
  localapp.."\\CartoRig\\App\\lua\\?\\init.lua;"..package.path
 local loaded,factory=pcall(require,"CartoRig.node_factory")
-if not loaded then print("CartoRig BLOCKED: Scene/NodeFactory module not installed: "..tostring(factory));return end
+if not loaded then
+ local reason="CartoRig BLOCKED: Scene/NodeFactory module not installed: "..tostring(factory)
+ print(reason);return false,reason
+end
 local diagnostic_ok,diagnostic=pcall(dofile,localapp.."\\CartoRig\\App\\graph_test.lua")
 local ui=app.UIManager
 if type(ui)=="function" then
  local ok,value=pcall(function() return app:UIManager() end)
  if ok then ui=value end
 end
-if not ui then print("CartoRig BLOCKED: UIManager unavailable");return end
+if not ui then
+ local reason="CartoRig BLOCKED: UIManager unavailable"
+ print(reason);return false,reason
+end
 local disp=bmd.UIDispatcher(ui)
+if not disp then
+ local reason="CartoRig BLOCKED: UIDispatcher could not be constructed"
+ print(reason);return false,reason
+end
 local function current_comp()
  local ok,value=pcall(function() return app:GetCurrentComp() end)
  if ok and value then return value end
  return rawget(_G,"comp")
 end
 local bound_comp=current_comp()
-if not bound_comp then print("CartoRig BLOCKED: open Fusion Composition first");return end
+if not bound_comp then
+ local reason="CartoRig BLOCKED: open Fusion Composition first"
+ print(reason);return false,reason
+end
 local window=disp:AddWindow({
  ID="CartoRigDevWindow",WindowTitle="cartorig-dev",Geometry={200,140,770,610}
 },ui:VGroup{
@@ -51,7 +68,10 @@ local window=disp:AddWindow({
   ui:Button{ID="Close",Text="Close"}
  }
 })
-if not window then print("CartoRig BLOCKED: Scene UI did not initialize");return end
+if not window then
+ local reason="CartoRig BLOCKED: Scene UI did not initialize"
+ print(reason);return false,reason
+end
 local items=window:GetItems()
 local report=""
 local function comp_guard()
@@ -169,3 +189,4 @@ else items.SceneList.PlainText="STATE ERROR: "..tostring(err) end
 window:Show()
 disp:RunLoop()
 window:Hide()
+return true,"Scene window closed normally"

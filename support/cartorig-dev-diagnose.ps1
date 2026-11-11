@@ -17,7 +17,13 @@ function Status($label,$path){
   $size="N/A";$sha="N/A"
   if($exists){
     $size=[string]([IO.FileInfo]::new($path)).Length
-    $sha=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+    $stream=[IO.File]::OpenRead($path)
+    try {
+      $hasher=[Security.Cryptography.SHA256]::Create()
+      try {
+        $sha=([BitConverter]::ToString($hasher.ComputeHash($stream))).Replace('-','').ToLowerInvariant()
+      } finally { $hasher.Dispose() }
+    } finally { $stream.Dispose() }
   }
   $display=$path.Replace($env:USERPROFILE,"%USERPROFILE%")
   return [pscustomobject]@{Name=$label;Present=$exists;Description="$label : $(if($exists){'PRESENT'}else{'MISSING'}); SIZE=$size; SHA256=$sha; PATH=$display"}

@@ -1,40 +1,40 @@
-# CartoRig — Windows development build 0.5.1
+# cartorig-dev 0.5.2 — Windows development preview
 
-**This is a development preview for DaVinci Resolve Studio 20, not the stable V1 release.** The only entry installed in Workspace → Scripts → Comp is named `cartorig-dev`.
+**This is an engineering preview, not the CartoRig V1 stable release.** The installer places exactly one new Fusion Scripts entry: `Workspace → Scripts → Comp → cartorig-dev`. Existing, unidentified third-party scripts are never deleted.
 
-## Installation
+## Installation or repair
 
-1. Close DaVinci Resolve Studio 20.
-2. Download the artifact `cartorig-dev-<commit>` from the successful **cartorig-dev Windows** GitHub Actions run, extract it, and run **`cartorig-dev-0.5.1-win64.exe`**. Do not use the older 0.5 installer.
-3. Finish the graphical installation, then restart Resolve and open its **Fusion** page. Under **Workspace → Scripts → Comp**, select **cartorig-dev**. No Python, compiler, SDK, CMake or manual data installation is necessary.
+1. Close DaVinci Resolve Studio 20 completely.
+2. Download the artifact ZIP from the **successful** GitHub Actions run named **cartorig-dev Windows**, associated with the exact intended commit. Extract the ZIP.
+3. Double-click `cartorig-dev-0.5.2-win64.exe` from the same Windows account that normally opens Resolve. The installer needs no system Python, external datasets, compiler, SDK or third-party services.
+4. Restart DaVinci Resolve Studio 20, go to the Fusion page with a Fusion Composition open, then choose **Workspace → Scripts → Comp → cartorig-dev**.
 
-The installer updates the existing development entry in place without running the previous 0.4/0.5 developer uninstaller. It preserves the former `cartorig-dev.lua` until the new entrypoint has been staged and activated. Legacy auxiliary diagnostic entries are migrated by their own uninstallers. Unmanaged scripts in the Fusion Scripts directory are not deleted.
+### What this version changes
 
-The launcher is placed in the per-user Resolve directory:
+- The `cartorig-dev.lua` launcher has a permanent per-user path: `%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\cartorig-dev.lua`.
+- The installer recovers a launcher left in `.backup` after an interrupted update, clears an obsolete `.pending` file, stages the new launcher before promoting it, and tries to restore the previous launcher on activation failure. It does **not** execute a previous CartoRig developer uninstaller before updating.
+- The UI is a separate file, `%LOCALAPPDATA%\CartoRig\App\lua\cartorig_scene_ui.lua`, while the single menu launcher is a short script. Top-level early exits due to missing Fusion APIs or modules now explicitly report failure rather than silently terminating.
+- Previous diagnostic files (`CartoRig Host Probe.lua`, `CartoRig Native Integration Probe.lua`, `CartoRig.lua`, `CartoRigProbe\native_probe.lua`) are deleted **only when their entire SHA-256 matches a known, pinned historical source** (LF or CRLF). Unknown or modified files are preserved; their existence does not block installing `cartorig-dev`.
+- A Windows cleanup report is written to `%LOCALAPPDATA%\CartoRig\App\legacy-cleanup.txt`; `install-location.txt` records the actual launcher and UI paths.
+- The user-facing menu name remains exactly **cartorig-dev**. No extra diagnostic script appears in Resolve.
 
-`%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\cartorig-dev.lua`
+## First test in the editor
 
-The underlying UI implementation is separate, at:
+1. Open a disposable project with a Fusion Composition and choose `Workspace → Scripts → Comp → cartorig-dev`.
+2. Confirm the Scene UI opens. Click **Create Scene**, then inspect the physical Scene, WorldMap and Camera nodes in the Node Editor.
+3. Choose WorldMap or Camera directly in the Node Editor and check the Inspector and Viewer.
+4. Save/close/reopen the disposable project and choose **Open Scene**. Share the TXT from **Save Report** and any Fusion errors.
 
-`%LOCALAPPDATA%\CartoRig\App\lua\cartorig_scene_ui.lua`
+If the menu entry is still missing, execute **`verificar-cartorig-dev.cmd`** from the diagnostic files bundled in the same Actions artifact. Run it in the **same Windows account** as Resolve, not as a different administrator. It will write `%TEMP%\cartorig-dev-install-check.txt`. Send that file for inspection. It only reads directories and does not touch any Resolve project.
 
-The installer writes `%LOCALAPPDATA%\CartoRig\App\install-location.txt`, recording the exact locations. If the UI fails on invocation, the launcher writes `%LOCALAPPDATA%\CartoRig\App\last-error.txt`. These files can be sent to the developer when diagnosing an issue; they do not contain the contents of editing projects.
+If the entry is listed but does not open, send `%LOCALAPPDATA%\CartoRig\App\last-error.txt` and `install-location.txt`. The launcher now reports both Lua exceptions and early `return` failures.
 
-## Editor test (disposable project only)
+## Automated checks and limits
 
-1. Open a disposable Fusion Composition, select `cartorig-dev` from the Scripts menu and click **Create Scene**.
-2. Look for three individual nodes: `CR_WorldMap_Main`, `CR_Camera_Main` and `CR_Scene_Main`, automatically connected to an unused/new MediaOut.
-3. Close the Scene window. Click `CR_WorldMap_Main` directly in the Fusion Node Editor and check the Inspector's Control page and the local Natural Earth 1:50m world land/ocean output in Viewer.
-4. Select `CR_Camera_Main` directly and try zoom and center coordinates. Do not interpret Scene rows as Fusion node selection.
-5. Save, close and reopen the disposable project, then reopen `cartorig-dev` and choose **Open Scene**. Check graph connectivity, parameter persistence and render.
-6. Use **Save Report** and send `cartorig-dev-Test-*.txt` from the Windows temporary folder. Also report Viewer/Inspector errors and provide screenshots when relevant.
+GitHub Actions uses standard **free Windows runners** and only free build-time tools. It tests package compilation, SHA-256 file integrity, migration from prior versions 0.1–0.5.1, interrupted update recovery, stale backups, complete legacy source-only cleanup, preservation of unknown scripts, clean installation, repeated updates and uninstallation. Lua and Python tests cover launcher status reporting and installer source invariants.
 
-**If cartorig-dev is absent from the Scripts menu:** do not install multiple diagnostics or modify shared Fusion directories. First check whether `install-location.txt` and the exact `cartorig-dev.lua` path above exist. Send the installation record, plus `last-error.txt` if generated. The installer only verifies installation to the documented path; enumeration by your licensed Resolve Studio 20 requires a real-host test and is **not** proven by the free Windows runner.
+These checks **do not prove** enumeration in the Resolve Studio 20 Scripts menu or native Fuse rendering; those require an editor's host run. The 40 mandatory A01–A20/B01–B20 V1 acceptance cases remain NOT RUN. No release can be approved.
 
-## Removing the preview
+## Uninstallation
 
-Windows Settings → Installed apps → **cartorig-dev (Development Preview)** → Uninstall. It removes the dedicated entry and installed runtime/Fuses/dataset without deleting projects or unrelated scripts.
-
-## Verification status
-
-GitHub Actions checks script syntax, source tests, installer file hashes, migration from prior releases, repeated upgrade and clean install/uninstall using the standard free Windows runner. These **do not verify the Fusion menu, Fuse render or Inspector in licensed Resolve**. Scene/WorldMap/Camera render and persist tests remain NOT RUN until tested in that host. The A01–A20/B01–B20 product acceptance matrix remains 40 NOT RUN. No stable release has been published.
+Windows → Installed Apps → **cartorig-dev (Development Preview)** → Uninstall. It removes its dedicated launcher, UI, Fuses and bundled data, never shared Resolve script directories, other scripts or editing projects. Unknown legacy files preserved during installation remain available and are reported rather than silently removed.
