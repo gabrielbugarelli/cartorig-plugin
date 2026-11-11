@@ -64,7 +64,8 @@ local throwingComp=setmetatable({},{
 })
 local inspectOk,inspectResult,inspectReason=pcall(factory.inspect,throwingComp)
 assert(inspectOk and inspectResult==nil and tostring(inspectReason):match("NO_COMPOSITION"),
- "Fusion proxy lookup failure must become a diagnostic, not escape as Lua exception")
+ "Fusion proxy lookup failure must become a diagnostic, not escape as Lua exception; pcall="..
+ tostring(inspectOk).." result="..tostring(inspectResult).." reason="..tostring(inspectReason))
 
 local ROOT="tests/fixtures/local-data-test"
 local broken,bmedia=fake()
