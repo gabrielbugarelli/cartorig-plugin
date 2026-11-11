@@ -102,6 +102,7 @@ local function fake(start_with_timeline)
     return to_tc(self.seek)
   end
   function timeline:SetCurrentTimecode(tc)
+    if self.host and self.host.page=="fusion" then return false end
     local frame=from_tc(tc)
     if not frame then return false end
     self.seek=frame
