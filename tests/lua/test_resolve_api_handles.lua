@@ -17,7 +17,11 @@ local function rejected(operation,contains)
     "Expected informative diagnostic containing "..contains..", got "..tostring(message))
 end
 local fakeResolve=function(manager)
-  return {GetProjectManager=function() return manager end}
+  local resolve={page="edit"}
+  function resolve:GetProjectManager() return manager end
+  function resolve:GetCurrentPage() return self.page end
+  function resolve:OpenPage(page) self.page=page;return true end
+  return resolve
 end
 local fakeManager=function(project)
   return {GetCurrentProject=function() return project end}
