@@ -155,6 +155,28 @@ therefore preserves finite numeric marker offsets/durations exactly in the
 snapshot. Only the protected append boundary is rounded upward to the next
 whole timeline frame when needed; the marker itself is never rewritten.
 
+## Connection readback
+
+Blackmagic documents `PlainInput.GetConnectedOutput()` as returning the connected
+`Output`, and `Link.GetTool()` as returning the Tool that owns an Input/Output.
+CartoRig therefore verifies structural graph connections by resolving the connected
+Output back to its owning Tool and comparing that Tool object with the requested
+upstream Tool. A non-nil connection to the wrong Tool is a failure, not success.
+
+## Intentional raw-API surfaces
+
+Two source areas intentionally do not route every call through the product API
+boundary:
+
+- **UIManager widget operations** (`AddWindow`, `GetItems`, `Show`,
+  `RunLoop`, `ExitLoop`) follow Blackmagic's documented UIManager/UIDispatcher
+  workflow directly. Resolve/Fusion handle acquisition and `bmd` dot-call
+  semantics still go through `blackmagic_api.lua`.
+- **`native_probe.lua` and historical host probes** deliberately call the host
+  API directly because their purpose is to measure which raw host calls work.
+  Their observations may justify a later contract update, but probe behavior is
+  never used as a substitute for the product boundary.
+
 ## Review rule for future API use
 
 A new Resolve/Fusion API dependency is not accepted until all four are present:
