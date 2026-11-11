@@ -1,4 +1,4 @@
-# cartorig-dev 0.6.0 — Editor installation and Scene workflow
+# cartorig-dev 0.6.1 — Editor installation and Scene workflow
 
 **Windows · DaVinci Resolve Studio 20 · development build, not V1 release.**
 
@@ -8,7 +8,7 @@ The only scripts entry is **Workspace → Scripts → cartorig-dev**. It is inst
 
 1. Close DaVinci Resolve.
 2. From the **cartorig-dev Scene Timeline Windows** GitHub Actions run for the chosen commit, download the successful artifact named `cartorig-dev-timeline-<commit>`.
-3. Extract the ZIP and double-click **`cartorig-dev-0.6.0-win64.exe`**. No additional dependencies, Python, SDK, manual data install or commands are required.
+3. Extract the ZIP and double-click **`cartorig-dev-0.6.1-win64.exe`**. No additional dependencies, Python, SDK, manual data install or commands are required.
 4. Restart Resolve and open an existing test project. **Do not manually add Fusion Composition to the timeline.**
 5. Open **Workspace → Scripts → cartorig-dev** on the Edit page. The Scene window will appear without an active Fusion Composition.
 
@@ -25,6 +25,14 @@ Upgrading from 0.5.2 installs the new Utility launcher before retiring the previ
 7. Use **Save Report** and send the TXT from `%TEMP%` with screenshots if errors occur.
 
 If Resolve refuses to create the first empty timeline, refuses to seek safely to the append boundary, cannot return the inserted Fusion Composition or rejects the default MediaOut connection, **the command fails explicitly**. These exact host capabilities have not yet been verified with this new workflow. Do not edit your main project to experiment.
+
+## Verify the Resolve API context fix
+
+Version 0.6.1 validates every API receiver before accessing methods, and it rejects a numerical global `resolve`. When the host supplies a numerical global, the launcher reacquires a valid Resolve API object with `bmd.scriptapp("Resolve")`. If neither exposes `GetProjectManager`, the command reports the actual value types without crashing.
+
+The regression suite tests numeric and malformed API handles, real C-proxy lookup exceptions, initialization without a project, nil video-track lists, and five independent Scene creations. These Lua/Python tests are **not** a substitute for running Resolve Studio 20 itself.
+
+If `Create Scene` is blocked, use **Save Report** and send the generated TXT. It will contain the specific API method and observed return type. Do not manually add a Fusion Composition or connect MediaOut as a workaround.
 
 ## Support and uninstall
 
