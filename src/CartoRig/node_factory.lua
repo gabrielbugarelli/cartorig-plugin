@@ -29,9 +29,17 @@ local function attrs(tool)
   if ok and type(val)=="table" then return val end
   return {}
 end
+local function member(o,key)
+  if o==nil then return nil end
+  local ok,value=pcall(function() return o[key] end)
+  if ok then return value end
+end
+local function method(o,key)
+  return type(member(o,key))=="function"
+end
 local function inventory(comp)
-  if not comp or type(comp.GetToolList)~="function" then
-    return nil,"NO_COMPOSITION: open a Fusion Composition"
+  if not method(comp,"GetToolList") then
+    return nil,"NO_COMPOSITION: GetToolList unavailable"
   end
   local ok,list=pcall(function() return comp:GetToolList(false) end)
   if not ok or type(list)~="table" then
@@ -137,7 +145,7 @@ end
 -- A TimelineItem Fusion Composition usually already contains MediaOut1.
 -- Never create an extra output simply because input discovery failed.
 local function input_of(tool,name)
-  if type(tool.FindInput)=="function" then
+  if method(tool,"FindInput") then
     local ok,value=pcall(function() return tool:FindInput(name) end)
     if ok and value then return value end
   end
@@ -231,7 +239,7 @@ function factory.create_scene(comp,title,opts)
   if not existing_media and opts.disallow_new_mediaout then
     return nil,"MEDIAOUT_UNAVAILABLE: fresh comp has no MediaOut"
   end
-  if type(comp.StartUndo)~="function" or type(comp.EndUndo)~="function" then
+  if not method(comp,"StartUndo") or not method(comp,"EndUndo") then
     return nil,"FUSION_API_ERROR: Undo transactions unavailable"
   end
   local started,beginerr=pcall(function() comp:StartUndo("CartoRig - Create Scene") end)
