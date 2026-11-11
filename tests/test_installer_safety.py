@@ -30,7 +30,7 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('Rename "$R0\\cartorig-dev.lua" "$R0\\cartorig-dev.lua.migrated-060"',s)
         self.assertLess(s.index('Rename "$R2\\cartorig-dev.lua.pending"'),
                         s.index('Rename "$R0\\cartorig-dev.lua" "$R0\\cartorig-dev.lua.migrated-060"'))
-        self.assertIn('DisplayVersion" "0.6.2"',s)
+        self.assertIn('DisplayVersion" "0.6.3"',s)
 
     def test_installer_dependencies_and_cleanup(self):
         s=self.nsi
@@ -107,9 +107,29 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('legacy_timeline_service_0.6.1.lua',fixture)
         self.assertIn('service061',self.win)
 
+    def test_reviewed_uninstaller_preserves_unowned_comp_entry(self):
+        s=self.nsi
+        self.assertNotIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua"',s)
+        self.assertNotIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua.pending"',s)
+        self.assertNotIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua.backup"',s)
+        self.assertIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua.migrated-060"',s)
+        self.assertIn('Uninstaller deleted or changed unowned Comp/cartorig-dev.lua',self.win)
+
+    def test_historical_062_fixture_is_pinned_before_reviewed_063(self):
+        current=(ROOT/"src/CartoRig/timeline_service.lua").read_text(encoding="utf-8")
+        prior=(ROOT/"src/CartoRig/legacy_timeline_service_0.6.2.lua").read_text(encoding="utf-8")
+        self.assertIn('require_existing_mediaout',prior)
+        self.assertNotIn('require_existing_mediaout',current)
+        self.assertIn('disallow_new_mediaout=true',current)
+        fixture=(ROOT/"packaging/legacy-preview-0.6.2.nsi").read_text(encoding="utf-8")
+        self.assertIn('legacy_timeline_service_0.6.2.lua',fixture)
+        self.assertIn('legacy_node_factory_0.6.2.lua',fixture)
+        self.assertIn('service062',self.win)
+        self.assertIn('factory062',self.win)
+
     def test_windows_package_tests_real_upgrade_layout(self):
         s=self.win
-        for marker in ('legacy-preview-0.5.2.nsi','legacy-preview-0.6.0.nsi','legacy-preview-0.6.1.nsi','cartorig-dev-0.6.2-win64.exe',
+        for marker in ('legacy-preview-0.5.2.nsi','legacy-preview-0.6.0.nsi','legacy-preview-0.6.1.nsi','legacy-preview-0.6.2.nsi','cartorig-dev-0.6.3-win64.exe',
                        'Get-FileHash','Utility\\cartorig-dev.lua','Comp\\cartorig-dev.lua',
                        'TimelineService mismatch','Not exactly one Scripts menu entry',
                        'Foreign script affected','retention-days: 7'):
