@@ -1,7 +1,7 @@
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !ifndef OUTPUTFILE
-  !define OUTPUTFILE "cartorig-dev-0.4-win64.exe"
+  !define OUTPUTFILE "cartorig-dev-0.5-win64.exe"
 !endif
 Unicode true
 Name "cartorig-dev"
@@ -30,6 +30,26 @@ Section "Install cartorig-dev"
   ${If} ${FileExists} "$INSTDIR\Comp\cartorig-dev.lua"
     ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
       MessageBox MB_OK|MB_ICONSTOP "cartorig-dev.lua belongs to another installation. Nothing was changed."
+      Abort
+    ${EndIf}
+  ${EndIf}
+  ; Refuse to overwrite external Fuse tools: only the CartoRig managed
+  ; uninstaller may own these filenames.
+  ${If} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigScene.fuse"
+    ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
+      MessageBox MB_OK|MB_ICONSTOP "External CartoRig Fuse installation exists. No files changed."
+      Abort
+    ${EndIf}
+  ${EndIf}
+  ${If} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigWorldMap.fuse"
+    ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
+      MessageBox MB_OK|MB_ICONSTOP "External CartoRig WorldMap Fuse found. No files changed."
+      Abort
+    ${EndIf}
+  ${EndIf}
+  ${If} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigCamera.fuse"
+    ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
+      MessageBox MB_OK|MB_ICONSTOP "External CartoRig Camera Fuse found. No files changed."
       Abort
     ${EndIf}
   ${EndIf}
@@ -72,14 +92,27 @@ Section "Install cartorig-dev"
 
   SetOutPath "$LOCALAPPDATA\CartoRig\App"
   File "/oname=graph_test.lua" "..\src\CartoRig\native_probe.lua"
+  File "/oname=THIRD_PARTY_NOTICES.txt" "..\THIRD_PARTY_NOTICES"
+  SetOutPath "$LOCALAPPDATA\CartoRig\App\lua\CartoRig"
+  File "/oname=domain.lua" "..\src\CartoRig\domain.lua"
+  File "/oname=geo.lua" "..\src\CartoRig\geo.lua"
+  File "/oname=catalog.lua" "..\src\CartoRig\catalog.lua"
+  File "/oname=node_factory.lua" "..\src\CartoRig\node_factory.lua"
+  SetOutPath "$LOCALAPPDATA\CartoRig\App\data"
+  File "/oname=ne_50m_land.lua" "..\data\ne_50m_land.lua"
+  SetOutPath "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses"
+  File "/oname=CartoRigScene.fuse" "..\fuses\CartoRigScene.fuse"
+  File "/oname=CartoRigWorldMap.fuse" "..\fuses\CartoRigWorldMap.fuse"
+  File "/oname=CartoRigCamera.fuse" "..\fuses\CartoRigCamera.fuse"
+  SetOutPath "$LOCALAPPDATA\CartoRig\App"
   File "/oname=README.txt" "..\docs\CARTORIG_PREVIEW_TEST.md"
   File "/oname=LICENSE.txt" "..\LICENSE"
   WriteUninstaller "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
   SetOutPath "$INSTDIR\Comp"
-  File "/oname=cartorig-dev.lua" "..\host\cartorig-dev.lua"
+  File "/oname=cartorig-dev.lua" "..\host\cartorig-dev-scene.lua"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "DisplayName" "cartorig-dev (Development Preview)"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "UninstallString" '"$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"'
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "DisplayVersion" "0.4.0"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "DisplayVersion" "0.5.0"
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "NoModify" 1
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "NoRepair" 1
 SectionEnd
@@ -87,6 +120,18 @@ SectionEnd
 Section "Uninstall"
   StrCpy $INSTDIR "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts"
   Delete "$INSTDIR\Comp\cartorig-dev.lua"
+  Delete "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigScene.fuse"
+  Delete "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigWorldMap.fuse"
+  Delete "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigCamera.fuse"
+  Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\domain.lua"
+  Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\geo.lua"
+  Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\catalog.lua"
+  Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\node_factory.lua"
+  RMDir "$LOCALAPPDATA\CartoRig\App\lua\CartoRig"
+  RMDir "$LOCALAPPDATA\CartoRig\App\lua"
+  Delete "$LOCALAPPDATA\CartoRig\App\data\ne_50m_land.lua"
+  RMDir "$LOCALAPPDATA\CartoRig\App\data"
+  Delete "$LOCALAPPDATA\CartoRig\App\THIRD_PARTY_NOTICES.txt"
   Delete "$LOCALAPPDATA\CartoRig\App\graph_test.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\README.txt"
   Delete "$LOCALAPPDATA\CartoRig\App\LICENSE.txt"
