@@ -2,7 +2,7 @@
 
 Este kit é **somente de leitura**: não instala scripts, não modifica Fusion Compositions e não acrescenta entradas no menu do DaVinci Resolve.
 
-A partir da 0.6.3, a **única entrada** `cartorig-dev` pertence ao escopo **Utility**, permitindo executar `Create Scene` desde a página Edit, sem Fusion Composition aberta.
+A partir da 0.6.0, a **única entrada** `cartorig-dev` pertence ao escopo **Utility**, permitindo executar `Create Scene` desde a página Edit, sem Fusion Composition aberta.
 
 ## Como executar
 
