@@ -546,7 +546,16 @@ function M.create(resolve,title,opts)
   if inspect.has_scene then return fail(ctx,item,"NEW_COMP_ALREADY_HAS_SCENE") end
   local result,nodeErr=factory.create_scene(comp,title,{disallow_new_mediaout=true,localappdata=opts.localappdata})
   if not result then return fail(ctx,item,nodeErr) end
-  if method(item,"SetName") then pcall(item.SetName,item,"CartoRig - "..title) end
+  local warnings={}
+  if method(item,"SetName") then
+    local renamed,renameErr=call(item,"SetName","CartoRig - "..title)
+    local observedName=call(item,"GetName")
+    if renamed~=true or observedName~="CartoRig - "..title then
+      warnings[#warnings+1]="Timeline clip name could not be verified: "..tostring(renameErr or observedName)
+    end
+  else
+    warnings[#warnings+1]="Timeline clip naming API unavailable; persisted Scene title remains authoritative"
+  end
   -- Final editorial verification after Fusion graph authoring. Only the new
   -- TimelineItem may differ from the pre-transaction snapshot.
   local finalState,finalErr=compare_timeline(timeline,before,itemId)
@@ -559,9 +568,10 @@ function M.create(resolve,title,opts)
   -- Insertion already happened at the desired playhead. Do not call
   -- SetCurrentTimecode while Fusion is active; Resolve documents it for Edit-like pages.
   return {
-    scene_id=result.scene_id,objects=result.objects,timeline_item=item,composition=comp,
+    scene_id=result.scene_id,title=result.title or title,objects=result.objects,
+    timeline_item=item,composition=comp,
     start_frame=at,end_frame=finish,track_index=trackIndex,new_timeline=ctx.created_timeline==true,
-    fusion_page_opened=true,
+    fusion_page_opened=true,warnings=warnings,
     message="Scene created in its own Fusion Composition; host Viewer and save/reopen require verification"
   }
 end
@@ -597,7 +607,7 @@ function M.list_scenes(resolve)
           if state and state.has_scene then
             local sceneStart,_,positionError=item_bounds(item,"scene list V"..track)
             if sceneStart then
-              results[#results+1]={scene_id=state.scene_id,name=call(item,"GetName") or "CartoRig Scene",
+              results[#results+1]={scene_id=state.scene_id,name=state.title or call(item,"GetName") or "CartoRig Scene",
                 track=track,start_frame=sceneStart,objects=state.objects}
             else
               warnings[#warnings+1]=positionError
