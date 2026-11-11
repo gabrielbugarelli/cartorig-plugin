@@ -345,25 +345,33 @@ local function mark_states_equal(a,b)
   return true
 end
 local function restore_marks(timeline,marks)
-  local cleared,clearErr=call(timeline,"ClearMarkInOut","all")
-  if cleared~=true then return nil,"MARK_RESTORE_FAILED: ClearMarkInOut(all): "..tostring(clearErr) end
+  local observed,observedErr=save_marks(timeline)
+  if not observed then return nil,observedErr end
+  if mark_states_equal(marks or {},observed) then return true end
   for _,kind in ipairs({"video","audio"}) do
-    local range=marks and marks[kind]
-    if range then
-      local restored,restoreErr=call(timeline,"SetMarkInOut",range["in"],range["out"],kind)
+    local desired=marks and marks[kind] or nil
+    local current=observed and observed[kind] or nil
+    if desired==nil and current~=nil then
+      local cleared,clearErr=call(timeline,"ClearMarkInOut",kind)
+      if cleared~=true then
+        return nil,"MARK_RESTORE_FAILED: ClearMarkInOut("..kind.."): "..tostring(clearErr)
+      end
+    elseif desired~=nil and (current==nil or current["in"]~=desired["in"] or current["out"]~=desired["out"]) then
+      local restored,restoreErr=call(timeline,"SetMarkInOut",desired["in"],desired["out"],kind)
       if restored~=true then
         return nil,"MARK_RESTORE_FAILED: SetMarkInOut("..kind.."): "..tostring(restoreErr)
       end
     end
   end
-  local observed,observedErr=save_marks(timeline)
-  if not observed then return nil,observedErr end
-  if not mark_states_equal(marks or {},observed) then
+  local readback,readbackErr=save_marks(timeline)
+  if not readback then return nil,readbackErr end
+  if not mark_states_equal(marks or {},readback) then
     return nil,"MARK_RESTORE_FAILED: readback differs from pre-transaction In/Out state"
   end
   return true
 end
-local function clear_video_marks(timeline)
+local function clear_video_marks(timeline,marks)
+  if not (marks and marks.video) then return true end
   local cleared,err=call(timeline,"ClearMarkInOut","video")
   if cleared~=true then return nil,"MARK_CLEAR_FAILED: "..tostring(err) end
   return true
@@ -507,7 +515,7 @@ function M.create(resolve,title,opts)
   local marks,markErr=save_marks(timeline)
   if not marks then return fail(ctx,nil,markErr) end
   ctx.original_marks=marks
-  local cleared,clearErr=clear_video_marks(timeline)
+  local cleared,clearErr=clear_video_marks(timeline,ctx.original_marks)
   if not cleared then return fail(ctx,nil,clearErr) end
   local seek,seekErr=call(timeline,"SetCurrentTimecode",targettc)
   if seek~=true then return fail(ctx,nil,"TIMELINE_SEEK_FAILED: "..tostring(seekErr)) end
