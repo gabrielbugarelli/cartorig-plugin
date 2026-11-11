@@ -50,6 +50,26 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('File "/oname=cartorig-dev.lua" "..\\host\\cartorig-dev-scene.lua"',self.prior)
         self.assertNotIn('cartorig-dev.lua.pending',self.prior)
 
+    def test_legacy_files_never_block_launcher_activation(self):
+        source=self.nsi
+        activation=source.index('Rename "$R0\\cartorig-dev.lua.pending" "$R0\\cartorig-dev.lua"')
+        self.assertLess(activation,source.index('ExecWait \'"$LOCALAPPDATA\\CartoRig\\HostProbe\\Uninstall-HostProbe.exe"'))
+        self.assertLess(activation,source.index('ExecWait \'"$LOCALAPPDATA\\CartoRig\\NativeIntegrationProbe\\Uninstall-NativeIntegration.exe"'))
+        self.assertNotIn('An unmanaged old CartoRig script remains. Upgrade stopped.',source)
+        self.assertIn('Old CartoRig.lua persists; not removed without ownership',source)
+        self.assertIn('Recover the launcher from a previous interrupted update',source)
+        self.assertIn('Rename "$R0\\cartorig-dev.lua.backup" "$R0\\cartorig-dev.lua"',source)
+        self.assertIn('Version: 0.5.2',source)
+
+    def test_required_runtime_is_checked_before_replacing_launcher(self):
+        source=self.nsi
+        marker=source.index('File "/oname=cartorig-dev.lua.pending"')
+        self.assertLess(source.index('UI missing; the existing menu script was preserved.'),marker)
+        self.assertLess(source.index('NodeFactory missing; the existing menu script was preserved.'),marker)
+        self.assertLess(source.index('Offline map data missing; the existing menu script was preserved.'),marker)
+        self.assertEqual(source.count('SetOutPath "$LOCALAPPDATA\\CartoRig\\App"'),3)
+        self.assertIn('files were changed',source)
+
     def test_update_and_uninstall_have_one_owned_scope(self):
         self.assertIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua"',self.nsi)
         self.assertIn('Delete "$LOCALAPPDATA\\CartoRig\\App\\lua\\cartorig_scene_ui.lua"',self.nsi)
