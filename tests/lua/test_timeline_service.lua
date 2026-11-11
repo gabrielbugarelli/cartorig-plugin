@@ -72,7 +72,9 @@ local function fake(start_with_timeline)
   end
   local function ensure_track(kind,index)
     while #timeline.tracks[kind]<index do
-      timeline.tracks[kind][#timeline.tracks[kind]+1]={items={},locked=false}
+      timeline.tracks[kind][#timeline.tracks[kind]+1]={
+        items={},locked=false,enabled=true,name=kind:sub(1,1):upper()..tostring(#timeline.tracks[kind]+1)
+      }
     end
     return timeline.tracks[kind][index]
   end
@@ -96,6 +98,26 @@ local function fake(start_with_timeline)
     local track=self.tracks[kind][index]
     if not track then return false end
     track.locked=locked
+    return true
+  end
+  function timeline:GetIsTrackEnabled(kind,index)
+    local track=self.tracks[kind][index]
+    return track and track.enabled or false
+  end
+  function timeline:SetTrackEnable(kind,index,enabled)
+    local track=self.tracks[kind][index]
+    if not track then return false end
+    track.enabled=enabled
+    return true
+  end
+  function timeline:GetTrackName(kind,index)
+    local track=self.tracks[kind][index]
+    return track and track.name or nil
+  end
+  function timeline:SetTrackName(kind,index,name)
+    local track=self.tracks[kind][index]
+    if not track then return false end
+    track.name=name
     return true
   end
   function timeline:GetItemListInTrack(kind,index)
@@ -191,6 +213,12 @@ local function fake(start_with_timeline)
     track.items[#track.items+1]=item
     if self.mutate_existing_lock and self.tracks.video[1] then
       self.tracks.video[1].locked=not self.tracks.video[1].locked
+    end
+    if self.mutate_existing_enabled and self.tracks.video[1] then
+      self.tracks.video[1].enabled=not self.tracks.video[1].enabled
+    end
+    if self.mutate_existing_name and self.tracks.video[1] then
+      self.tracks.video[1].name="Changed by insertion"
     end
     self.last=item
     return item
@@ -413,6 +441,18 @@ t9b.mutate_existing_lock=true
 local lockResult,lockErr=svc.create(r9b,"Lock mutation")
 assert(lockResult==nil and lockErr:find("EXTERNAL_TIMELINE_CHANGED",1,true))
 assert(t9b.tracks.video[1].locked==false,"rollback must restore original lock state")
+
+-- Enabled state and track name are editorial state too; unexpected changes are
+-- rejected and restored just like track locks.
+local r9c,p9c,t9c=fake(true)
+t9c:AddTrack("video")
+t9c.tracks.video[1].name="Editorial V1"
+t9c.mutate_existing_enabled=true
+t9c.mutate_existing_name=true
+local metaResult,metaErr=svc.create(r9c,"Track metadata mutation")
+assert(metaResult==nil and metaErr:find("EXTERNAL_TIMELINE_CHANGED",1,true))
+assert(t9c.tracks.video[1].enabled==true)
+assert(t9c.tracks.video[1].name=="Editorial V1")
 
 -- If Resolve unexpectedly moves pre-existing media, report incomplete rollback
 -- instead of claiming safety.
