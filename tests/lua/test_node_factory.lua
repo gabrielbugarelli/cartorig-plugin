@@ -3,7 +3,8 @@ local factory=require("CartoRig.node_factory")
 local domain=require("CartoRig.domain")
 local dataPath="tests/fixtures/local-data-test\\CartoRig\\App\\data\\ne_50m_land.lua"
 local f=assert(io.open(dataPath,"wb"))
-f:write(string.rep("x",510000));f:close()
+f:write("local t={}\nfor i=1,1422 do t[i]={0,0,1,0,1,1,0,1} end\nreturn t\n")
+f:close()
 local function fake()
  local comp={tools={},data={},added={},deleted=0,undo=0,undo_keeps={}}
  function comp:GetToolList() return self.tools end
@@ -47,6 +48,17 @@ local function fake()
  local media=comp:AddTool("MediaOut",0,0)
  return comp,media
 end
+local corruptPath="tests/fixtures/corrupt-data-test\\CartoRig\\App\\data\\ne_50m_land.lua"
+local corruptFile=assert(io.open(corruptPath,"wb"))
+corruptFile:write("return {{0,0,999,0,1,1,0,1}}\n")
+corruptFile:close()
+local corruptComp,corruptMedia=fake()
+local corruptResult,corruptReason=factory.create_scene(corruptComp,"Corrupt data",{localappdata="tests/fixtures/corrupt-data-test"})
+assert(corruptResult==nil and corruptReason:match("DATA_INCOMPATIBLE"))
+assert(#corruptComp.tools==1 and corruptComp.tools[1]==corruptMedia,
+ "invalid Natural Earth data must block before graph mutation")
+os.remove(corruptPath)
+
 local ROOT="tests/fixtures/local-data-test"
 local broken,bmedia=fake()
 assert(factory.create_scene(broken,"X",{localappdata="nonexistent"})==nil)
