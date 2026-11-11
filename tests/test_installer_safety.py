@@ -21,6 +21,15 @@ class InstallerSafetyTests(unittest.TestCase):
         cls.cleaner=(ROOT/"support/cleanup-verified-legacy.ps1").read_text(encoding="utf-8")
         cls.shared=(ROOT/"support/verify-managed-shared.ps1").read_text(encoding="utf-8")
 
+    def test_build_identity_is_embedded_and_reportable(self):
+        s=self.nsi
+        self.assertIn('!define BUILDSHA "development-unpinned"',s)
+        self.assertIn('Build commit: ${BUILDSHA}',s)
+        self.assertIn('build-info.txt',s)
+        self.assertIn('"/DBUILDSHA=$env:GITHUB_SHA"',self.win)
+        self.assertIn("commit=$env:GITHUB_SHA",self.win)
+        self.assertIn('Build commit: ',self.scene)
+
     def test_install_and_uninstall_require_resolve_closed(self):
         s=self.nsi
         self.assertGreaterEqual(s.count('Get-Process -Name Resolve'),2)
