@@ -1,10 +1,10 @@
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !ifndef OUTPUTFILE
-  !define OUTPUTFILE "CartoRig-Preview-0.3-win64.exe"
+  !define OUTPUTFILE "cartorig-dev-0.4-win64.exe"
 !endif
 Unicode true
-Name "CartoRig"
+Name "cartorig-dev"
 OutFile "${OUTPUTFILE}"
 RequestExecutionLevel user
 InstallDir "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts"
@@ -18,11 +18,18 @@ ShowUninstDetails show
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
 
-Section "Install CartoRig preview"
+Section "Install cartorig-dev"
   ; Only replace CartoRig.lua if a managed CartoRig uninstaller exists.
   ${If} ${FileExists} "$INSTDIR\Comp\CartoRig.lua"
     ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
       MessageBox MB_OK|MB_ICONSTOP "CartoRig.lua exists but is not a managed installation. No files were changed."
+      Abort
+    ${EndIf}
+  ${EndIf}
+  ; The development entry must belong to our managed installation.
+  ${If} ${FileExists} "$INSTDIR\Comp\cartorig-dev.lua"
+    ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
+      MessageBox MB_OK|MB_ICONSTOP "cartorig-dev.lua belongs to another installation. Nothing was changed."
       Abort
     ${EndIf}
   ${EndIf}
@@ -69,23 +76,23 @@ Section "Install CartoRig preview"
   File "/oname=LICENSE.txt" "..\LICENSE"
   WriteUninstaller "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
   SetOutPath "$INSTDIR\Comp"
-  File "/oname=CartoRig.lua" "..\host\CartoRig.lua"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRig" "DisplayName" "CartoRig (Development Preview)"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRig" "UninstallString" '"$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"'
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRig" "DisplayVersion" "0.3.0"
-  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRig" "NoModify" 1
-  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRig" "NoRepair" 1
+  File "/oname=cartorig-dev.lua" "..\host\cartorig-dev.lua"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "DisplayName" "cartorig-dev (Development Preview)"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "UninstallString" '"$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"'
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "DisplayVersion" "0.4.0"
+  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "NoModify" 1
+  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev" "NoRepair" 1
 SectionEnd
 
 Section "Uninstall"
   StrCpy $INSTDIR "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts"
-  Delete "$INSTDIR\Comp\CartoRig.lua"
+  Delete "$INSTDIR\Comp\cartorig-dev.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\graph_test.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\README.txt"
   Delete "$LOCALAPPDATA\CartoRig\App\LICENSE.txt"
   Delete "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
   RMDir "$LOCALAPPDATA\CartoRig\App"
   RMDir "$LOCALAPPDATA\CartoRig"
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRig"
+  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev"
   ; Never delete shared Scripts folders or editor projects.
 SectionEnd
