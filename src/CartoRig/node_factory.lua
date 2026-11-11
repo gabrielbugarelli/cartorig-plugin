@@ -97,19 +97,35 @@ function factory.inspect(comp)
   return {scene_id=compid,objects=objects,has_scene=compid~=nil,existing_tools=list}
 end
 
-local function can_use_mediaout(tool)
-  if attrs(tool).TOOLS_RegID~="MediaOut" then return false end
-  if type(tool.FindInput)~="function" then return false end
-  local ok,input=pcall(function() return tool:FindInput("Input") end)
-  if not ok or not input or type(input.GetConnectedOutput)~="function" then return false end
-  local connected,source=pcall(function() return input:GetConnectedOutput() end)
-  return connected and source==nil
-end
-
-local function mediaout_candidate(list)
-  for _,tool in pairs(list) do
-    if can_use_mediaout(tool) then return tool end
+-- A TimelineItem Fusion Composition usually already contains MediaOut1.
+-- Never create an extra output simply because input discovery failed.
+local function input_of(tool,name)
+  if type(tool.FindInput)=="function" then
+    local ok,value=pcall(function() return tool:FindInput(name) end)
+    if ok and value then return value end
   end
+  local ok,value=pcall(function() return tool[name] end)
+  if ok and value then return value end
+end
+local function mediaout_candidate(list)
+  local found,number=nil,0
+  for _,tool in pairs(list) do
+    if attrs(tool).TOOLS_RegID=="MediaOut" then
+      number=number+1;found=tool
+    end
+  end
+  if number>1 then return nil,"MEDIAOUT_AMBIGUOUS: newly created comp has more than one MediaOut" end
+  if number==0 then return nil,nil end
+  local input=input_of(found,"Input")
+  if not input or type(input.GetConnectedOutput)~="function" then
+    return nil,"MEDIAOUT_UNINSPECTABLE: refuse to duplicate the existing MediaOut"
+  end
+  local ok,value=pcall(function() return input:GetConnectedOutput() end)
+  if not ok then return nil,"MEDIAOUT_UNINSPECTABLE: cannot read current MediaOut input" end
+  if value~=nil then
+    return nil,"MEDIAOUT_ALREADY_CONNECTED: refuse to modify an occupied output"
+  end
+  return found,nil
 end
 
 local function create_node(comp,kind,info,x,y,created)
@@ -166,15 +182,16 @@ function factory.create_scene(comp,title,opts)
   local ok,existing=factory.inspect(comp)
   if not ok then return nil,existing end
   if ok.has_scene then
-    return nil,"SCENE_EXISTS: use Open Scene; no duplicate structural nodes are allowed"
+    return nil,"SCENE_EXISTS: this Fusion Composition already contains a CartoRig Scene; Create Scene must target a new timeline item"
   end
   local dataset,derr=library_ready(opts.localappdata)
   if not dataset then return nil,derr end
   local state,err=domain.new_scene(title or "Map Scene")
   if not state then return nil,err end
-  local existing_media=mediaout_candidate(ok.existing_tools)
+  local existing_media,media_error=mediaout_candidate(ok.existing_tools)
+  if media_error then return nil,media_error end
   if not existing_media and opts.disallow_new_mediaout then
-    return nil,"MEDIAOUT_UNAVAILABLE: no free MediaOut, no foreign connections modified"
+    return nil,"MEDIAOUT_UNAVAILABLE: fresh comp has no MediaOut"
   end
   if type(comp.StartUndo)~="function" or type(comp.EndUndo)~="function" then
     return nil,"FUSION_API_ERROR: Undo transactions unavailable"
@@ -193,8 +210,11 @@ function factory.create_scene(comp,title,opts)
     local output=existing_media
     if not output then
       output=comp:AddTool("MediaOut",0,2)
-      if not output then error("MEDIAOUT_CREATE_FAILED: no MediaOut available") end
+      if not output then error("MEDIAOUT_CREATE_FAILED: Resolve did not create MediaOut") end
       created[#created+1]=output
+      if attrs(output).TOOLS_RegID~="MediaOut" then
+        error("MEDIAOUT_CREATE_FAILED: unexpected tool returned by Fusion")
+      end
       output:SetAttrs({TOOLS_Name="CR_Output_Main"})
       output:SetData(P.."OwnedHelper",true)
       output:SetData(SCENE_KEY,state.scene_id)
@@ -203,6 +223,14 @@ function factory.create_scene(comp,title,opts)
     -- if ConnectInput partially mutates it and then fails, rollback disconnects it.
     if existing_media then modified_external=existing_media end
     connect(output,"Input",nodes.Scene)
+    local port=input_of(output,"Input")
+    if not port or type(port.GetConnectedOutput)~="function" then
+      error("MEDIAOUT_LINK_UNVERIFIED: cannot inspect physical output link")
+    end
+    local src=port:GetConnectedOutput()
+    if not src then
+      error("MEDIAOUT_LINK_FAILED: MediaOut is not connected to Scene")
+    end
     comp:SetData(SCENE_KEY,state.scene_id)
     comp:SetData(VERSION,state.schema_version)
     comp:SetData(SOURCE,"Natural Earth 1:50m land")
