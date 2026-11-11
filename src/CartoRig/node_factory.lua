@@ -55,7 +55,7 @@ function factory.inspect(comp)
   local list,err=inventory(comp)
   if not list then return nil,err end
   local objects,owned={},0
-  local sid
+  local sid,ids,names=nil,{},{}
   for _,tool in pairs(list) do
     if get(tool,OWNER)==true then
       owned=owned+1
@@ -66,6 +66,12 @@ function factory.inspect(comp)
       if not domain.is_uuid(obj.id) or not domain.is_uuid(obj.scene_id) then
         return nil,"STATE_INVALID: invalid node identity"
       end
+      if ids[obj.id] then return nil,"STATE_INVALID: duplicated object UUID "..obj.id end
+      if obj.name=="" or names[obj.name] then
+        return nil,"STATE_INVALID: missing or duplicated CartoRig node name "..tostring(obj.name)
+      end
+      ids[obj.id]=true
+      names[obj.name]=true
       if sid and obj.scene_id~=sid then
         return nil,"STATE_INVALID: multiple scenes in one composition"
       end
