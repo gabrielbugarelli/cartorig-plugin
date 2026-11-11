@@ -344,13 +344,43 @@ local function rollback_context(ctx,item)
     local removed,err=call(ctx.timeline,"DeleteClips",{item},false)
     if removed~=true then problems[#problems+1]="new clip not removed: "..tostring(err) end
   end
-  if ctx.added_video_track and ctx.timeline and not ctx.created_timeline then
-    local items=call(ctx.timeline,"GetItemListInTrack","video",ctx.added_video_track)
-    if items==nil or (type(items)=="table" and next(items)==nil) then
-      local removed,err=call(ctx.timeline,"DeleteTrack","video",ctx.added_video_track)
-      if removed~=true then problems[#problems+1]="added video track not removed: "..tostring(err) end
-    else
-      problems[#problems+1]="added video track retained because it is not empty"
+  if not ctx.created_timeline and ctx.timeline and ctx.rollback_baseline then
+    -- Remove only empty tracks beyond the pre-transaction count. This covers
+    -- both CartoRig's first video track and any empty track auto-created by Resolve.
+    for _,trackType in ipairs(TRACK_TYPES) do
+      local expected=ctx.rollback_baseline.counts[trackType] or 0
+      local current,countErr=call(ctx.timeline,"GetTrackCount",trackType)
+      if type(current)~="number" then
+        problems[#problems+1]="cannot read "..trackType.." track count during rollback: "..tostring(countErr)
+      else
+        for index=current,expected+1,-1 do
+          local items,itemErr=call(ctx.timeline,"GetItemListInTrack",trackType,index)
+          local empty=(items==nil and itemErr==nil) or (type(items)=="table" and next(items)==nil)
+          if empty then
+            local removed,removeErr=call(ctx.timeline,"DeleteTrack",trackType,index)
+            if removed~=true then
+              problems[#problems+1]="extra "..trackType.." track "..index.." not removed: "..tostring(removeErr)
+            end
+          else
+            problems[#problems+1]="extra "..trackType.." track "..index.." retained because it is non-empty or unreadable"
+          end
+        end
+      end
+    end
+    -- Restore lock states only on tracks that existed before the transaction.
+    for _,trackType in ipairs(TRACK_TYPES) do
+      for index=1,(ctx.rollback_baseline.counts[trackType] or 0) do
+        local expected=ctx.rollback_baseline.locks[trackType][index]
+        local current,lockErr=call(ctx.timeline,"GetIsTrackLocked",trackType,index)
+        if type(current)~="boolean" then
+          problems[#problems+1]="cannot read lock state on "..trackType.." "..index..": "..tostring(lockErr)
+        elseif current~=expected then
+          local restored,restoreErr=call(ctx.timeline,"SetTrackLock",trackType,index,expected)
+          if restored~=true then
+            problems[#problems+1]="lock not restored on "..trackType.." "..index..": "..tostring(restoreErr)
+          end
+        end
+      end
     end
   end
   -- Existing timelines must be restored before any verification. A timeline
