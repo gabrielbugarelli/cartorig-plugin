@@ -30,6 +30,7 @@ jobs:
           $legacyPreview = Join-Path $root 'fixture\OldPreview.exe'
           $legacyDev = Join-Path $root 'fixture\OldDev.exe'
           $legacy05 = Join-Path $root 'fixture\OldDev05.exe'
+          $legacy051 = Join-Path $root 'fixture\OldDev051.exe'
           $candidate = Join-Path $root 'dist\cartorig-dev-0.5.2-win64.exe'
           & $nsis '/V2' "/DOUTPUTFILE=$legacyHost" 'packaging\host-probe.nsi'
           if ($LASTEXITCODE -ne 0) { throw "Legacy host fixture compile failed" }
@@ -41,6 +42,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Legacy cartorig-dev 0.4 fixture compile failed" }
           & $nsis '/V2' "/DOUTPUTFILE=$legacy05" 'packaging\legacy-preview-0.5.nsi'
           if ($LASTEXITCODE -ne 0) { throw "Legacy cartorig-dev 0.5 fixture compile failed" }
+          & $nsis '/V2' "/DOUTPUTFILE=$legacy051" 'packaging\legacy-preview-0.5.1.nsi'
+          if ($LASTEXITCODE -ne 0) { throw "Legacy cartorig-dev 0.5.1 fixture compile failed" }
           & $nsis '/V3' "/DOUTPUTFILE=$candidate" 'packaging\cartorig-preview.nsi'
           if ($LASTEXITCODE -ne 0) { throw "CartoRig preview installer compile failed" }
           if (-not (Test-Path $candidate)) { throw "Missing GUI installer" }
@@ -74,6 +77,7 @@ jobs:
           $remove = Join-Path $env:LOCALAPPDATA 'CartoRig\App\Uninstall-CartoRig.exe'
           $setup = (Resolve-Path 'dist\cartorig-dev-0.5.2-win64.exe').Path
           $legacy05Setup = (Resolve-Path 'fixture\OldDev05.exe').Path
+          $legacy051Setup = (Resolve-Path 'fixture\OldDev051.exe').Path
           $sourceLauncher = 'host\cartorig-dev-launcher.lua'
           $sourceUI = 'host\cartorig-dev-scene.lua'
           $uiInstalled = Join-Path $env:LOCALAPPDATA 'CartoRig\App\lua\cartorig_scene_ui.lua'
@@ -97,6 +101,8 @@ jobs:
           if ($oldDevRun.ExitCode -ne 0 -or -not (Test-Path $single)) { throw "Legacy 0.4 installation failed" }
           $old05 = Start-Process -FilePath $legacy05Setup -ArgumentList '/S' -Wait -PassThru
           if ($old05.ExitCode -ne 0 -or -not (Test-Path $single)) { throw "Legacy 0.5 installation failed" }
+          $old051 = Start-Process -FilePath $legacy051Setup -ArgumentList '/S' -Wait -PassThru
+          if ($old051.ExitCode -ne 0 -or -not (Test-Path $single)) { throw "Legacy 0.5.1 installation failed" }
           $priorHash=(Get-FileHash -Algorithm SHA256 $single).Hash
           if ($priorHash -eq $expectedLauncherHash) { throw "Legacy 0.5 does not reproduce old script" }
           for ($i = 0; $i -lt 2; $i++) {
@@ -150,8 +156,30 @@ jobs:
             if (-not (Test-Path $orphan)) { throw "Installer deleted an unmanaged orphaned script" }
           }
           $installLog = [IO.File]::ReadAllText($installRecord)
-          if (-not $installLog.Contains('Old CartoRig.lua persists')) { throw "Legacy orphan did not generate warning in install record" }
+          $cleanupLogPath = Join-Path $appDir 'legacy-cleanup.txt'
+          if (-not (Test-Path $cleanupLogPath)) { throw "Missing verified cleanup report" }
+          $cleanupLog = [IO.File]::ReadAllText($cleanupLogPath)
+          if (-not $installLog.Contains('Verified legacy cleanup completed')) { throw "Installer did not report verified cleanup" }
+          if (-not $cleanupLog.Contains('PRESERVED_UNKNOWN: CartoRig.lua')) { throw "Unknown script was not explicitly preserved" }
           Remove-Item -LiteralPath $old1,$old2,$legacySingle -Force
+
+          # Historical originals must be removed ONLY when contents exactly match
+          # approved SHA-256 checksums, including the previous nested Lua module.
+          Copy-Item -LiteralPath 'host\CartoRig Host Probe.lua' -Destination $old1
+          Copy-Item -LiteralPath 'host\CartoRig Native Integration Probe.lua' -Destination $old2
+          Copy-Item -LiteralPath 'host\CartoRig.lua' -Destination $legacySingle
+          New-Item -ItemType Directory -Force (Split-Path -Parent $oldLib) | Out-Null
+          Copy-Item -LiteralPath 'src\CartoRig\native_probe.lua' -Destination $oldLib
+          $verified = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
+          if ($verified.ExitCode -ne 0 -or -not (Test-Path $single)) { throw "Verified legacy cleanup interrupted launcher upgrade" }
+          foreach ($owned in @($old1,$old2,$legacySingle,$oldLib)) {
+            if (Test-Path $owned) { throw "Verified historical CartoRig script not removed: $owned" }
+          }
+          $verifiedLog = [IO.File]::ReadAllText($cleanupLogPath)
+          foreach ($historical in @('CartoRig Host Probe.lua','CartoRig Native Integration Probe.lua','CartoRig.lua','CartoRigProbe\native_probe.lua')) {
+            if (-not $verifiedLog.Contains("REMOVED_VERIFIED: $historical")) { throw "Missing verified removal evidence: $historical" }
+          }
+          if ((Get-FileHash -Algorithm SHA256 $single).Hash -ne $expectedLauncherHash) { throw "Historical cleanup damaged active launcher" }
 
           $p = Start-Process -FilePath $remove -ArgumentList '/S' -Wait -PassThru
           if ($p.ExitCode -ne 0 -or (Test-Path $single) -or (Test-Path $module) -or (Test-Path $landData)) { throw "Uninstaller failed" }
@@ -166,7 +194,7 @@ jobs:
           foreach ($name in $fuses) { if (Test-Path (Join-Path $fuseDir $name)) { throw "Fuse not removed: $name" } }
           if (-not (Test-Path $other) -or [IO.File]::ReadAllText($other) -ne $otherContent) { throw "External script damaged after uninstall" }
           if ((Test-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRigDev') -or (Test-Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CartoRig')) { throw "Preview Installed Apps entry not removed" }
-          "PASS: Windows upgrade/recovery of interrupted staging and legacy orphans, clean install/uninstall, and foreign-script protection. Resolve menu NOT RUN. Resolve host still NOT RUN." | Set-Content 'dist\package-validation.txt'
+          "PASS: 0.1-0.5.1 migration, verified-only legacy cleanup, unknown-script protection, interrupted upgrade recovery, clean install/uninstall; live Resolve menu NOT RUN." | Set-Content 'dist\package-validation.txt'
       - name: Upload approved preview package (not a stable release)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
