@@ -33,6 +33,7 @@ local function member(o,key)
   if o==nil then return nil end
   local ok,value=pcall(function() return o[key] end)
   if ok then return value end
+  return nil
 end
 local function method(o,key)
   return type(member(o,key))=="function"
