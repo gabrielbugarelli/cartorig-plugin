@@ -21,6 +21,15 @@ class InstallerSafetyTests(unittest.TestCase):
         cls.cleaner=(ROOT/"support/cleanup-verified-legacy.ps1").read_text(encoding="utf-8")
         cls.shared=(ROOT/"support/verify-managed-shared.ps1").read_text(encoding="utf-8")
 
+    def test_install_and_uninstall_require_resolve_closed(self):
+        s=self.nsi
+        self.assertGreaterEqual(s.count('Get-Process -Name Resolve'),2)
+        self.assertIn('DaVinci Resolve must be closed before installing or updating cartorig-dev',s)
+        self.assertIn('DaVinci Resolve must be closed before uninstalling cartorig-dev',s)
+        first_write=s.index('SetOutPath "$LOCALAPPDATA\\CartoRig\\App"')
+        process_check=s.index('Get-Process -Name Resolve')
+        self.assertLess(process_check,first_write)
+
     def test_single_utility_launcher_and_no_comp_reinstall(self):
         s=self.nsi
         self.assertIn('StrCpy $R2 "$APPDATA\\Blackmagic Design\\DaVinci Resolve\\Support\\Fusion\\Scripts\\Utility"',s)
