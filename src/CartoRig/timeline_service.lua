@@ -143,18 +143,24 @@ local function snapshot_markers(timeline,start_frame)
   if not markers then return nil,nil,dictErr end
   local snapshot,maxend={},nil
   for frameId,info in pairs(markers) do
-    if type(frameId)~="number" or frameId<0 or frameId~=math.floor(frameId) then
-      return nil,nil,"MARKER_POSITION_INVALID: expected non-negative integer offset, got "..tostring(frameId)
+    if type(frameId)~="number" or frameId~=frameId or
+       frameId==math.huge or frameId==-math.huge then
+      return nil,nil,"MARKER_POSITION_INVALID: expected finite numeric frame offset, got "..tostring(frameId)
     end
     local signature,sigErr=marker_signature(info)
     if not signature then return nil,nil,sigErr end
-    local duration=type(info.duration)=="number" and info.duration or 1
-    if duration<1 then duration=1 end
-    if duration~=math.floor(duration) then
-      return nil,nil,"MARKER_DURATION_INVALID: marker "..tostring(frameId).." duration "..tostring(duration)
+    local duration=info.duration
+    if duration==nil then duration=1 end
+    if type(duration)~="number" or duration~=duration or
+       duration==math.huge or duration==-math.huge then
+      return nil,nil,"MARKER_DURATION_INVALID: marker "..tostring(frameId)..
+        " duration "..tostring(duration)
     end
+    -- The Blackmagic contract does not state that marker frameId/duration are
+    -- integers. Protect through the first whole frame strictly after its span.
+    local protectedEnd=math.ceil(start_frame+frameId+math.max(duration,1))
     snapshot[frameId]=signature
-    maxend=math.max(maxend or start_frame,start_frame+frameId+duration)
+    maxend=math.max(maxend or start_frame,protectedEnd)
   end
   return snapshot,maxend
 end
