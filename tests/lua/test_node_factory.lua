@@ -59,6 +59,13 @@ assert(#corruptComp.tools==1 and corruptComp.tools[1]==corruptMedia,
  "invalid Natural Earth data must block before graph mutation")
 os.remove(corruptPath)
 
+local throwingComp=setmetatable({},{
+ __index=function() error("synthetic Fusion proxy lookup failure") end
+})
+local inspectOk,inspectResult,inspectReason=pcall(factory.inspect,throwingComp)
+assert(inspectOk and inspectResult==nil and tostring(inspectReason):match("NO_COMPOSITION"),
+ "Fusion proxy lookup failure must become a diagnostic, not escape as Lua exception")
+
 local ROOT="tests/fixtures/local-data-test"
 local broken,bmedia=fake()
 assert(factory.create_scene(broken,"X",{localappdata="nonexistent"})==nil)
