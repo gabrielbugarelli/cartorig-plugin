@@ -89,10 +89,24 @@ if not window then
 end
 local items=window:GetItems()
 local report=""
+local function read_build_info()
+  local info={version="unknown",commit="unknown"}
+  local stream=io.open(localapp.."\\CartoRig\\App\\build-info.txt","rb")
+  if not stream then return info end
+  for line in stream:lines() do
+    local key,value=line:match("^([%w_]+)=(.+)$")
+    if key and value then info[key]=value end
+  end
+  stream:close()
+  return info
+end
 local function record(action,success,details)
   local text=tostring(details or "")
+  local build=read_build_info()
   report=table.concat({
     "cartorig-dev | Timeline Scene service",
+    "Version: "..tostring(build.version),
+    "Build commit: "..tostring(build.commit),
     "UTC: "..os.date("!%Y-%m-%dT%H:%M:%SZ"),
     "Action: "..tostring(action),
     "Status: "..(success and "COMMAND_COMPLETED" or "BLOCKED/FAILED"),
