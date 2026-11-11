@@ -305,8 +305,9 @@ function factory.create_scene(comp,title,opts)
     if not observed or observed.has_scene then
       cleanup[#cleanup+1]="post-rollback graph invalid: "..tostring(inspectErr or "Scene still present")
     end
-    if get(comp,SCENE_KEY)~=nil or get(comp,TITLE)~=nil then
-      cleanup[#cleanup+1]="composition identity/title metadata remained after rollback"
+    if get(comp,SCENE_KEY)~=nil or get(comp,TITLE)~=nil or
+       get(comp,VERSION)~=nil or get(comp,SOURCE)~=nil then
+      cleanup[#cleanup+1]="composition CartoRig metadata remained after rollback"
     end
     return #cleanup==0,table.concat(cleanup,"; ")
   end
