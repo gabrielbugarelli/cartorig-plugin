@@ -78,7 +78,7 @@ assert(expanded.has_scene and #expanded.objects==5,
 local sid=made.scene_id
 assert(sid==comp:GetData("CartoRig.V1.SceneId"))
 assert(factory.create_scene(comp,"Do not duplicate",{localappdata=ROOT})==nil)
-assert(#comp.tools==5)
+assert(#comp.tools==7)
 local rejected,rm=fake()
 rejected.fail_link="Input"
 local result2,reason2=factory.create_scene(rejected,"Connection failure",{localappdata=ROOT})
