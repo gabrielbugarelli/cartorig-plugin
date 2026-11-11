@@ -1,0 +1,90 @@
+name: cartorig-dev Scene Timeline Windows
+on:
+  push:
+    branches: ['feat/scene-per-timeline-composition']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    name: windows / scene-timeline-install-and-migration
+    if: ${{ github.event.repository.private == false }}
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install free NSIS
+        shell: pwsh
+        run: choco install nsis --yes --no-progress --limit-output
+      - name: Compile historical 0.5.2 and new 0.6.0 installers
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist,fixture | Out-Null
+          $exe="${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (!(Test-Path $exe)) {throw 'NSIS unavailable'}
+          $root=(Get-Location).Path
+          $old=Join-Path $root 'fixture\cartorig-dev-0.5.2.exe'
+          $new=Join-Path $root 'dist\cartorig-dev-0.6.0-win64.exe'
+          & $exe /V2 "/DOUTPUTFILE=$old" packaging\legacy-preview-0.5.2.nsi
+          if ($LASTEXITCODE -ne 0) {throw 'Legacy compile failed'}
+          & $exe /V3 "/DOUTPUTFILE=$new" packaging\cartorig-preview.nsi
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path $new)) {throw 'Preview compile failed'}
+          $sha=(Get-FileHash -Algorithm SHA256 $new).Hash.ToLowerInvariant()
+          "$sha  cartorig-dev-0.6.0-win64.exe" | Set-Content -Encoding ascii dist/SHA256SUMS.txt
+          @{version='0.6.0';type='development-only';commit_sha="$env:GITHUB_SHA";sha256=$sha;script='Utility\cartorig-dev.lua'} |
+            ConvertTo-Json | Set-Content -Encoding utf8 dist/manifest.json
+      - name: Validate old-to-new migration, single Utility menu, reinstall, uninstall
+        shell: pwsh
+        run: |
+          $root=Join-Path $env:APPDATA 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts'
+          $comp=Join-Path $root 'Comp\cartorig-dev.lua'
+          $utility=Join-Path $root 'Utility\cartorig-dev.lua'
+          $backup="$comp.migrated-060"
+          $app=Join-Path $env:LOCALAPPDATA 'CartoRig\App'
+          $new=(Resolve-Path dist/cartorig-dev-0.6.0-win64.exe).Path
+          $old=(Resolve-Path fixture/cartorig-dev-0.5.2.exe).Path
+          $uninstall=Join-Path $app 'Uninstall-CartoRig.exe'
+          $module=Join-Path $app 'lua\CartoRig\timeline_service.lua'
+          $ui=Join-Path $app 'lua\cartorig_scene_ui.lua'
+          $foreign=Join-Path $root 'Comp\Other Editor.lua'
+          New-Item -ItemType Directory -Force (Split-Path -Parent $foreign) | Out-Null
+          [IO.File]::WriteAllText($foreign,'Unrelated editor script: leave unchanged')
+          $hash=(Get-FileHash -Algorithm SHA256 $foreign).Hash
+          $p=Start-Process -FilePath $old -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or !(Test-Path $comp)) {throw 'Cannot reproduce historical installation'}
+          for ($i=0; $i -lt 2; $i++) {
+            $p=Start-Process -FilePath $new -ArgumentList '/S' -Wait -PassThru
+            if ($p.ExitCode -ne 0) {throw "Preview install iteration $i failed"}
+            if (!(Test-Path $utility) -or (Test-Path $comp) -or !(Test-Path $backup)) {throw 'Utility migration failed'}
+            if ((Get-FileHash $utility -Algorithm SHA256).Hash -ne (Get-FileHash host/cartorig-dev-launcher.lua -Algorithm SHA256).Hash) {throw 'Launcher hash mismatch'}
+            if (!(Test-Path $module) -or (Get-FileHash $module -Algorithm SHA256).Hash -ne (Get-FileHash src/CartoRig/timeline_service.lua -Algorithm SHA256).Hash) {throw 'TimelineService mismatch'}
+            if (!(Test-Path $ui) -or (Get-FileHash $ui -Algorithm SHA256).Hash -ne (Get-FileHash host/cartorig-dev-scene.lua -Algorithm SHA256).Hash) {throw 'Scene UI mismatch'}
+            $all=@(Get-ChildItem -Path $root -Recurse -File -Filter cartorig-dev.lua)
+            if ($all.Count -ne 1 -or $all[0].FullName -ne $utility) {throw 'Not exactly one Scripts menu entry'}
+            if ((Test-Path "$utility.pending") -or (Test-Path "$utility.backup")) {throw 'Launcher staging residue'}
+            $record=[IO.File]::ReadAllText((Join-Path $app 'install-location.txt'))
+            if (!$record.Contains($utility) -or !$record.Contains('0.6.0')) {throw 'Installation record stale'}
+            if ((Get-FileHash $foreign -Algorithm SHA256).Hash -ne $hash) {throw 'Unrelated script overwritten'}
+          }
+          $p=Start-Process -FilePath $uninstall -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or (Test-Path $utility) -or (Test-Path $backup) -or (Test-Path $module)) {throw 'Upgrade uninstall failed'}
+          $p=Start-Process -FilePath $new -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or !(Test-Path $utility) -or (Test-Path $comp)) {throw 'Clean install failed'}
+          $p=Start-Process -FilePath $uninstall -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0 -or (Test-Path $utility)) {throw 'Clean uninstall failed'}
+          if ((Get-FileHash $foreign -Algorithm SHA256).Hash -ne $hash) {throw 'Foreign script affected'}
+          'PASS: 0.5.2 migration to Utility, repeat install, one menu file, clean install/uninstall, foreign script preserved; Resolve host NOT RUN.' |
+            Set-Content dist/package-validation.txt
+      - name: Include read-only installation diagnostic
+        shell: pwsh
+        run: |
+          Copy-Item support/cartorig-dev-diagnose.ps1,support/verificar-cartorig-dev.cmd,support/README.md -Destination dist
+      - name: Upload verified package only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cartorig-dev-timeline-${{ github.sha }}
+          path: dist/
+          retention-days: 7
+          if-no-files-found: error
