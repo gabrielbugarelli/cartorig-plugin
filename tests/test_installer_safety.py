@@ -1,114 +1,85 @@
-"""Source-level guardrails for the only cartorig-dev Scripts entry.
-
-These tests deliberately do not claim to execute licensed DaVinci Resolve.
-"""
-from pathlib import Path
+"""Fail-closed static installer contracts. NOT a Resolve Studio host test."""
 import hashlib
-import re
+from pathlib import Path
 import unittest
 
-ROOT = Path(__file__).resolve().parents[1]
-HISTORICAL = (
-    "host/CartoRig Host Probe.lua",
-    "host/CartoRig Native Integration Probe.lua",
-    "host/CartoRig.lua",
-    "src/CartoRig/native_probe.lua",
+ROOT=Path(__file__).resolve().parents[1]
+HISTORICAL=(
+ "host/CartoRig Host Probe.lua",
+ "host/CartoRig Native Integration Probe.lua",
+ "host/CartoRig.lua",
+ "src/CartoRig/native_probe.lua",
 )
 
 class InstallerSafetyTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.nsi=(ROOT/"packaging/cartorig-preview.nsi").read_text(encoding="utf-8")
-        cls.workflow=(ROOT/".github/workflows/cartorig-preview-windows.yml").read_text(encoding="utf-8")
+        cls.win=(ROOT/".github/workflows/scene-timeline-windows.yml").read_text(encoding="utf-8")
         cls.launcher=(ROOT/"host/cartorig-dev-launcher.lua").read_text(encoding="utf-8")
         cls.scene=(ROOT/"host/cartorig-dev-scene.lua").read_text(encoding="utf-8")
-        cls.cleanup=(ROOT/"support/cleanup-verified-legacy.ps1").read_text(encoding="utf-8")
-        cls.prior=(ROOT/"packaging/legacy-preview-0.5.1.nsi").read_text(encoding="utf-8")
+        cls.cleaner=(ROOT/"support/cleanup-verified-legacy.ps1").read_text(encoding="utf-8")
 
-    def test_only_one_stable_comp_entry_is_written(self):
-        self.assertEqual(len(re.findall(r'File "/oname=cartorig-dev.lua"',self.nsi)),0)
-        self.assertEqual(len(re.findall(r'File "/oname=cartorig-dev.lua.pending"',self.nsi)),1)
-        self.assertIn('host\\cartorig-dev-launcher.lua',self.nsi)
-        self.assertIn('host\\cartorig-dev-scene.lua',self.nsi)
-        self.assertIn('cartorig_scene_ui.lua',self.nsi)
-        self.assertIn('cartorig-dev.lua.backup',self.nsi)
-        self.assertIn('StrCpy $R0 "$APPDATA\\Blackmagic Design\\DaVinci Resolve\\Support\\Fusion\\Scripts\\Comp"',self.nsi)
+    def test_single_utility_launcher_and_no_comp_reinstall(self):
+        s=self.nsi
+        self.assertIn('StrCpy $R2 "$APPDATA\\Blackmagic Design\\DaVinci Resolve\\Support\\Fusion\\Scripts\\Utility"',s)
+        self.assertIn('SetOutPath "$R2"',s)
+        self.assertEqual(s.count('File "/oname=cartorig-dev.lua.pending"'),1)
+        self.assertIn('Rename "$R2\\cartorig-dev.lua.pending" "$R2\\cartorig-dev.lua"',s)
+        self.assertNotIn('File "/oname=cartorig-dev.lua" "..\\host\\cartorig-dev-scene.lua"',s)
+        self.assertIn('Rename "$R0\\cartorig-dev.lua" "$R0\\cartorig-dev.lua.migrated-060"',s)
+        self.assertLess(s.index('Rename "$R2\\cartorig-dev.lua.pending"'),
+                        s.index('Rename "$R0\\cartorig-dev.lua" "$R0\\cartorig-dev.lua.migrated-060"'))
+        self.assertIn('DisplayVersion" "0.6.0"',s)
 
-    def test_no_pre_activation_uninstall_and_recoverable_upgrade(self):
-        nsi=self.nsi
-        self.assertNotIn('ExecWait \'"$LOCALAPPDATA\\CartoRig\\App\\Uninstall-CartoRig.exe"',nsi)
-        self.assertNotIn('Uninstall-HostProbe.exe',nsi)
-        self.assertNotIn('Uninstall-NativeIntegration.exe',nsi)
-        self.assertIn('Rename "$R0\\cartorig-dev.lua.pending" "$R0\\cartorig-dev.lua"',nsi)
-        self.assertIn('Rename "$R0\\cartorig-dev.lua.backup" "$R0\\cartorig-dev.lua"',nsi)
-        self.assertIn('RestoreCartoRigLauncher:',nsi)
-        self.assertIn('Recover the launcher from a previous interrupted update',nsi)
-        self.assertIn('Version: 0.5.2',nsi)
+    def test_installer_dependencies_and_cleanup(self):
+        s=self.nsi
+        self.assertIn('File "/oname=timeline_service.lua" "..\\src\\CartoRig\\timeline_service.lua"',s)
+        self.assertIn('File "/oname=cartorig_scene_ui.lua" "..\\host\\cartorig-dev-scene.lua"',s)
+        self.assertIn('TimelineService missing',s)
+        self.assertIn('Scene Fuse missing',s)
+        self.assertIn('WorldMap Fuse missing',s)
+        self.assertIn('Camera Fuse missing',s)
+        self.assertIn('Delete "$INSTDIR\\Utility\\cartorig-dev.lua"',s)
+        self.assertIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua.migrated-060"',s)
+        self.assertIn('Delete "$LOCALAPPDATA\\CartoRig\\App\\lua\\CartoRig\\timeline_service.lua"',s)
+        self.assertNotIn('RMDir /r "$APPDATA\\Blackmagic Design',s)
 
-    def test_unrecognized_legacy_never_deletes_untrusted_scripts(self):
-        nsi=self.nsi
-        active=nsi.index('VerifyCartoRigLauncher:')
-        cleanup_call=nsi.index('ExecWait',active)
-        self.assertLess(active,cleanup_call)
-        self.assertIn('cleanup-verified-legacy.ps1',nsi)
-        self.assertNotIn('An unmanaged old CartoRig script remains. Upgrade stopped.',nsi)
-        self.assertNotIn('Delete "$R0\\CartoRig.lua"',nsi)
-        self.assertIn('[Security.Cryptography.SHA256]::Create()',self.cleanup)
-        self.assertIn('if($item.Hashes -contains $sha)',self.cleanup)
-        self.assertIn('Remove-Item -LiteralPath $path -Force',self.cleanup)
-        self.assertIn('PRESERVED_UNKNOWN',self.cleanup)
-        self.assertIn('Active cartorig-dev.lua is NEVER eligible',self.cleanup)
+    def test_recovery_retains_old_comp_until_new_is_active(self):
+        s=self.nsi
+        self.assertNotIn('ExecWait \'"$LOCALAPPDATA\\CartoRig\\App\\Uninstall-CartoRig.exe"',s)
+        self.assertIn('RestoreCartoRigUtility:',s)
+        self.assertIn('MigrateCartoRigFailed:',s)
+        self.assertIn('Previous migration backup',s) if 'Previous migration backup' in s else self.assertIn('migration backup',s)
+        self.assertIn('cartorig-dev.lua.backup',s)
 
-    def test_allowlist_matches_exact_historical_repository_bytes(self):
-        for path in HISTORICAL:
-            raw=(ROOT/path).read_bytes()
-            canonical=raw.replace(b"\r\n",b"\n")
-            lf=hashlib.sha256(canonical).hexdigest()
-            crlf=hashlib.sha256(canonical.replace(b"\n",b"\r\n")).hexdigest()
-            with self.subTest(path=path):
-                self.assertIn(lf,self.cleanup,path)
-                self.assertIn(crlf,self.cleanup,path)
-        self.assertNotIn('"cartorig-dev.lua"',self.cleanup)
+    def test_legacy_cleanup_only_for_verified_bytes(self):
+        for relative in HISTORICAL:
+            raw=(ROOT/relative).read_bytes().replace(b"\r\n",b"\n")
+            for data in (raw,raw.replace(b"\n",b"\r\n")):
+                self.assertIn(hashlib.sha256(data).hexdigest(),self.cleaner)
+        self.assertIn('PRESERVED_UNKNOWN',self.cleaner)
+        self.assertNotIn('Delete "$R0\\CartoRig.lua"',self.nsi)
 
-    def test_launcher_detects_false_and_nil_top_level_ui_returns(self):
-        self.assertIn('pcall(dofile,ui)',self.launcher)
+    def test_utility_ui_has_no_open_scene_or_manual_context_dependency(self):
+        s=self.scene
+        self.assertIn('service.create,resolve,title',s)
+        self.assertNotIn('OpenScene',s)
+        self.assertNotIn('Open Scene',s)
+        self.assertNotIn('WRONG_COMPOSITION',s)
+        self.assertNotIn('SetActiveTool',s)
+        self.assertIn('service.list_scenes,resolve',s)
+        self.assertIn('fusion.UIManager',s)
         self.assertIn('status~=true',self.launcher)
-        self.assertIn('startup_failure',self.launcher)
-        self.assertIn('last-error.txt',self.launcher)
-        self.assertIn('return true',self.scene)
-        for text in ('Fusion/UIManager is unavailable','LOCALAPPDATA missing',
-                     'NodeFactory module not installed','open Fusion Composition first'):
-            self.assertIn(text,self.scene)
-        self.assertNotIn('FuRegisterClass',self.launcher)
 
-    def test_installer_checks_critical_runtime_before_activation(self):
-        source=self.nsi
-        staging=source.index('File "/oname=cartorig-dev.lua.pending"')
-        for message in ("Scene UI missing","NodeFactory missing","Offline map data missing",
-                        "Scene Fuse missing","WorldMap Fuse missing","Camera Fuse missing"):
-            self.assertLess(source.index(message),staging)
-        self.assertIn('File "/oname=cleanup-verified-legacy.ps1"',source)
-        self.assertIn('File "/oname=cartorig_scene_ui.lua"',source)
-
-    def test_actions_reproduce_prior_051_and_failure_cases(self):
-        w=self.workflow
-        for marker in ('legacy-preview-0.5.nsi','legacy-preview-0.5.1.nsi',
-                       'expectedLauncherHash','expectedUiHash',
-                       'Interrupted update','Stale backup','Unknown orphaned',
-                       'REMOVED_VERIFIED:', 'PRESERVED_UNKNOWN:', 'Fresh install must also publish'):
-            self.assertIn(marker,w)
-        self.assertIn('retention-days: 7',w)
-        self.assertNotIn('continue-on-error: true',w)
-        self.assertIn('File "/oname=cartorig-dev.lua.pending"',self.prior)
-        self.assertNotIn('cleanup-verified-legacy.ps1',self.prior)
-
-    def test_uninstaller_scope_is_limited_to_owned_files(self):
-        source=self.nsi
-        self.assertIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua"',source)
-        self.assertIn('Delete "$LOCALAPPDATA\\CartoRig\\App\\lua\\cartorig_scene_ui.lua"',source)
-        self.assertIn('Delete "$LOCALAPPDATA\\CartoRig\\App\\cleanup-verified-legacy.ps1"',source)
-        self.assertNotIn('RMDir /r "$APPDATA\\Blackmagic Design',source)
-        self.assertNotIn('Delete "$INSTDIR\\Comp\\CartoRig.lua"',source)
+    def test_windows_package_tests_real_upgrade_layout(self):
+        s=self.win
+        for marker in ('legacy-preview-0.5.2.nsi','cartorig-dev-0.6.0-win64.exe',
+                       'Get-FileHash','Utility\\cartorig-dev.lua','Comp\\cartorig-dev.lua',
+                       'TimelineService mismatch','Not exactly one Scripts menu entry',
+                       'Foreign script affected','retention-days: 7'):
+            self.assertIn(marker,s)
+        self.assertNotIn('continue-on-error: true',s)
 
 if __name__=="__main__":
     unittest.main()

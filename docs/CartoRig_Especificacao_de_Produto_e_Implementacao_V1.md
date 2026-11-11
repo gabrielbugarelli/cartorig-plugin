@@ -24,7 +24,7 @@ O resultado é uma composição nativa, conectável ao `MediaOut`, com transpar�
 | `PRD-02` | Cada objeto autoral existe como **um node real, visível, nomeado, selecionável e independente** no Node Editor do Fusion. |
 | `PRD-03` | O usuário seleciona o node **diretamente no Node Editor** para exibir suas áreas **Control** e **Motion** no Inspector. Não precisa abrir Scene para editar. |
 | `PRD-04` | **Control** contém as propriedades granulares do node; **Motion** aplica, atualiza e remove animações predefinidas; **Spline/Keyframes** do Fusion permitem refinamento temporal. |
-| `PRD-05` | Scene cria e conecta automaticamente os nodes autorais ao pipeline de composição, sem wiring cartográfico manual. |
+| `PRD-05` | Cada `Create Scene` insere automaticamente uma Fusion Composition independente na timeline e cria/conecta seus nodes ao MediaOut, sem preparação nem conexões manuais. |
 | `PRD-06` | A câmera cartográfica é única por cena e transforma todos os objetos geoancorados de forma coerente em qualquer frame. |
 | `PRD-07` | Uma alteração em um node não modifica outro node indevidamente; estilos, identidade, parâmetros e animações são independentes. |
 | `PRD-08` | Nenhum objeto autoral ganha rota, rótulo, marcador, destaque ou animação editorial sem comando explícito. |
@@ -41,7 +41,7 @@ O resultado é uma composição nativa, conectável ao `MediaOut`, com transpar�
 
 ### 1.4. Limites do produto
 
-A V1 é um compositor cartográfico 2D, não um sistema GIS cadastral, calculador de rotas por rodovias, geocodificador de endereços, cliente obrigatório de mapas online, editor de vídeo paralelo ou clone de outros plugins. A página Edit pode reproduzir a composição, mas não hospeda a interface de criação. O CartoRig não recria a timeline, o Spline ou os Keyframes do Fusion.
+A V1 é um compositor cartográfico 2D, não um sistema GIS cadastral, calculador de rotas por rodovias, geocodificador de endereços, cliente obrigatório de mapas online, editor de vídeo paralelo ou clone de outros plugins. A entrada CartoRig está disponível em Workspace → Scripts em todas as páginas do Resolve. A página Edit contém os clipes Fusion Composition criados automaticamente pelo CartoRig; a seleção e a edição de nodes continuam na página Fusion. O CartoRig não recria a timeline, o Spline ou os Keyframes do Fusion.
 
 ## 2. Superfícies de interação e divisão de responsabilidades
 
@@ -121,7 +121,7 @@ O nome visível padrão é `CR_<Type>_<ReadableName>_<NNN>` para objetos múltip
 
 ### 3.4. Topologia de composição
 
-A criação inicial fornece um pipeline válido que contém `CR_WorldMap_Main`, `CR_Camera_Main` e `CR_Scene_Main`, com uma saída conectável ao `MediaOut`. Adicionar objetos cria nodes vinculados funcionalmente ao mesmo sistema de câmera e renderização. O usuário não conecta geometrias, transformações ou `Merge` manualmente.
+Cada cena é criada em um clipe Fusion Composition próprio, com pipeline válido de `CR_WorldMap_Main`, `CR_Camera_Main` e `CR_Scene_Main` conectado ao MediaOut efetivo da composição. A saída padrão disponível deve ser reutilizada; não se exige conexão manual nem se duplica MediaOut por falha de inspeção. Adicionar objetos cria nodes vinculados funcionalmente ao mesmo sistema de câmera e renderização. O usuário não conecta geometrias, transformações ou `Merge` manualmente.
 
 ```text
 [CR_WorldMap_Main]  ----------------------\
@@ -144,21 +144,22 @@ A ordem inicial das camadas, do fundo para a frente, é: `WorldMap → Continent
 
 ### 4.1. Abertura, contexto e ciclo de vida de cenas
 
-A entrada do plugin aparece como **CartoRig** no fluxo Fusion e abre a janela UI Manager **Scene**. A janela é flutuante ou usa outro posicionamento efetivamente suportado; não se exige docking não fornecido pelo host. A janela identifica a composição Fusion ativa e carrega seu catálogo de objetos persistidos. Nenhuma operação pode modificar uma composição diferente daquela exibida como contexto ativo.
+A janela UI Manager **Scene** pode ser aberta pela entrada única **CartoRig** em Workspace → Scripts, de qualquer página do Resolve; a versão de desenvolvimento usa o nome **cartorig-dev**. Não se exige uma Fusion Composition previamente criada, a abertura manual da página Fusion nem a preparação de nodes ou da saída.
+
+**Cada Scene corresponde exatamente a uma Fusion Composition independente na timeline.** Todo clique em `Create Scene` cria um novo clipe Fusion Composition, cria os três nodes estruturais reais com UUIDs próprios, conecta automaticamente o MediaOut desse clipe e disponibiliza o resultado na timeline. Os clipes existentes não podem ser sobrescritos, deslocados ou removidos silenciosamente. Quando não existir timeline, o plugin usa a API do Resolve para criar/ativar uma; se a API recusar, informa erro explícito e não declara criação bem-sucedida.
 
 | Comando | Entrada | Resultado obrigatório |
 |---|---|---|
-| `Create Scene` | Composição atual sem Scene CartoRig | Cria Scene, WorldMap e Camera como nodes separados; estabelece saída funcional e mapa neutro; não cria objetos editoriais ou keyframes |
-| `Open Scene` | Composição já contendo CartoRig | Reconstrói a lista CRUD a partir dos dados persistidos; não duplica nem altera nodes |
-| `Rename Scene` | Título novo | Atualiza título/identidade visual, preservando UUID e composição |
-| `Duplicate Scene` | Composição de destino separada/instância nova | Duplica os nodes CartoRig para uma cena independente, remapeando todos os UUIDs e relações internas; não duplica nodes livres |
-| `Delete Scene` | Confirmação de exclusão | Remove exclusivamente a cena e seus nodes gerenciados quando todas as conexões externas podem ser preservadas com segurança; caso contrário, bloqueia até resolução explícita |
-| `Create Scene` repetido | Composição já contendo cena | Não cria uma segunda estrutura: informa existência da cena e disponibiliza `Open Scene` |
+| `Create Scene` | Projeto Resolve ativo, com ou sem Fusion Composition anterior | Nova Fusion Composition na timeline, Scene/WorldMap/Camera e saída conectada; nenhum wiring manual |
+| `Create Scene` repetido | Uma ou várias cenas existentes | Cada clique cria outra composição independente, IDs próprios e nenhuma alteração nas cenas anteriores; cinco cliques produzem cinco composições distintas |
+| Reabrir cena existente | Selecionar seu clipe na timeline e abrir CartoRig | Lista estrutural reconstruída automaticamente dos dados persistidos; sem botão `Open Scene` |
+| `Rename Scene` | Novo título | Atualiza o título sem trocar UUID ou composição |
+| `Duplicate Scene` | Nova composição de destino | Copia nodes gerenciados para um clipe independente, remapeando UUIDs e referências |
+| `Delete Scene` | Cena identificada e confirmação | Remove somente clipe e nodes gerenciados, após validar referências e proteção de material externo |
 
-**Cardinalidade:** uma cena CartoRig gerenciada por composição Fusion na V1. A cópia independente é colocada em outra composição compatível, sem coexistir como segunda raiz na mesma composição. Duplicação de uma composição pelo próprio Fusion deve resultar em estado independente quando aberta no CartoRig, com IDs remapeados com segurança.
+**Cardinalidade:** uma única Scene por Fusion Composition, múltiplas composições por timeline e projeto. `Create Scene` nunca reutiliza a composição atual como destino de uma nova cena. **O botão `Open Scene` não existe.**
 
-A lista de objetos serve para operações estruturais; não há comando `Edit in Inspector` nem seleção automática de nodes. Se a janela permanecer aberta quando a composição ativa mudar, suas ações são bloqueadas até a associação ao contexto correto estar confirmada. Salvar ou renderizar nunca depende dessa janela aberta.
-
+A lista Scene serve apenas a operações estruturais e nunca muda a seleção dos nodes ou o Inspector. O usuário seleciona o node diretamente no Fusion. O salvamento e a renderização independem da janela aberta. Se a inserção ou inicialização falhar, o sistema tenta reverter apenas o clipe e nodes recém-criados, sem apagar materiais anteriores, e relata qualquer recurso não revertido.
 ### 4.2. Busca geográfica offline
 
 O campo `Search location` utiliza um índice instalado localmente e apresenta resultados tipados. A interface aceita nomes com e sem acento, variações de caixa e aliases reconhecidos (`Brasil/Brazil`, `Sao Paulo/São Paulo`). O filtro `Geographic type` permite `All`, `Continent`, `Country`, `State/Province` e `City`; filtro e pesquisa podem ser combinados.
@@ -617,11 +618,11 @@ A tecnologia concreta pode combinar Lua/Python integrado ao ambiente suportado, 
 | Componente | Entrada | Responsabilidade | Saída garantida |
 |---|---|---|---|
 | `SceneUI` | Eventos de criação e CRUD | Exibir janela UI Manager, filtrar catálogo, validar comandos estruturais | Comando de domínio; não edita estilo ou animação |
-| `SceneService` | Comando + composição ativa + IDs | Executar transações, vínculo, remoção e ordem visual | Estado consistente ou rollback |
+| `SceneService` | Comando + projeto/timeline + IDs | Criar nova Fusion Composition por cena e executar operações estruturais de forma transacional | Composição e estado isolados ou rollback seguro |
 | `GeoCatalog` | Query, tipo, hierarquia | Consultar índice Natural Earth offline | Localizações tipadas, dados de geometria e aliases |
 | `GeoEngine` | Feições, âncoras, câmera | Projeção, caminho, clipping, regiões e integridade cartográfica | Primitivas de render no frame solicitado |
 | `NodeFactory` | Tipo, UUID, campos e relações | Criar/configurar nodes físicos do Fusion e seus controles | Node selecionável, integrado e persistente |
-| `FusionAdapter` | Composição, ferramentas e canais | Interagir com Node Editor, Inspector, Undo, Viewer, Spline e MediaOut | Operações no contexto correto, sem alterar nodes externos |
+| `FusionAdapter` | Resolve Project/Timeline/TimelineItem e composição Fusion | Inserir clipe pela API do Resolve, operar nodes/Inspector/Undo/Viewer/Spline e conectar MediaOut | Uma composição física por Scene, sem alterar recursos externos |
 | `MapRenderer` | Estado autoral + dados + tempo + tamanho | Renderizar WorldMap e objetos com efeitos/alpha | Frame RGBA determinístico |
 | `MotionEngine` | Preset, playhead, FPS, canais | Aplicar/atualizar/remover canais temporais nativos | Animação editável e recuperável |
 | `StateStore` | IDs, relações, parâmetros e versão | Persistência e migração de cena/objetos | Save/reopen sem janela Scene |
@@ -826,7 +827,7 @@ Um teste só passa quando confirma **o resultado e a persistência correspondent
 
 | ID | Preparação e ação | Resultado esperado |
 |---|---|---|
-| **A01** | Abrir composição Fusion sem CartoRig; Scene → `Create Scene` | Nodes reais `CR_Scene_Main`, `CR_WorldMap_Main`, `CR_Camera_Main` aparecem, conectados funcionalmente; Viewer/MediaOut exibem mapa neutro; nenhum keyframe ou destaque editorial automático |
+| **A01** | Abrir projeto Resolve sem criar Fusion Composition manualmente; executar Scene → `Create Scene` cinco vezes | Cinco clipes Fusion Composition independentes na timeline; cada um contém Scene, WorldMap e Camera físicos e UUIDs próprios, todos conectados ao MediaOut sem wiring manual; Viewer mostra mapa neutro |
 | **A02** | Scene → pesquisar e adicionar `Brazil`, `Argentina`, `Mato Grosso` | Três nodes geográficos independentes, visíveis no grafo; país/estado corretos; IDs únicos e render coerente |
 | **A03** | Em Scene, marcar linha do Brasil somente como alvo de `Rename` | O Inspector não muda, o node não é selecionado para edição no Fusion; a linha serve apenas para CRUD |
 | **A04** | Fechar Scene; clicar diretamente em `CR_Country_Brazil_001` no Node Editor | Inspector exibe Control e Motion do Brasil; mudar Fill altera só esse node, sem abrir Scene |
@@ -844,8 +845,8 @@ Um teste só passa quando confirma **o resultado e a persistência correspondent
 | **A16** | Com internet bloqueada, buscar `Brasil`, `São Paulo`, `Sao Paulo`, `Rio de Janeiro`, `Georgia` | Busca por aliases e desambiguação conforme dados instalados; nenhuma dependência de internet/conta/terminal |
 | **A17** | Sobrepor WorldMap com fundo transparente, Regions e Route sobre MediaIn em HD/QHD/4K | Alpha, composição de cor, efeitos e geometria correspondem no Viewer e Deliver; não há opacidade de fundo inesperada |
 | **A18** | Misturar nodes CartoRig e nodes livres; executar CRUD, reorder e delete seguros | Nodes externos preservados; operações não reconectam/deletam recursos de terceiros sem autorização |
-| **A19** | Trocar composição ativa, reabrir Scene e criar objeto na segunda composição | Cada comando atua somente na cena correta; não cria nodes órfãos nem edita composição anterior |
-| **A20** | Executar instalação limpa no Windows com Studio 20, abrir Scene e criar/renderizar mapa | Produto instalável e utilizável por GUI, sem Python manual, SDK, CMake, terminal ou rede |
+| **A19** | Selecionar outra Fusion Composition CartoRig na timeline e abrir Scene | A lista da cena selecionada carrega automaticamente; nenhuma operação altera outra composição; não existe comando `Open Scene` |
+| **A20** | Instalar no Windows Studio 20; abrir CartoRig na página Edit sem comp preparada; Create Scene e renderizar | Entrada Utility única; o clipe Fusion Composition, os nodes e o MediaOut são criados/conectados automaticamente, sem Python, SDK, terminal ou rede |
 
 ### 14.3. Testes complementares obrigatórios — B01 a B20
 
@@ -942,7 +943,7 @@ O **código próprio do CartoRig** será disponibilizado sob licença **MIT**, c
 
 ### 16.4. Fluxos que a documentação do usuário deve ensinar
 
-O guia deve explicar concretamente `Open Scene → Create Scene → Add Country Brazil → Close Scene → Click CR_Country_Brazil in Node Editor → Control → Fill Color`, e `Scene → Add Brazil/Argentina → Add Route from existing nodes → Choose Anchors → Close Scene → Select Route → Control → Motion Draw Path → Fusion Spline → Deliver`.
+O guia deve explicar concretamente `Workspace → Scripts → CartoRig → Create Scene (insere Fusion Composition e conecta MediaOut) → Add Country Brazil → Close Scene → Click CR_Country_Brazil in Node Editor → Control → Fill Color`, e `Scene → Add Brazil/Argentina → Add Route from existing nodes → Choose Anchors → Close Scene → Select Route → Control → Motion Draw Path → Fusion Spline → Deliver`.
 
 A documentação também deve explicar como enquadrar a Camera, congelar uma âncora quando o node de referência é removido, identificar limites dos dados geográficos, resetar propriedade, remover preset personalizado, duplicar composição, usar alpha e restaurar um projeto que aponte para dataset ausente.
 

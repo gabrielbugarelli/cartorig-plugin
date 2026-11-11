@@ -1,40 +1,37 @@
-# cartorig-dev 0.5.2 — Windows development preview
+# cartorig-dev 0.6.0 — Editor installation and Scene workflow
 
-**This is an engineering preview, not the CartoRig V1 stable release.** The installer places exactly one new Fusion Scripts entry: `Workspace → Scripts → Comp → cartorig-dev`. Existing, unidentified third-party scripts are never deleted.
+**Windows · DaVinci Resolve Studio 20 · development build, not V1 release.**
 
-## Installation or repair
+The only scripts entry is **Workspace → Scripts → cartorig-dev**. It is installed in the **Utility** scope so it can open from any Resolve page. No additional technical diagnostics are installed in the Scripts menu.
 
-1. Close DaVinci Resolve Studio 20 completely.
-2. Download the artifact ZIP from the **successful** GitHub Actions run named **cartorig-dev Windows**, associated with the exact intended commit. Extract the ZIP.
-3. Double-click `cartorig-dev-0.5.2-win64.exe` from the same Windows account that normally opens Resolve. The installer needs no system Python, external datasets, compiler, SDK or third-party services.
-4. Restart DaVinci Resolve Studio 20, go to the Fusion page with a Fusion Composition open, then choose **Workspace → Scripts → Comp → cartorig-dev**.
+## Install / upgrade
 
-### What this version changes
+1. Close DaVinci Resolve.
+2. From the **cartorig-dev Scene Timeline Windows** GitHub Actions run for the chosen commit, download the successful artifact named `cartorig-dev-timeline-<commit>`.
+3. Extract the ZIP and double-click **`cartorig-dev-0.6.0-win64.exe`**. No additional dependencies, Python, SDK, manual data install or commands are required.
+4. Restart Resolve and open an existing test project. **Do not manually add Fusion Composition to the timeline.**
+5. Open **Workspace → Scripts → cartorig-dev** on the Edit page. The Scene window will appear without an active Fusion Composition.
 
-- The `cartorig-dev.lua` launcher has a permanent per-user path: `%APPDATA%\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\cartorig-dev.lua`.
-- The installer recovers a launcher left in `.backup` after an interrupted update, clears an obsolete `.pending` file, stages the new launcher before promoting it, and tries to restore the previous launcher on activation failure. It does **not** execute a previous CartoRig developer uninstaller before updating.
-- The UI is a separate file, `%LOCALAPPDATA%\CartoRig\App\lua\cartorig_scene_ui.lua`, while the single menu launcher is a short script. Top-level early exits due to missing Fusion APIs or modules now explicitly report failure rather than silently terminating.
-- Previous diagnostic files (`CartoRig Host Probe.lua`, `CartoRig Native Integration Probe.lua`, `CartoRig.lua`, `CartoRigProbe\native_probe.lua`) are deleted **only when their entire SHA-256 matches a known, pinned historical source** (LF or CRLF). Unknown or modified files are preserved; their existence does not block installing `cartorig-dev`.
-- A Windows cleanup report is written to `%LOCALAPPDATA%\CartoRig\App\legacy-cleanup.txt`; `install-location.txt` records the actual launcher and UI paths.
-- The user-facing menu name remains exactly **cartorig-dev**. No extra diagnostic script appears in Resolve.
+Upgrading from 0.5.2 installs the new Utility launcher before retiring the previous Comp launcher. The older file is retained as a non-script backup at `Comp\cartorig-dev.lua.migrated-060` until the next uninstall. After installation, exactly one active `cartorig-dev.lua` should exist under `Scripts\Utility`.
 
-## First test in the editor
+## First Studio 20 acceptance exercise
 
-1. Open a disposable project with a Fusion Composition and choose `Workspace → Scripts → Comp → cartorig-dev`.
-2. Confirm the Scene UI opens. Click **Create Scene**, then inspect the physical Scene, WorldMap and Camera nodes in the Node Editor.
-3. Choose WorldMap or Camera directly in the Node Editor and check the Inspector and Viewer.
-4. Save/close/reopen the disposable project and choose **Open Scene**. Share the TXT from **Save Report** and any Fusion errors.
+1. Use a **disposable project/timeline**.
+2. Click **Create Scene** five times in the same CartoRig window, changing the title if desired.
+3. The expected result is **five distinct Fusion Composition clips on the timeline**, each with its own UUID and real nodes `CR_WorldMap_Main`, `CR_Camera_Main`, `CR_Scene_Main`, automatically connected to **that composition's MediaOut**. You should not need to add any clip or manually connect any output.
+4. Close the window and select a CartoRig clip, then inspect the Fusion Node Editor. In WorldMap, adjust Land Fill Color and verify the Viewer/MediaOut output. Change the Camera's center and zoom directly in its Inspector.
+5. Save, close and reopen the project. Verify that the five clips still exist, remain independent and render. Opening cartorig-dev again must show the scene list automatically; there is **no Open Scene button**.
+6. Test while keeping unrelated editorial clips in the timeline. The CartoRig insertion must append safely and **must not overwrite or move** existing clips.
+7. Use **Save Report** and send the TXT from `%TEMP%` with screenshots if errors occur.
 
-If the menu entry is still missing, execute **`verificar-cartorig-dev.cmd`** from the diagnostic files bundled in the same Actions artifact. Run it in the **same Windows account** as Resolve, not as a different administrator. It will write `%TEMP%\cartorig-dev-install-check.txt`. Send that file for inspection. It only reads directories and does not touch any Resolve project.
+If Resolve refuses to create the first empty timeline, refuses to seek safely to the append boundary, cannot return the inserted Fusion Composition or rejects the default MediaOut connection, **the command fails explicitly**. These exact host capabilities have not yet been verified with this new workflow. Do not edit your main project to experiment.
 
-If the entry is listed but does not open, send `%LOCALAPPDATA%\CartoRig\App\last-error.txt` and `install-location.txt`. The launcher now reports both Lua exceptions and early `return` failures.
+## Support and uninstall
 
-## Automated checks and limits
+The ZIP includes a read-only **`verificar-cartorig-dev.cmd`** diagnostic. Running it creates a report in `%TEMP%` without modifying project files. If the menu entry is present but the UI does not open, inspect `%LOCALAPPDATA%\CartoRig\App\last-error.txt`.
 
-GitHub Actions uses standard **free Windows runners** and only free build-time tools. It tests package compilation, SHA-256 file integrity, migration from prior versions 0.1–0.5.1, interrupted update recovery, stale backups, complete legacy source-only cleanup, preservation of unknown scripts, clean installation, repeated updates and uninstallation. Lua and Python tests cover launcher status reporting and installer source invariants.
+Windows Installed Apps → **cartorig-dev (Development Preview)** → Uninstall. It removes only the managed scripts, Fuses, assets and their temporary staging files, not Resolve projects or unrelated scripts.
 
-These checks **do not prove** enumeration in the Resolve Studio 20 Scripts menu or native Fuse rendering; those require an editor's host run. The 40 mandatory A01–A20/B01–B20 V1 acceptance cases remain NOT RUN. No release can be approved.
+## Verification limits
 
-## Uninstallation
-
-Windows → Installed Apps → **cartorig-dev (Development Preview)** → Uninstall. It removes its dedicated launcher, UI, Fuses and bundled data, never shared Resolve script directories, other scripts or editing projects. Unknown legacy files preserved during installation remain available and are reported rather than silently removed.
+GitHub Actions tests Lua/Python logic, five-composition lifecycle through explicitly marked mocks, Windows installation/upgrade/uninstall and source integrity on **free public standard runners**. The runner cannot validate UI menu enumeration, timeline insertion or the Fuses in an actual licensed Resolve Studio 20. Full A01–A20/B01–B20 acceptance remains **40 NOT RUN** until host test evidence is reviewed.

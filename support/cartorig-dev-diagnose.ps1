@@ -47,11 +47,13 @@ $files=@(
   (Status "LEGACY_HOST_PROBE" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\CartoRig Host Probe.lua')),
   (Status "LEGACY_NATIVE_PROBE" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\CartoRig Native Integration Probe.lua')),
   (Status "LEGACY_NATIVE_LIBRARY" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\CartoRigProbe\native_probe.lua')),
-  (Status "LAUNCHER_PENDING" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\cartorig-dev.lua.pending')),
-  (Status "LAUNCHER_BACKUP" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\cartorig-dev.lua.backup'))
+  (Status "LAUNCHER_PENDING" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\cartorig-dev.lua.pending')),
+  (Status "LAUNCHER_COMP_PENDING" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\cartorig-dev.lua.pending')),
+  (Status "LAUNCHER_BACKUP" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\cartorig-dev.lua.backup')),
+  (Status "LAUNCHER_COMP_BACKUP" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\cartorig-dev.lua.backup'))
 )
-$primary=$files[0].Present;$ui=$files[4].Present
-$other=$files[1].Present -or $files[2].Present -or $files[3].Present
+$primary=$files[1].Present;$ui=$files[4].Present
+$other=$files[0].Present -or $files[2].Present -or $files[3].Present
 $classification="FILES_PRESENT_MENU_VISIBILITY_NOT_VERIFIED"
 if(!$primary){
   $classification=if($other){"OTHER_DEFAULT_SCRIPTS_LOCATION"}else{"SCRIPT_MISSING_IN_DEFAULT_DIRECTORIES"}

@@ -2,13 +2,13 @@
 
 **Estado de partida:** nenhum teste de host executado. `NOT RUN` não é aprovado.
 
-Fonte normativa: `docs/CartoRig_Especificacao_de_Produto_e_Implementacao_V1.md` (SHA-256 `af25a7816b0d4cb616f81d30f1c2c77b4c663f783c9f8dc41d96e0b2936427c9`).
+Fonte normativa: `docs/CartoRig_Especificacao_de_Produto_e_Implementacao_V1.md` (SHA-256 `aa8fc5b394da22f4c78cfdb65a3f5c3cc27958271250c2d2f7b2d63c410b4e5e`).
 
 Critério `DONE`: node real, UI na superfície contratada, render e persistência, segurança de dependências, teste no host real e evidência aprovada pelo GitHub Actions **do mesmo commit/build**.
 
 | Teste | Marco | Ação normativa | Resultado normativo | Implementação | Teste executável | Evidência Actions | Commit / PR | Status |
 |---|---|---|---|---|---|---|---|---|
-| A01 | A | Abrir composição Fusion sem CartoRig; Scene → `Create Scene` | Nodes reais `CR_Scene_Main`, `CR_WorldMap_Main`, `CR_Camera_Main` aparecem, conectados funcionalmente; Viewer/MediaOut exibem mapa neutro; nenhum keyframe ou destaque editorial automático | PENDING | PENDING | PENDING | PENDING | NOT RUN |
+| A01 | A | Abrir CartoRig sem composição preparada; Create Scene 5 vezes | Cinco Fusion Compositions próprias com UUIDs independentes e pipeline WorldMap→Camera→Scene→MediaOut funcional, sem wiring manual | PENDING | PENDING | PENDING | PENDING | NOT RUN |
 | A02 | A | Scene → pesquisar e adicionar `Brazil`, `Argentina`, `Mato Grosso` | Três nodes geográficos independentes, visíveis no grafo; país/estado corretos; IDs únicos e render coerente | PENDING | PENDING | PENDING | PENDING | NOT RUN |
 | A03 | A | Em Scene, marcar linha do Brasil somente como alvo de `Rename` | O Inspector não muda, o node não é selecionado para edição no Fusion; a linha serve apenas para CRUD | PENDING | PENDING | PENDING | PENDING | NOT RUN |
 | A04 | A | Fechar Scene; clicar diretamente em `CR_Country_Brazil_001` no Node Editor | Inspector exibe Control e Motion do Brasil; mudar Fill altera só esse node, sem abrir Scene | PENDING | PENDING | PENDING | PENDING | NOT RUN |
@@ -26,8 +26,8 @@ Critério `DONE`: node real, UI na superfície contratada, render e persistênci
 | A16 | A | Com internet bloqueada, buscar `Brasil`, `São Paulo`, `Sao Paulo`, `Rio de Janeiro`, `Georgia` | Busca por aliases e desambiguação conforme dados instalados; nenhuma dependência de internet/conta/terminal | PENDING | PENDING | PENDING | PENDING | NOT RUN |
 | A17 | C | Sobrepor WorldMap com fundo transparente, Regions e Route sobre MediaIn em HD/QHD/4K | Alpha, composição de cor, efeitos e geometria correspondem no Viewer e Deliver; não há opacidade de fundo inesperada | PENDING | PENDING | PENDING | PENDING | NOT RUN |
 | A18 | B | Misturar nodes CartoRig e nodes livres; executar CRUD, reorder e delete seguros | Nodes externos preservados; operações não reconectam/deletam recursos de terceiros sem autorização | PENDING | PENDING | PENDING | PENDING | NOT RUN |
-| A19 | A | Trocar composição ativa, reabrir Scene e criar objeto na segunda composição | Cada comando atua somente na cena correta; não cria nodes órfãos nem edita composição anterior | PENDING | PENDING | PENDING | PENDING | NOT RUN |
-| A20 | D | Executar instalação limpa no Windows com Studio 20, abrir Scene e criar/renderizar mapa | Produto instalável e utilizável por GUI, sem Python manual, SDK, CMake, terminal ou rede | PENDING | PENDING | PENDING | PENDING | NOT RUN |
+| A19 | A | Selecionar outra Scene/clip na timeline; abrir Scene sem botão Open Scene | Lista e operações estruturais correspondem somente à Scene selecionada; nenhuma composição externa é alterada | PENDING | PENDING | PENDING | PENDING | NOT RUN |
+| A20 | D | Abrir cartorig-dev na Edit page sem Fusion Composition anterior; criar Scene/render | Produto instalável e utilizável por GUI, sem Python manual, SDK, CMake, terminal ou rede | PENDING | PENDING | PENDING | PENDING | NOT RUN |
 | B01 | A | Criar duas instâncias de `Country Brazil` na mesma cena | Dois nodes com UUIDs, nomeações, estilos e animações independentes | PENDING | PENDING | PENDING | PENDING | NOT RUN |
 | B02 | A | Fechar Scene, alternar seleção direta entre Country, Route e Camera no Node Editor | Inspector contextual muda para o tipo correto; nenhum parâmetro de outro node fica acessível por engano | PENDING | PENDING | PENDING | PENDING | NOT RUN |
 | B03 | A | Em Scene, selecionar linha para `Duplicate`, `Delete` ou `Reorder` sem executar a ação | Não dispara seleção no Node Editor, nem abre Control/Motion; apenas identifica alvo CRUD | PENDING | PENDING | PENDING | PENDING | NOT RUN |

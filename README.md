@@ -12,7 +12,7 @@ The nine required physical authoring nodes are Scene, WorldMap, Camera, Continen
 
 ## Current implementation state
 
-This branch now includes the **first functional implementation candidate for Scene, WorldMap and Camera**, as three separately registered physical Fusion Fuses. The single `cartorig-dev` UIManager window exposes Create Scene/Open Scene, and NodeFactory adds the three nodes with distinct UUID metadata, connects WorldMap → Camera → Scene → an available MediaOut, and attempts rollback on partial failure. WorldMap paints authentic locally bundled Natural Earth **1:50m Land** geometry with editable Land/Ocean appearance; Camera exposes Center Latitude/Longitude, Zoom and Bearing in its own native Inspector. These are coded and verified in non-host tests, **not yet validated in Resolve Studio 20**. Missing in this partial milestone: borders, Natural Earth Admin 0/Admin 1 and place search datasets, Country/State author nodes, complete Motion, full render/persistence/Inspector validation. The 40 A/B cases remain NOT RUN, and the stable release gate stays closed. Future versions continue updating the same single `Workspace → Scripts → Comp → cartorig-dev` entry.
+This branch now includes the **first functional implementation candidate for Scene, WorldMap and Camera**, as three separately registered physical Fusion Fuses. The single `cartorig-dev` Utility script opens Scene from any Resolve page, without an existing Fusion Composition. Every Create Scene uses the Resolve Timeline API to insert a fresh Fusion Composition clip with independent UUIDs and WorldMap → Camera → Scene → the actual MediaOut; it attempts to preserve all previous timeline clips and roll back failed insertions. Scene automatically lists CartoRig clips and has no Open Scene button. WorldMap paints authentic locally bundled Natural Earth **1:50m Land** geometry with editable Land/Ocean appearance; Camera exposes Center Latitude/Longitude, Zoom and Bearing in its own native Inspector. These are coded and verified in non-host tests, **not yet validated in Resolve Studio 20**. Missing in this partial milestone: borders, Natural Earth Admin 0/Admin 1 and place search datasets, Country/State author nodes, complete Motion, full render/persistence/Inspector validation. The 40 A/B cases remain NOT RUN, and the stable release gate stays closed. Future versions continue updating the same single `Workspace → Scripts → cartorig-dev` Utility entry.
 
 - [Single-entry cartorig-dev Windows preview, upgrade and editor test](docs/CARTORIG_PREVIEW_TEST.md)
 - [Engineering plan](docs/IMPLEMENTATION_PLAN.md)
@@ -23,7 +23,7 @@ This branch now includes the **first functional implementation candidate for Sce
 
 ## Required end-user workflow (upon implementation)
 
-1. Open Fusion, launch **CartoRig → Scene → Create Scene**.
+1. From Resolve Edit or Fusion, use **Workspace → Scripts → cartorig-dev → Create Scene**. CartoRig inserts a Fusion Composition clip automatically and connects the output.
 2. In Scene, add Country **Brazil** (and other geographic objects). Close Scene.
 3. Click `CR_Country_Brazil_001` directly in Fusion's Node Editor.
 4. Edit **Control → Fill Color** for only that Country.

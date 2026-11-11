@@ -36,6 +36,10 @@ class LuaRuntimeIntegration(unittest.TestCase):
     def test_factory_transactions_and_external_node_protection(self):
         self.invoke("tests/lua/test_node_factory.lua")
 
+    def test_timeline_scene_lifecycle_and_non_destructive_append(self):
+        # Resolve API mocked; does not count as Studio 20 acceptance.
+        self.invoke("tests/lua/test_timeline_service.lua")
+
     def test_pinned_natural_earth_real_world_data(self):
         self.invoke("tests/lua/test_land_source.lua")
 
