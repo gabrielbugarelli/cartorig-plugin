@@ -1,4 +1,4 @@
-# cartorig-dev 0.6.2 — Editor installation and Scene workflow
+# cartorig-dev 0.6.3 — Editor installation and Scene workflow
 
 **Windows · DaVinci Resolve Studio 20 · development build, not V1 release.**
 
@@ -8,7 +8,7 @@ The only scripts entry is **Workspace → Scripts → cartorig-dev**. It is inst
 
 1. Close DaVinci Resolve.
 2. From the **cartorig-dev Scene Timeline Windows** GitHub Actions run for the chosen commit, download the successful artifact named `cartorig-dev-timeline-<commit>`.
-3. Extract the ZIP and double-click **`cartorig-dev-0.6.2-win64.exe`**. No additional dependencies, Python, SDK, manual data install or commands are required.
+3. Extract the ZIP and double-click **`cartorig-dev-0.6.3-win64.exe`**. No additional dependencies, Python, SDK, manual data install or commands are required.
 4. Restart Resolve and open an existing test project. **Do not manually add Fusion Composition to the timeline.**
 5. Open **Workspace → Scripts → cartorig-dev** on the Edit page. The Scene window will appear without an active Fusion Composition.
 
@@ -28,7 +28,7 @@ If Resolve refuses to create the first empty timeline, refuses to seek safely to
 
 ## Verify the Resolve API context fix
 
-Version 0.6.2 validates every API receiver before accessing methods, and it rejects a numerical global `resolve`. When the host supplies a numerical global, the launcher reacquires a valid Resolve API object with `bmd.scriptapp("Resolve")`. If neither exposes `GetProjectManager`, the command reports the actual value types without crashing.
+Version 0.6.3 validates every API receiver before accessing methods, and it rejects a numerical global `resolve`. When the host supplies a numerical global, the launcher reacquires a valid Resolve API object with `bmd.scriptapp("Resolve")`. If neither exposes `GetProjectManager`, the command reports the actual value types without crashing.
 
 The regression suite tests numeric and malformed API handles, real C-proxy lookup exceptions, initialization without a project, nil video-track lists, and five independent Scene creations. These Lua/Python tests are **not** a substitute for running Resolve Studio 20 itself.
 
@@ -36,9 +36,32 @@ If `Create Scene` is blocked, use **Save Report** and send the generated TXT. It
 
 ## Resolve TimelineItem position compatibility
 
-Version 0.6.2 calls `TimelineItem.GetStart(false)` and `GetEnd(false)` explicitly. The Resolve scripting API documents the `subframe_precision` argument; the 0.6.1 implementation omitted it and could receive non-numeric/nil positions in the Lua binding, causing `TRACK_POSITION_INVALID` before scene insertion. The regression suite now uses mocks that deliberately return nil unless `false` is supplied.
+Version 0.6.3 calls `TimelineItem.GetStart(false)` and `GetEnd(false)` explicitly. The Resolve scripting API documents the `subframe_precision` argument; the 0.6.1 implementation omitted it and could receive non-numeric/nil positions in the Lua binding, causing `TRACK_POSITION_INVALID` before scene insertion. The regression suite now uses mocks that deliberately return nil unless `false` is supplied.
 
 If a position still cannot be read, CartoRig reports the item name, value and Lua type returned by both methods instead of the generic 0.6.1 message.
+
+## Reviewed 0.6.3 timeline transaction
+
+Version 0.6.3 is a safety rewrite of Scene insertion, not merely another error-message patch.
+
+Before insertion CartoRig snapshots all existing **video, audio and subtitle** TimelineItems by their Resolve UUIDs, start/end frames, track location and lock state. Timeline markers are also snapshotted. The append boundary is the greatest end among clips and markers, so a Scene is not inserted before editorial audio, subtitles or markers that extend beyond the last video clip.
+
+CartoRig temporarily clears only the video In/Out range because Resolve can use it while creating a Fusion Composition. The original video marks are restored before the composition is authored. The original page and playhead are captured for rollback.
+
+After Resolve inserts the Fusion Composition, CartoRig verifies:
+
+- the new item has a real `GetUniqueId()`;
+- it landed on a pre-existing video track rather than silently creating or changing another track;
+- it starts exactly at the validated append boundary;
+- every pre-existing video/audio/subtitle item remains on the same track and frame range;
+- track counts and lock states are unchanged;
+- timeline markers are unchanged.
+
+If any verification fails, CartoRig deletes only the newly inserted clip, removes only empty tracks that were created during the failed transaction, restores track locks, video In/Out marks, playhead and page, and validates the restored timeline. A timeline created solely for a failed command is deleted through the MediaPool API. If external material was moved and cannot be restored safely, the command reports **ROLLBACK_INCOMPLETE** instead of claiming success.
+
+Timeline-created Scenes require the actual MediaOut supplied by the new Fusion Composition. The NodeFactory is called with `disallow_new_mediaout=true`; it will not manufacture a second MediaOut as a fallback.
+
+These checks are exercised by Lua/Python tests, including simulated ripple across audio/subtitle tracks, locked targets, markers after the last clip, auto-created tracks, missing UUIDs, NodeFactory failures, and five Scene creations. They remain mocks and **do not replace the Resolve Studio 20 host test**.
 
 ## Support and uninstall
 
