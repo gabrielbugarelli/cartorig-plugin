@@ -63,6 +63,7 @@ assert(factory.inspect(comp).has_scene)
 assert(#factory.inspect(comp).objects==3)
 -- Additional authoring nodes must not invalidate the three singleton structural
 -- nodes. Multiple Countries/States/Markers/etc. are expected by the product.
+local countries={}
 for n=1,2 do
  local country=comp:AddTool("Fuse.CartoRigCountry",10+n,4)
  country:SetAttrs({TOOLS_Name="CR_Country_Test_"..n})
@@ -71,10 +72,21 @@ for n=1,2 do
  country:SetData("CartoRig.V1.ObjectType","Country")
  country:SetData("CartoRig.V1.SceneId",made.scene_id)
  country:SetData("CartoRig.V1.SchemaVersion","1.0.0")
+ countries[n]=country
 end
 local expanded=assert(factory.inspect(comp))
 assert(expanded.has_scene and #expanded.objects==5,
  "Two extra Country nodes must coexist with the structural Scene/WorldMap/Camera")
+local originalCountry2Id=countries[2]:GetData("CartoRig.V1.ObjectId")
+countries[2]:SetData("CartoRig.V1.ObjectId",countries[1]:GetData("CartoRig.V1.ObjectId"))
+local duplicateId,duplicateIdErr=factory.inspect(comp)
+assert(duplicateId==nil and duplicateIdErr:match("duplicated object UUID"))
+countries[2]:SetData("CartoRig.V1.ObjectId",originalCountry2Id)
+countries[2]:SetAttrs({TOOLS_Name="CR_Country_Test_1"})
+local duplicateName,duplicateNameErr=factory.inspect(comp)
+assert(duplicateName==nil and duplicateNameErr:match("duplicated CartoRig node name"))
+countries[2]:SetAttrs({TOOLS_Name="CR_Country_Test_2"})
+assert(#assert(factory.inspect(comp)).objects==5)
 local sid=made.scene_id
 assert(sid==comp:GetData("CartoRig.V1.SceneId"))
 assert(factory.create_scene(comp,"Do not duplicate",{localappdata=ROOT})==nil)
