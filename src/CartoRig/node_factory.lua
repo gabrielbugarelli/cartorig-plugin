@@ -11,9 +11,9 @@ local VERSION=P.."SchemaVersion"
 local TYPE=P.."ObjectType"
 local SOURCE=P.."DatasetSource"
 local FUSES={
-  WorldMap="CartoRigWorldMap",
-  Camera="CartoRigCamera",
-  Scene="CartoRigScene"
+  WorldMap="Fuse.CartoRigWorldMap",
+  Camera="Fuse.CartoRigCamera",
+  Scene="Fuse.CartoRigScene"
 }
 local FUSE_ORDER={"WorldMap","Camera","Scene"}
 local NAMES={WorldMap="CR_WorldMap_Main",Camera="CR_Camera_Main",Scene="CR_Scene_Main"}
@@ -117,7 +117,9 @@ local function create_node(comp,kind,info,x,y,created)
   if not tool then error("NODE_CREATE_FAILED: Fuse '"..FUSES[kind].."' is not registered in Fusion") end
   created[#created+1]=tool
   local observed=attrs(tool).TOOLS_RegID
-  if observed~=FUSES[kind] then
+  -- Scripting API registers Fuse tools under the "Fuse." RegID prefix.
+  -- Accept the unprefixed class name only as a host-exposed equivalent.
+  if observed~=FUSES[kind] and observed~=FUSES[kind]:sub(6) then
     error("NODE_TYPE_MISMATCH: expected "..FUSES[kind].." got "..tostring(observed))
   end
   tool:SetAttrs({TOOLS_Name=NAMES[kind]})
