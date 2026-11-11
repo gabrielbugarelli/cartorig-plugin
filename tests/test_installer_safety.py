@@ -30,7 +30,7 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('Rename "$R0\\cartorig-dev.lua" "$R0\\cartorig-dev.lua.migrated-060"',s)
         self.assertLess(s.index('Rename "$R2\\cartorig-dev.lua.pending"'),
                         s.index('Rename "$R0\\cartorig-dev.lua" "$R0\\cartorig-dev.lua.migrated-060"'))
-        self.assertIn('DisplayVersion" "0.6.1"',s)
+        self.assertIn('DisplayVersion" "0.6.2"',s)
 
     def test_installer_dependencies_and_cleanup(self):
         s=self.nsi
@@ -94,9 +94,22 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('originalService',self.win)
         self.assertIn('originalUi',self.win)
 
+    def test_historical_061_missing_subframe_flag_is_an_actual_fixture(self):
+        prior=(ROOT/"src/CartoRig/legacy_timeline_service_0.6.1.lua").read_text(encoding="utf-8")
+        current=(ROOT/"src/CartoRig/timeline_service.lua").read_text(encoding="utf-8")
+        self.assertIn('call(item,"GetStart")',prior)
+        self.assertIn('call(item,"GetEnd")',prior)
+        self.assertNotIn('call(item,"GetStart")',current)
+        self.assertNotIn('call(item,"GetEnd")',current)
+        self.assertIn('call(item,"GetStart",false)',current)
+        self.assertIn('call(item,"GetEnd",false)',current)
+        fixture=(ROOT/"packaging/legacy-preview-0.6.1.nsi").read_text(encoding="utf-8")
+        self.assertIn('legacy_timeline_service_0.6.1.lua',fixture)
+        self.assertIn('service061',self.win)
+
     def test_windows_package_tests_real_upgrade_layout(self):
         s=self.win
-        for marker in ('legacy-preview-0.5.2.nsi','legacy-preview-0.6.0.nsi','cartorig-dev-0.6.1-win64.exe',
+        for marker in ('legacy-preview-0.5.2.nsi','legacy-preview-0.6.0.nsi','legacy-preview-0.6.1.nsi','cartorig-dev-0.6.2-win64.exe',
                        'Get-FileHash','Utility\\cartorig-dev.lua','Comp\\cartorig-dev.lua',
                        'TimelineService mismatch','Not exactly one Scripts menu entry',
                        'Foreign script affected','retention-days: 7'):
