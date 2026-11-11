@@ -1,5 +1,5 @@
 -- cartorig-dev: Scene UI Manager only. One Create Scene = one timeline Fusion clip.
--- No prior Fusion Composition or manual wiring; no Open Scene button.
+-- No prior Fusion Composition or manual wiring; scene listing is automatic.
 local bmd=rawget(_G,"bmd")
 local resolve=rawget(_G,"resolve")
 if not resolve and bmd and type(bmd.scriptapp)=="function" then
