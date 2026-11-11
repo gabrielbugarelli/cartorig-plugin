@@ -2,7 +2,7 @@
 
 **Estado de partida:** nenhum teste de host executado. `NOT RUN` não é aprovado.
 
-Fonte normativa: `docs/CartoRig_Especificacao_de_Produto_e_Implementacao_V1.md` (SHA-256 `af25a7816b0d4cb616f81d30f1c2c77b4c663f783c9f8dc41d96e0b2936427c9`).
+Fonte normativa: `docs/CartoRig_Especificacao_de_Produto_e_Implementacao_V1.md` (SHA-256 `aa8fc5b394da22f4c78cfdb65a3f5c3cc27958271250c2d2f7b2d63c410b4e5e`).
 
 Critério `DONE`: node real, UI na superfície contratada, render e persistência, segurança de dependências, teste no host real e evidência aprovada pelo GitHub Actions **do mesmo commit/build**.
 
