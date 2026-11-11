@@ -42,7 +42,11 @@ local function fake(start_with_timeline)
   end
   function timeline:GetStartTimecode() return timecode end
   function timeline:GetSetting(key) return "24" end
-  function timeline:GetCurrentTimecode() return to_tc(self.seek) end
+  function timeline:GetCurrentTimecode()
+    -- The real Resolve API does not promise this method on the Fusion page.
+    if self.host and self.host.page=="fusion" then return nil end
+    return to_tc(self.seek)
+  end
   function timeline:SetCurrentTimecode(tc)
     local frame=from_tc(tc)
     if not frame then return false end
@@ -98,6 +102,7 @@ local function fake(start_with_timeline)
     self.switches[#self.switches+1]=page
     return true
   end
+  timeline.host=resolve
   return resolve,project,timeline
 end
 -- SMPTE positions are deterministic, including drop frame.
