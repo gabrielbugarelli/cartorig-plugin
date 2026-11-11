@@ -305,7 +305,8 @@ local r7,p7,t7=fake(true)
 local bad=add_item(t7,"video",1,86400,86500,"bad-id")
 bad.bad_id=true
 local badResult,badErr=svc.create(r7,"Bad identity")
-assert(badResult==nil and badErr:find("ITEM_ID_INVALID",1,true))
+assert(badResult==nil and type(badErr)=="string" and badErr:find("ITEM_ID_INVALID",1,true),
+  "Expected ITEM_ID_INVALID, got result="..tostring(badResult).." err="..tostring(badErr))
 assert(t7.created==0)
 
 -- Wrong destination track/type is rejected and the new item removed.
