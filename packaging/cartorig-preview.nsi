@@ -24,6 +24,11 @@ Section "Install cartorig-dev"
   ; Utility is visible on every Resolve page; Comp is Fusion-context-only.
   StrCpy $R2 "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility"
   StrCpy $R9 "Managed legacy cleanup: no error"
+  ; Stage ownership verifiers before any shared Resolve file is inspected.
+  InitPluginsDir
+  SetOutPath "$PLUGINSDIR"
+  File "/oname=verify-managed-comp-launcher.ps1" "..\support\verify-managed-comp-launcher.ps1"
+  File "/oname=verify-managed-shared.ps1" "..\support\verify-managed-shared.ps1"
   ; The only development entry must be installed by a CartoRig-managed installer.
   ${If} ${FileExists} "$R0\cartorig-dev.lua"
     ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
@@ -47,11 +52,7 @@ Section "Install cartorig-dev"
       Abort
     ${EndIf}
   ${EndIf}
-  ; Stage the verifier before any legacy Comp mutation.
-  InitPluginsDir
-  SetOutPath "$PLUGINSDIR"
-  File "/oname=verify-managed-comp-launcher.ps1" "..\support\verify-managed-comp-launcher.ps1"
-  File "/oname=verify-managed-shared.ps1" "..\support\verify-managed-shared.ps1"
+  ; Ownership verifiers are already staged above before all preflight checks.
   ; A persistent migration backup is removed only when its exact source bytes
   ; prove that it is a historical CartoRig launcher and Utility is already active.
   ${If} ${FileExists} "$R0\cartorig-dev.lua.migrated-060"
