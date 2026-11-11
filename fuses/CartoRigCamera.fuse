@@ -1,0 +1,69 @@
+-- CartoRig Camera: separate physical Fusion image effect, shared by map layers upstream.
+-- Transform semantics require Studio 20 host evaluation; no generated animation.
+FuRegisterClass("CartoRigCamera", CT_Tool, {
+  REGS_Name="CartoRig Camera",REGS_Category="CartoRig",REGS_OpIconString="CAM",
+  REGS_OpDescription="Shared 2D geographic camera",REG_NoMotionBlurCtrls=true,
+  REG_NoBlendCtrls=true,REG_Version=1,
+})
+function Create()
+  self:AddControlPage("Control")
+  InLatitude=self:AddInput("Center Latitude (deg)","CenterLatitude",{
+    LINKID_DataType="Number",INPID_InputControl="SliderControl",
+    INP_Default=0,INP_MinScale=-90,INP_MaxScale=90,
+    INP_MinAllowed=-90,INP_MaxAllowed=90
+  })
+  InLongitude=self:AddInput("Center Longitude (deg)","CenterLongitude",{
+    LINKID_DataType="Number",INPID_InputControl="SliderControl",
+    INP_Default=0,INP_MinScale=-180,INP_MaxScale=180,
+    INP_MinAllowed=-180,INP_MaxAllowed=180
+  })
+  InZoom=self:AddInput("Zoom","Zoom",{
+    LINKID_DataType="Number",INPID_InputControl="SliderControl",
+    INP_Default=1,INP_MinScale=0.25,INP_MaxScale=16,
+    INP_MinAllowed=0.25,INP_MaxAllowed=64
+  })
+  InBearing=self:AddInput("Bearing (deg)","Bearing",{
+    LINKID_DataType="Number",INPID_InputControl="SliderControl",
+    INP_Default=0,INP_MinScale=-180,INP_MaxScale=180,
+    INP_MinAllowed=-180,INP_MaxAllowed=180
+  })
+  self:AddInput("Equirectangular 2D / WGS84 angular coordinates","SourceInfo",{
+    LINKID_DataType="Text",INPID_InputControl="LabelControl",INP_External=false,INP_Passive=true,
+  })
+  self:AddControlPage("Motion")
+  self:AddInput("Camera presets will be added after host camera verification","NoMotion",{
+    LINKID_DataType="Text",INPID_InputControl="LabelControl",INP_External=false,INP_Passive=true,
+  })
+  InImage=self:AddInput("Map Input","Input",{LINKID_DataType="Image",LINK_Main=1})
+  OutImage=self:AddOutput("Output","Output",{LINKID_DataType="Image",LINK_Main=1})
+end
+local function num(input,req)
+  local result=input:GetValue(req)
+  if not result or type(result.Value)~="number" then error("Camera control unavailable") end
+  return result.Value
+end
+function Process(req)
+  local img=InImage:GetValue(req)
+  if not img then error("CAMERA_INPUT_MISSING: shared map input is not connected") end
+  local lat=num(InLatitude,req)
+  local lon=num(InLongitude,req)
+  local zoom=num(InZoom,req)
+  local bearing=num(InBearing,req)
+  if lat < -90 or lat>90 or zoom<0.25 or zoom>64 or bearing<-180 or bearing>180 then
+    error("CAMERA_INVALID_POSE: control out of range")
+  end
+  -- The WorldMap renders a Fit World equirectangular image before this effect.
+  -- Pixels of longitude/latitude are scaled by min(width/360,height/180).
+  local w,h=img.Width,img.Height
+  local fit=math.min(w/360,h/180)
+  lon=((lon+180)%360)-180
+  local x=0.5-lon*fit/w*zoom
+  local y=0.5-lat*fit/h*zoom
+  local out=img:Transform(nil,{
+    XF_XOffset=x,XF_YOffset=y,XF_XAxis=0.5,XF_YAxis=0.5,
+    XF_XSize=zoom,XF_YSize=zoom,XF_Angle=-bearing,
+    XF_EdgeMode="Black",
+  })
+  if not out then error("CAMERA_RENDER_FAILED: Fusion returned no image") end
+  OutImage:Set(req,out)
+end

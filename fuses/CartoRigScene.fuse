@@ -1,0 +1,26 @@
+-- CartoRig Scene: independent physical Fuse, compositing output and read-only identity.
+-- No Geo/Motion controls; structural actions happen exclusively in the UIManager.
+FuRegisterClass("CartoRigScene",CT_Tool,{
+  REGS_Name="CartoRig Scene",REGS_Category="CartoRig",
+  REGS_OpIconString="SCN",REGS_OpDescription="CartoRig scene output",
+  REG_NoMotionBlurCtrls=true,REG_NoBlendCtrls=true,REG_Version=1,
+})
+function Create()
+  self:AddControlPage("Control")
+  self:AddInput("Scene identity and links are managed in CartoRig Scene","SceneIdentity",{
+    LINKID_DataType="Text",INPID_InputControl="LabelControl",
+    INP_External=false,INP_Passive=true,
+  })
+  self:AddControlPage("Motion")
+  self:AddInput("No motion presets for this node","NoMotion",{
+    LINKID_DataType="Text",INPID_InputControl="LabelControl",
+    INP_External=false,INP_Passive=true,
+  })
+  InImage=self:AddInput("Scene Image","Input",{LINKID_DataType="Image",LINK_Main=1})
+  OutImage=self:AddOutput("Output","Output",{LINKID_DataType="Image",LINK_Main=1})
+end
+function Process(req)
+  local image=InImage:GetValue(req)
+  if not image then error("SCENE_INPUT_MISSING: Camera must be connected to Scene") end
+  OutImage:Set(req,image)
+end
