@@ -1,9 +1,10 @@
--- CartoRig V1 | SceneService/NodeFactory structural milestone A implementation.
--- Real Fusion tools, no virtual author nodes. NEVER select tools in Node Editor.
--- Status: host rendering and save/reopen still require Studio 20 acceptance.
-local domain = require("CartoRig.domain")
-local factory = {}
-local P = "CartoRig.V1."
+-- CartoRig V1 | structural Scene NodeFactory.
+-- Real Fusion tools only; never selects tools in the Node Editor.
+local domain=require("CartoRig.domain")
+local fusion=require("CartoRig.fusion_contract")
+local factory={}
+
+local P="CartoRig.V1."
 local SCENE_KEY=P.."SceneId"
 local OBJECT=P.."ObjectId"
 local OWNER=P.."Owned"
@@ -12,6 +13,7 @@ local TYPE=P.."ObjectType"
 local SOURCE=P.."DatasetSource"
 local TITLE=P.."Title"
 local DISPLAY=P.."DisplayName"
+
 local FUSES={
   WorldMap="Fuse.CartoRigWorldMap",
   Camera="Fuse.CartoRigCamera",
@@ -20,34 +22,18 @@ local FUSES={
 local FUSE_ORDER={"WorldMap","Camera","Scene"}
 local NAMES={WorldMap="CR_WorldMap_Main",Camera="CR_Camera_Main",Scene="CR_Scene_Main"}
 
-local function get(tool,field)
-  local ok,val=pcall(function() return tool:GetData(field) end)
-  if ok then return val end
+local function read_data(object,key,label)
+  local value,err=fusion.get_data(object,key,label or key)
+  if err then return nil,err end
+  return value
 end
-local function attrs(tool)
-  local ok,val=pcall(function() return tool:GetAttrs() end)
-  if ok and type(val)=="table" then return val end
-  return {}
-end
-local function member(o,key)
-  if o==nil then return nil end
-  local ok,value=pcall(function() return o[key] end)
-  if ok then return value end
-  return nil
-end
-local function method(o,key)
-  return type(member(o,key))=="function"
-end
+
 local function inventory(comp)
-  if not method(comp,"GetToolList") then
-    return nil,"NO_COMPOSITION: GetToolList unavailable"
-  end
-  local ok,list=pcall(function() return comp:GetToolList(false) end)
-  if not ok or type(list)~="table" then
-    return nil,"FUSION_API_ERROR: cannot read the tool graph"
-  end
+  local list,err=fusion.tool_list(comp)
+  if not list then return nil,"NO_COMPOSITION: "..tostring(err) end
   return list
 end
+
 local validated_datasets={}
 local function library_ready(root)
   local drive=root or os.getenv("LOCALAPPDATA")
@@ -82,15 +68,31 @@ end
 function factory.inspect(comp)
   local list,err=inventory(comp)
   if not list then return nil,err end
+
   local objects,owned={},0
   local sid,ids,names=nil,{},{}
-  for _,tool in pairs(list) do
-    if get(tool,OWNER)==true then
+  for index,tool in ipairs(list) do
+    local isOwned,ownedErr=read_data(tool,OWNER,"tool "..index.." Owned")
+    if ownedErr then return nil,ownedErr end
+    if isOwned==true then
       owned=owned+1
-      local kind=get(tool,TYPE)
-      if not kind then return nil,"STATE_INVALID: owned node has no type" end
-      local obj={type=kind,name=attrs(tool).TOOLS_Name or "",id=get(tool,OBJECT),
-        scene_id=get(tool,SCENE_KEY),display_name=get(tool,DISPLAY)}
+      local kind,kindErr=read_data(tool,TYPE,"tool "..index.." ObjectType")
+      if kindErr then return nil,kindErr end
+      if type(kind)~="string" or kind=="" then
+        return nil,"STATE_INVALID: owned node has no type"
+      end
+      local attr,attrErr=fusion.attrs(tool,"owned tool "..index)
+      if not attr then return nil,attrErr end
+      local objectId,objectErr=read_data(tool,OBJECT,"tool "..index.." ObjectId")
+      if objectErr then return nil,objectErr end
+      local sceneId,sceneErr=read_data(tool,SCENE_KEY,"tool "..index.." SceneId")
+      if sceneErr then return nil,sceneErr end
+      local displayName,displayErr=read_data(tool,DISPLAY,"tool "..index.." DisplayName")
+      if displayErr then return nil,displayErr end
+      local obj={
+        type=kind,name=attr.TOOLS_Name or "",id=objectId,
+        scene_id=sceneId,display_name=displayName
+      }
       if not domain.is_uuid(obj.id) or not domain.is_uuid(obj.scene_id) then
         return nil,"STATE_INVALID: invalid node identity"
       end
@@ -107,17 +109,17 @@ function factory.inspect(comp)
       objects[#objects+1]=obj
     end
   end
-  local compid=get(comp,SCENE_KEY)
+
+  local compid,compErr=read_data(comp,SCENE_KEY,"composition SceneId")
+  if compErr then return nil,compErr end
   if compid~=nil and sid~=compid then
     return nil,"STATE_INVALID: composition and nodes disagree on Scene ID"
   end
   if owned>0 and not compid then
     return nil,"STATE_INVALID: orphaned CartoRig nodes; no implicit repair"
   end
+
   if compid then
-    -- Scene/WorldMap/Camera are the only singleton structural types. Additional
-    -- CartoRig authoring nodes (Country, State, Route, Marker, Label, etc.) are
-    -- expected and must not invalidate a healthy composition.
     local structural={Scene=0,WorldMap=0,Camera=0}
     for _,o in ipairs(objects) do
       if structural[o.type]~=nil then
@@ -131,121 +133,122 @@ function factory.inspect(comp)
       return nil,"STATE_INVALID: structural nodes missing or duplicated"
     end
   end
-  local title=get(comp,TITLE)
+
+  local title,titleErr=read_data(comp,TITLE,"composition Title")
+  if titleErr then return nil,titleErr end
   if title~=nil and (type(title)~="string" or title:match("^%s*$")) then
     return nil,"STATE_INVALID: persisted Scene title is malformed"
   end
-  -- 0.6.0-0.6.2 development Scenes did not persist the title on the comp.
-  -- They remain readable; every new 0.6.3 Scene is required to persist it.
   local legacyTitleMissing=compid~=nil and title==nil
   table.sort(objects,function(a,b) return a.name<b.name end)
-  return {scene_id=compid,title=title,legacy_title_missing=legacyTitleMissing,
-    objects=objects,has_scene=compid~=nil,existing_tools=list}
+  return {
+    scene_id=compid,title=title,legacy_title_missing=legacyTitleMissing,
+    objects=objects,has_scene=compid~=nil,existing_tools=list
+  }
 end
 
--- A TimelineItem Fusion Composition usually already contains MediaOut1.
--- Never create an extra output simply because input discovery failed.
 local function input_of(tool,name)
-  if method(tool,"FindInput") then
-    local ok,value=pcall(function() return tool:FindInput(name) end)
-    if ok and value then return value end
-  end
-  local ok,value=pcall(function() return tool[name] end)
-  if ok and value then return value end
+  local input,err=fusion.find_input(tool,name)
+  if err then return nil,err end
+  return input
 end
+
+-- A Fusion Composition inserted by Resolve is expected to own its MediaOut.
+-- TimelineService passes disallow_new_mediaout=true, so a missing output is a
+-- hard failure rather than a reason to fabricate another output.
 local function mediaout_candidate(list)
-  local found,number=nil,0
-  for _,tool in pairs(list) do
-    if attrs(tool).TOOLS_RegID=="MediaOut" then
-      number=number+1;found=tool
+  local found,count=nil,0
+  for index,tool in ipairs(list) do
+    local attr,attrErr=fusion.attrs(tool,"tool "..index)
+    if not attr then return nil,attrErr end
+    if attr.TOOLS_RegID=="MediaOut" then
+      count=count+1
+      found=tool
     end
   end
-  if number>1 then return nil,"MEDIAOUT_AMBIGUOUS: newly created comp has more than one MediaOut" end
-  if number==0 then return nil,nil end
-  local input=input_of(found,"Input")
-  if not input or type(input.GetConnectedOutput)~="function" then
-    return nil,"MEDIAOUT_UNINSPECTABLE: refuse to duplicate the existing MediaOut"
+  if count>1 then return nil,"MEDIAOUT_AMBIGUOUS: composition has more than one MediaOut" end
+  if count==0 then return nil,nil end
+
+  local input,inputErr=input_of(found,"Input")
+  if not input then
+    return nil,"MEDIAOUT_UNINSPECTABLE: "..tostring(inputErr or "Input unavailable")
   end
-  local ok,value=pcall(function() return input:GetConnectedOutput() end)
-  if not ok then return nil,"MEDIAOUT_UNINSPECTABLE: cannot read current MediaOut input" end
+  local value,valueErr=fusion.connected_output(input,"MediaOut.Input")
+  if valueErr then return nil,"MEDIAOUT_UNINSPECTABLE: "..tostring(valueErr) end
   if value~=nil then
     return nil,"MEDIAOUT_ALREADY_CONNECTED: refuse to modify an occupied output"
   end
-  return found,nil
+  return found
 end
 
 local function create_node(comp,kind,info,x,y,created)
-  local tool=comp:AddTool(FUSES[kind],x,y)
-  if not tool then error("NODE_CREATE_FAILED: Fuse '"..FUSES[kind].."' is not registered in Fusion") end
+  local tool,toolErr=fusion.add_tool(comp,FUSES[kind],x,y)
+  if not tool then error("NODE_CREATE_FAILED: "..tostring(toolErr)) end
   created[#created+1]=tool
-  local observed=attrs(tool).TOOLS_RegID
-  -- Scripting API registers Fuse tools under the "Fuse." RegID prefix.
-  -- Accept the unprefixed class name only as a host-exposed equivalent.
+
+  local attr,attrErr=fusion.attrs(tool,kind)
+  if not attr then error(attrErr) end
+  local observed=attr.TOOLS_RegID
   if observed~=FUSES[kind] and observed~=FUSES[kind]:sub(6) then
     error("NODE_TYPE_MISMATCH: expected "..FUSES[kind].." got "..tostring(observed))
   end
-  tool:SetAttrs({TOOLS_Name=NAMES[kind]})
-  if attrs(tool).TOOLS_Name~=NAMES[kind] then
+
+  local renamed,renameErr=fusion.set_attrs(tool,{TOOLS_Name=NAMES[kind]},kind)
+  if not renamed then error(renameErr) end
+  local renamedAttrs,renamedErr=fusion.attrs(tool,kind)
+  if not renamedAttrs then error(renamedErr) end
+  if renamedAttrs.TOOLS_Name~=NAMES[kind] then
     error("NODE_RENAME_FAILED: "..NAMES[kind])
   end
-  for key,value in pairs({
-    [OWNER]=true,
-    [OBJECT]=info.object_id,
-    [TYPE]=kind,
-    [SCENE_KEY]=info.scene_id,
-    [VERSION]="1.0.0",
-    [DISPLAY]=info.display_name
-  }) do
-    tool:SetData(key,value)
-    if get(tool,key)~=value then error("NODE_METADATA_FAILED: "..kind.." / "..key) end
+
+  local metadata={
+    [OWNER]=true,[OBJECT]=info.object_id,[TYPE]=kind,[SCENE_KEY]=info.scene_id,
+    [VERSION]="1.0.0",[DISPLAY]=info.display_name
+  }
+  for key,value in pairs(metadata) do
+    local written,writeErr=fusion.set_data(tool,key,value,kind.." / "..key)
+    if not written then error(writeErr) end
   end
   return tool
 end
 
 local function connect(target,port,source)
-  if type(target.ConnectInput)~="function" then
-    error("FUSION_API_ERROR: ConnectInput missing")
+  local ok,err=fusion.connect(target,port,source)
+  if not ok then error("FUSION_CONNECT_FAILED: "..tostring(err)) end
+end
+
+local function clear_comp_metadata(comp)
+  local errors={}
+  for _,key in ipairs({SCENE_KEY,VERSION,SOURCE,TITLE}) do
+    local cleared,err=fusion.set_data(comp,key,nil,"rollback "..key)
+    if not cleared then errors[#errors+1]=tostring(err) end
   end
-  local success=target:ConnectInput(port,source)
-  if success==false then
-    error("FUSION_CONNECT_FAILED: "..tostring(port))
-  end
-  -- nil return may be successful in some host builds. Verify via actual input graph.
-  if type(target.FindInput)~="function" then
-    if success~=true then error("FUSION_CONNECT_UNVERIFIED: "..port) end
-    return
-  end
-  local input=target:FindInput(port)
-  if not input or type(input.GetConnectedOutput)~="function" then
-    if success~=true then error("FUSION_CONNECT_UNVERIFIED: "..port) end
-    return
-  end
-  local output=input:GetConnectedOutput()
-  if not output then error("FUSION_CONNECT_FAILED: no source on "..port) end
+  return #errors==0,table.concat(errors,"; ")
 end
 
 function factory.create_scene(comp,title,opts)
   opts=opts or {}
-  local ok,existing=factory.inspect(comp)
-  if not ok then return nil,existing end
-  if ok.has_scene then
+  local existing,inspectErr=factory.inspect(comp)
+  if not existing then return nil,inspectErr end
+  if existing.has_scene then
     return nil,"SCENE_EXISTS: this Fusion Composition already contains a CartoRig Scene; Create Scene must target a new timeline item"
   end
-  local dataset,derr=library_ready(opts.localappdata)
-  if not dataset then return nil,derr end
-  local state,err=domain.new_scene(title or "Map Scene")
-  if not state then return nil,err end
-  local existing_media,media_error=mediaout_candidate(ok.existing_tools)
-  if media_error then return nil,media_error end
-  if not existing_media and opts.disallow_new_mediaout then
+
+  local dataset,dataErr=library_ready(opts.localappdata)
+  if not dataset then return nil,dataErr end
+  local state,stateErr=domain.new_scene(title or "Map Scene")
+  if not state then return nil,stateErr end
+
+  local existingMedia,mediaErr=mediaout_candidate(existing.existing_tools)
+  if mediaErr then return nil,mediaErr end
+  if not existingMedia and opts.disallow_new_mediaout then
     return nil,"MEDIAOUT_UNAVAILABLE: fresh comp has no MediaOut"
   end
-  if not method(comp,"StartUndo") or not method(comp,"EndUndo") then
-    return nil,"FUSION_API_ERROR: Undo transactions unavailable"
-  end
-  local started,beginerr=pcall(function() comp:StartUndo("CartoRig - Create Scene") end)
-  if not started then return nil,"FUSION_API_ERROR: StartUndo: "..tostring(beginerr) end
-  local created,nodes,modified_external={},{}
+
+  local started,startErr=fusion.start_undo(comp,"CartoRig - Create Scene")
+  if not started then return nil,"FUSION_API_ERROR: StartUndo: "..tostring(startErr) end
+
+  local created,nodes,modifiedExternal={}, {}, nil
   local succeeded,why=pcall(function()
     local bykind={}
     for _,obj in ipairs(state.objects) do bykind[obj.object_type]=obj end
@@ -254,104 +257,120 @@ function factory.create_scene(comp,title,opts)
     end
     connect(nodes.Camera,"Input",nodes.WorldMap)
     connect(nodes.Scene,"Input",nodes.Camera)
-    local output=existing_media
+
+    local output=existingMedia
     if not output then
-      output=comp:AddTool("MediaOut",0,2)
-      if not output then error("MEDIAOUT_CREATE_FAILED: Resolve did not create MediaOut") end
+      local outputErr
+      output,outputErr=fusion.add_tool(comp,"MediaOut",0,2)
+      if not output then error("MEDIAOUT_CREATE_FAILED: "..tostring(outputErr)) end
       created[#created+1]=output
-      if attrs(output).TOOLS_RegID~="MediaOut" then
+      local outputAttrs,attrsErr=fusion.attrs(output,"MediaOut")
+      if not outputAttrs then error(attrsErr) end
+      if outputAttrs.TOOLS_RegID~="MediaOut" then
         error("MEDIAOUT_CREATE_FAILED: unexpected tool returned by Fusion")
       end
-      output:SetAttrs({TOOLS_Name="CR_Output_Main"})
-      output:SetData(P.."OwnedHelper",true)
-      output:SetData(SCENE_KEY,state.scene_id)
+      local renamed,renameErr=fusion.set_attrs(output,{TOOLS_Name="CR_Output_Main"},"MediaOut")
+      if not renamed then error(renameErr) end
+      local owned,ownedErr=fusion.set_data(output,P.."OwnedHelper",true,"MediaOut OwnedHelper")
+      if not owned then error(ownedErr) end
+      local linked,linkedErr=fusion.set_data(output,SCENE_KEY,state.scene_id,"MediaOut SceneId")
+      if not linked then error(linkedErr) end
     end
-    -- Mark the previously empty external output before trying the write;
-    -- if ConnectInput partially mutates it and then fails, rollback disconnects it.
-    if existing_media then modified_external=existing_media end
+
+    if existingMedia then modifiedExternal=existingMedia end
     connect(output,"Input",nodes.Scene)
-    local port=input_of(output,"Input")
-    if not port or type(port.GetConnectedOutput)~="function" then
-      error("MEDIAOUT_LINK_UNVERIFIED: cannot inspect physical output link")
+
+    local port,portErr=input_of(output,"Input")
+    if not port then error("MEDIAOUT_LINK_UNVERIFIED: "..tostring(portErr)) end
+    local source,sourceErr=fusion.connected_output(port,"MediaOut.Input")
+    if sourceErr then error("MEDIAOUT_LINK_UNVERIFIED: "..tostring(sourceErr)) end
+    if not source then error("MEDIAOUT_LINK_FAILED: MediaOut is not connected to Scene") end
+
+    for key,value in pairs({
+      [SCENE_KEY]=state.scene_id,[VERSION]=state.schema_version,
+      [SOURCE]="Natural Earth 1:50m land",[TITLE]=state.title
+    }) do
+      local written,writeErr=fusion.set_data(comp,key,value,"composition "..key)
+      if not written then error(writeErr) end
     end
-    local src=port:GetConnectedOutput()
-    if not src then
-      error("MEDIAOUT_LINK_FAILED: MediaOut is not connected to Scene")
-    end
-    comp:SetData(SCENE_KEY,state.scene_id)
-    comp:SetData(VERSION,state.schema_version)
-    comp:SetData(SOURCE,"Natural Earth 1:50m land")
-    comp:SetData(TITLE,state.title)
-    if get(comp,SCENE_KEY)~=state.scene_id or get(comp,TITLE)~=state.title or
-       get(comp,VERSION)~=state.schema_version or get(comp,SOURCE)~="Natural Earth 1:50m land" then
-      error("SCENE_STATE_FAILED: composition did not persist identity/title/schema/dataset source")
-    end
+
     local observed,observedErr=factory.inspect(comp)
-    if not observed or not observed.has_scene or observed.scene_id~=state.scene_id or observed.title~=state.title then
+    if not observed or not observed.has_scene or
+       observed.scene_id~=state.scene_id or observed.title~=state.title then
       error("SCENE_STATE_FAILED: post-create reconstruction failed: "..tostring(observedErr))
     end
   end)
+
   local function rollback_creation()
     local cleanup={}
-    if modified_external then
-      local disconnected,de=pcall(function() return modified_external:ConnectInput("Input",nil) end)
+    if modifiedExternal then
+      local disconnected,disconnectErr=fusion.connect(modifiedExternal,"Input",nil)
       if not disconnected then
-        cleanup[#cleanup+1]="MediaOut disconnect exception: "..tostring(de)
-      else
-        local input=input_of(modified_external,"Input")
-        if input and type(input.GetConnectedOutput)=="function" then
-          local checked,value=pcall(function() return input:GetConnectedOutput() end)
-          if not checked or value~=nil then cleanup[#cleanup+1]="MediaOut input still connected after rollback" end
-        end
+        cleanup[#cleanup+1]="MediaOut disconnect: "..tostring(disconnectErr)
       end
     end
+
     for i=#created,1,-1 do
-      local deleted,de=pcall(function() return created[i]:Delete() end)
-      if not deleted then cleanup[#cleanup+1]="node delete exception: "..tostring(de) end
+      local deleted,deleteErr=fusion.delete_tool(created[i])
+      if not deleted then cleanup[#cleanup+1]="node delete: "..tostring(deleteErr) end
     end
-    for _,key in ipairs({SCENE_KEY,VERSION,SOURCE,TITLE}) do
-      local cleared,ce=pcall(function() comp:SetData(key,nil) end)
-      if not cleared then cleanup[#cleanup+1]="composition metadata cleanup: "..tostring(ce) end
-    end
-    local ended,endErr=pcall(function() comp:EndUndo(false) end)
+
+    local metadataClean,metadataErr=clear_comp_metadata(comp)
+    if not metadataClean then cleanup[#cleanup+1]="metadata cleanup: "..metadataErr end
+
+    local ended,endErr=fusion.end_undo(comp,false)
     if not ended then cleanup[#cleanup+1]="EndUndo(false): "..tostring(endErr) end
+
     local remaining,inventoryErr=inventory(comp)
     if not remaining then
       cleanup[#cleanup+1]="post-rollback inventory unavailable: "..tostring(inventoryErr)
     else
       for _,createdTool in ipairs(created) do
-        for _,currentTool in pairs(remaining) do
+        for _,currentTool in ipairs(remaining) do
           if currentTool==createdTool then
-            cleanup[#cleanup+1]="created tool still present after rollback: "..tostring(attrs(createdTool).TOOLS_Name)
+            local attr=fusion.attrs(createdTool,"leaked created tool")
+            cleanup[#cleanup+1]="created tool still present after rollback: "..
+              tostring(attr and attr.TOOLS_Name or "unknown")
             break
           end
         end
       end
     end
-    local observed,inspectErr=factory.inspect(comp)
+
+    local observed,postErr=factory.inspect(comp)
     if not observed or observed.has_scene then
-      cleanup[#cleanup+1]="post-rollback graph invalid: "..tostring(inspectErr or "Scene still present")
+      cleanup[#cleanup+1]="post-rollback graph invalid: "..tostring(postErr or "Scene still present")
     end
-    if get(comp,SCENE_KEY)~=nil or get(comp,TITLE)~=nil or
-       get(comp,VERSION)~=nil or get(comp,SOURCE)~=nil then
-      cleanup[#cleanup+1]="composition CartoRig metadata remained after rollback"
+
+    for _,key in ipairs({SCENE_KEY,TITLE,VERSION,SOURCE}) do
+      local value,readErr=read_data(comp,key,"post-rollback "..key)
+      if readErr then
+        cleanup[#cleanup+1]=readErr
+      elseif value~=nil then
+        cleanup[#cleanup+1]="composition metadata remained after rollback: "..key
+      end
     end
     return #cleanup==0,table.concat(cleanup,"; ")
   end
+
   if not succeeded then
     local clean,cleanupErr=rollback_creation()
     return nil,"SCENE_CREATE_FAILED: "..tostring(why)..
       (clean and "; transaction rolled back" or "; ROLLBACK_INCOMPLETE: "..cleanupErr)
   end
-  local ended,e=pcall(function() comp:EndUndo(true) end)
+
+  local ended,endErr=fusion.end_undo(comp,true)
   if not ended then
     local clean,cleanupErr=rollback_creation()
-    return nil,"UNDO_ERROR: "..tostring(e)..
+    return nil,"UNDO_ERROR: "..tostring(endErr)..
       (clean and "; transaction rolled back" or "; ROLLBACK_INCOMPLETE: "..cleanupErr)
   end
-  return {scene_id=state.scene_id,title=state.title,objects=state.objects,source=dataset,
+
+  return {
+    scene_id=state.scene_id,title=state.title,objects=state.objects,source=dataset,
     output_connected=true,created_author_nodes=3,
-    status="CREATED_NEEDS_FUSION_RENDER_AND_REOPEN_VALIDATION"}
+    status="CREATED_NEEDS_FUSION_RENDER_AND_REOPEN_VALIDATION"
+  }
 end
 
 return factory
