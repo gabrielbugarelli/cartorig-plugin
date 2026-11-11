@@ -39,6 +39,8 @@ $files=@(
   (Status "SHARED_COMP" $sharedComp),
   (Status "SHARED_UTILITY" $sharedUtility),
   (Status "SCENE_UI" (Join-Path $app 'lua\cartorig_scene_ui.lua')),
+  (Status "BLACKMAGIC_API" (Join-Path $app 'lua\CartoRig\blackmagic_api.lua')),
+  (Status "FUSION_CONTRACT" (Join-Path $app 'lua\CartoRig\fusion_contract.lua')),
   (Status "NODE_FACTORY" (Join-Path $app 'lua\CartoRig\node_factory.lua')),
   (Status "UNINSTALLER" (Join-Path $app 'Uninstall-CartoRig.exe')),
   (Status "INSTALL_RECORD" (Join-Path $app 'install-location.txt')),
