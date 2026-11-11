@@ -20,6 +20,13 @@ class InstallerSafetyTests(unittest.TestCase):
         cls.scene=(ROOT/"host/cartorig-dev-scene.lua").read_text(encoding="utf-8")
         cls.cleaner=(ROOT/"support/cleanup-verified-legacy.ps1").read_text(encoding="utf-8")
         cls.shared=(ROOT/"support/verify-managed-shared.ps1").read_text(encoding="utf-8")
+        cls.diagnostic=(ROOT/"support/cartorig-dev-diagnose.ps1").read_text(encoding="utf-8")
+
+    def test_support_diagnostic_checks_contract_runtime_modules(self):
+        self.assertIn('"BLACKMAGIC_API"',self.diagnostic)
+        self.assertIn("blackmagic_api.lua",self.diagnostic)
+        self.assertIn('"FUSION_CONTRACT"',self.diagnostic)
+        self.assertIn("fusion_contract.lua",self.diagnostic)
 
     def test_build_identity_is_embedded_and_reportable(self):
         s=self.nsi
