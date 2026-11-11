@@ -19,6 +19,7 @@ class InstallerSafetyTests(unittest.TestCase):
         cls.launcher=(ROOT/"host/cartorig-dev-launcher.lua").read_text(encoding="utf-8")
         cls.scene=(ROOT/"host/cartorig-dev-scene.lua").read_text(encoding="utf-8")
         cls.cleaner=(ROOT/"support/cleanup-verified-legacy.ps1").read_text(encoding="utf-8")
+        cls.shared=(ROOT/"support/verify-managed-shared.ps1").read_text(encoding="utf-8")
 
     def test_single_utility_launcher_and_no_comp_reinstall(self):
         s=self.nsi
@@ -129,6 +130,23 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('0.6.3 changed conflicting external Comp/cartorig-dev.lua',self.win)
         self.assertIn('0.6.3 changed unrecognized/modified legacy Comp launcher',self.win)
         self.assertIn('Verified 0.5.2 legacy launcher did not migrate to 0.6.3',self.win)
+    def test_shared_resolve_files_require_content_ownership(self):
+        s=self.nsi
+        verifier=self.shared
+        self.assertIn('verify-managed-shared.ps1',s)
+        self.assertIn('-Kind launcher',s)
+        self.assertIn('-Kind scene-fuse',s)
+        self.assertIn('-Kind worldmap-fuse',s)
+        self.assertIn('-Kind camera-fuse',s)
+        self.assertIn('c088214364f1226508348ebe662ed310a253fd5606253ab211307d7c17a3672f',verifier)
+        self.assertIn('17c28628c767353a7a558674f202371d325655bba5613e195b02fe603ab93759',verifier)
+        self.assertIn('e01a3e4c6823495612ccf11149a73f8f988e35ce1fa539028c8de1d06f6c9960',verifier)
+        self.assertIn('617eaf8578fce3ac21f150eff6124c71070149995e3753cad082b2bde04f4cb3',verifier)
+        self.assertIn('Existing Utility cartorig-dev.lua was modified',s)
+        self.assertIn('CartoRig Scene Fuse was modified',s)
+        self.assertIn('Uninstaller deleted or changed modified Utility/cartorig-dev.lua',self.win)
+        self.assertIn('Uninstaller deleted or changed modified CartoRigScene.fuse',self.win)
+
     def test_reviewed_uninstaller_preserves_unowned_comp_entry(self):
         s=self.nsi
         self.assertNotIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua"',s)
