@@ -56,7 +56,7 @@ local old_bmd=_G.bmd
 _G.fu=nil;_G.fusion=nil;_G.bmd=nil
 local scene=assert(loadfile("host/cartorig-dev-scene.lua"))
 local ok,status,message=pcall(scene)
-assert(ok and status==false and message:find("RESOLVE_UNAVAILABLE",1,true))
+assert(ok and status==false and message:find("RESOLVE_CONTEXT_INVALID",1,true))
 _G.fu=old_fu;_G.fusion=old_fusion;_G.bmd=old_bmd
 os.getenv=original_getenv;dofile=original_dofile;io.open=original_ioopen
 os.remove=original_remove;print=original_print
