@@ -53,7 +53,7 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('cleanup-verified-legacy.ps1',nsi)
         self.assertNotIn('An unmanaged old CartoRig script remains. Upgrade stopped.',nsi)
         self.assertNotIn('Delete "$R0\\CartoRig.lua"',nsi)
-        self.assertIn('Get-FileHash -LiteralPath $path -Algorithm SHA256',self.cleanup)
+        self.assertIn('[Security.Cryptography.SHA256]::Create()',self.cleanup)
         self.assertIn('if($item.Hashes -contains $sha)',self.cleanup)
         self.assertIn('Remove-Item -LiteralPath $path -Force',self.cleanup)
         self.assertIn('PRESERVED_UNKNOWN',self.cleanup)
