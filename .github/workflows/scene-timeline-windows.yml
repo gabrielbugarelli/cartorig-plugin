@@ -151,6 +151,18 @@ jobs:
           $p=Start-Process -FilePath $old -ArgumentList '/S' -Wait -PassThru
           if ($p.ExitCode -ne 0 -or !(Test-Path $comp) -or (Test-Path $utility)) {throw 'Direct legacy fixture setup failed'}
           $legacyHash=(Get-FileHash $comp -Algorithm SHA256).Hash
+          $unknownPending="$comp.pending"
+          [IO.File]::WriteAllText($unknownPending,'unrecognized staged launcher; preserve me')
+          $unknownPendingHash=(Get-FileHash $unknownPending -Algorithm SHA256).Hash
+          $blockedPending=Start-Process -FilePath $new -ArgumentList '/S' -Wait -PassThru
+          if (!(Test-Path $comp) -or (Get-FileHash $comp -Algorithm SHA256).Hash -ne $legacyHash) {
+            throw 'Blocked staging verification changed recognized active legacy launcher'
+          }
+          if (!(Test-Path $unknownPending) -or (Get-FileHash $unknownPending -Algorithm SHA256).Hash -ne $unknownPendingHash) {
+            throw '0.6.3 deleted or changed unrecognized legacy pending launcher'
+          }
+          if (Test-Path $utility) {throw 'Utility activated despite unrecognized legacy pending launcher'}
+          Remove-Item -LiteralPath $unknownPending -Force
           $p=Start-Process -FilePath $new -ArgumentList '/S' -Wait -PassThru
           if ($p.ExitCode -ne 0 -or !(Test-Path $utility) -or (Test-Path $comp) -or !(Test-Path $backup)) {
             throw 'Verified 0.5.2 legacy launcher did not migrate to 0.6.3'
