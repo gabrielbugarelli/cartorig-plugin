@@ -371,15 +371,13 @@ function M.list_scenes(resolve)
           return nil,"SCENE_INSPECTION_FAILED: "..tostring(inspecterr)
         end
         if state.has_scene then
+          local sceneStart,_,positionError=item_bounds(item,"scene list V"..track)
+          if not sceneStart then return nil,positionError end
           results[#results+1]={
             scene_id=state.scene_id,
             name=call(item,"GetName") or "CartoRig Scene",
             track=track,
-            start_frame=(function()
-              local start,_,positionError=item_bounds(item,"scene list V"..track)
-              if not start then error(positionError) end
-              return start
-            end)(),
+            start_frame=sceneStart,
             objects=state.objects
           }
         end
