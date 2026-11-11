@@ -173,19 +173,23 @@ function M.create(resolve,title,opts)
   local ending=call(timeline,"GetEndFrame")
   local starttc=call(timeline,"GetStartTimecode")
   local fps=call(timeline,"GetSetting","timelineFrameRate")
-  local currenttc=call(timeline,"GetCurrentTimecode")
   if type(start)~="number" or type(ending)~="number" or ending<start then
     return nil,"TIMELINE_GEOMETRY_UNAVAILABLE: no reliable frame positions"
   end
   local target=math.max(start,ending,previous.maxend or start)
   local targettc,te=M.timecode_add(starttc,target-start,fps)
   if not targettc then return nil,te end
-  if type(currenttc)~="string" then return nil,"TIMELINE_PLAYHEAD_UNAVAILABLE: refusing blind insertion" end
   if not method(resolve,"OpenPage") then return nil,"RESOLVE_PAGE_API_UNAVAILABLE" end
   -- SetCurrentTimecode is documented for Edit/Color/etc; not for the Fusion page.
   local page=call(resolve,"GetCurrentPage")
   local switched=call(resolve,"OpenPage","edit")
   if switched~=true then return nil,"EDIT_PAGE_UNAVAILABLE: cannot position playhead safely" end
+  -- GetCurrentTimecode is not guaranteed on the Fusion page. Read it only
+  -- after switching to Edit, including on the 2nd/3rd/... Create Scene click.
+  local currenttc=call(timeline,"GetCurrentTimecode")
+  if type(currenttc)~="string" then
+    return nil,"TIMELINE_PLAYHEAD_UNAVAILABLE: no readable Edit-page timecode"
+  end
   local seek=call(timeline,"SetCurrentTimecode",targettc)
   if seek~=true then
     if type(page)=="string" then pcall(resolve.OpenPage,resolve,page) end
