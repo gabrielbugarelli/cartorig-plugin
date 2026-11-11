@@ -48,7 +48,7 @@ rejected(function() return svc.list_scenes(projectIsNumber) end,
   "GetCurrentProject returned number")
 local timelineIsNumber=fakeResolve(fakeManager(fakeProject(23)))
 rejected(function() return svc.create(timelineIsNumber,"Scene") end,
-  "TIMELINE_INVALID")
+  "GetCurrentTimeline returned number")
 rejected(function() return svc.list_scenes(timelineIsNumber) end,
   "GetCurrentTimeline returned number")
 
