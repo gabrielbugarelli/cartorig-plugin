@@ -26,7 +26,6 @@ class FuseContractTests(unittest.TestCase):
     def test_scene_is_not_editable_from_script_panel(self):
         source=(ROOT/"host"/"cartorig-dev-scene.lua").read_text(encoding="utf-8")
         self.assertIn("Create Scene",source)
-        self.assertIn("Open Scene",source)
         self.assertIn("service.create,resolve,title",source)
         self.assertNotIn("OpenScene",source)
         self.assertNotIn("Open Scene",source)
