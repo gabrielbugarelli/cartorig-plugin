@@ -344,7 +344,11 @@ function M.create(resolve,title,opts)
   local base,err=project_context(resolve)
   if not base then return nil,err end
   local ctx={resolve=resolve,project=base.project}
-  ctx.original_page=call(resolve,"GetCurrentPage")
+  local originalPage,pageErr=call(resolve,"GetCurrentPage")
+  if type(originalPage)~="string" then
+    return nil,"PAGE_STATE_UNAVAILABLE: cannot capture editor page before transaction: "..tostring(pageErr or originalPage)
+  end
+  ctx.original_page=originalPage
   local timeline,terr=ensure_timeline(ctx)
   if not timeline then return fail(ctx,nil,terr) end
   -- Snapshot before CartoRig adds a missing video track. This is the state a
