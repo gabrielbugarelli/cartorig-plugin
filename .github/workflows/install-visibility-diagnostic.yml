@@ -1,7 +1,7 @@
 name: CartoRig install visibility diagnostic
 on:
   push:
-    branches: ['fix/cartorig-dev-install-visibility-audit']
+    branches: ['fix/cartorig-dev-install-visibility-audit','feat/scene-per-timeline-composition']
   workflow_dispatch:
 permissions:
   contents: read
@@ -34,7 +34,7 @@ jobs:
           }
           Run-Diagnostic
           Assert-Result 'SCRIPT_MISSING_IN_DEFAULT_DIRECTORIES'
-          $script=Join-Path $roaming 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\cartorig-dev.lua'
+          $script=Join-Path $roaming 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Utility\cartorig-dev.lua'
           New-Item -ItemType Directory -Force (Split-Path -Parent $script) | Out-Null
           [IO.File]::WriteAllText($script,'-- fake Windows filesystem test fixture, not a Fusion script')
           Run-Diagnostic
@@ -45,7 +45,7 @@ jobs:
           Run-Diagnostic
           Assert-Result 'FILES_PRESENT_MENU_VISIBILITY_NOT_VERIFIED'
           Remove-Item -LiteralPath $script -Force
-          $other=Join-Path $shared 'Blackmagic Design\DaVinci Resolve\Fusion\Scripts\Comp\cartorig-dev.lua'
+          $other=Join-Path $roaming 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts\Comp\cartorig-dev.lua'
           New-Item -ItemType Directory -Force (Split-Path -Parent $other) | Out-Null
           [IO.File]::WriteAllText($other,'-- synthetic alternate-location fixture')
           Run-Diagnostic
