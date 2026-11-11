@@ -119,6 +119,11 @@ _G.bmd={scriptapp=function() return 0 end}
 local ok2,status2,reason2=pcall(scene_chunk)
 assert(ok2 and status2==false and reason2:find("RESOLVE_CONTEXT_INVALID",1,true))
 assert(reason2:find("returned number",1,true))
+_G.resolve=throwing
+_G.bmd={scriptapp=function() return 0 end}
+local ok3,status3,reason3=pcall(scene_chunk)
+assert(ok3 and status3==false and reason3:find("RESOLVE_CONTEXT_INVALID",1,true),
+  "Throwing global Resolve proxy must not escape Scene API lookup guard: "..tostring(reason3))
 _G.bmd=original_bmd
 _G.resolve=original_resolve
 _G.fusion=original_fusion
