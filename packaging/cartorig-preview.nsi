@@ -193,6 +193,8 @@ Section "Install cartorig-dev"
   File "/oname=domain.lua" "..\src\CartoRig\domain.lua"
   File "/oname=geo.lua" "..\src\CartoRig\geo.lua"
   File "/oname=catalog.lua" "..\src\CartoRig\catalog.lua"
+  File "/oname=blackmagic_api.lua" "..\src\CartoRig\blackmagic_api.lua"
+  File "/oname=fusion_contract.lua" "..\src\CartoRig\fusion_contract.lua"
   File "/oname=node_factory.lua" "..\src\CartoRig\node_factory.lua"
   File "/oname=timeline_service.lua" "..\src\CartoRig\timeline_service.lua"
   SetOutPath "$LOCALAPPDATA\CartoRig\App\data"
@@ -208,6 +210,14 @@ Section "Install cartorig-dev"
   ; Files that the menu launcher requires must exist before any launcher rename.
   ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\lua\cartorig_scene_ui.lua"
     MessageBox MB_OK|MB_ICONSTOP "Scene UI missing; the existing menu script was preserved." /SD IDOK
+    Abort
+  ${EndIf}
+  ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\blackmagic_api.lua"
+    MessageBox MB_OK|MB_ICONSTOP "Blackmagic API contract boundary missing; the existing menu script was preserved." /SD IDOK
+    Abort
+  ${EndIf}
+  ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\fusion_contract.lua"
+    MessageBox MB_OK|MB_ICONSTOP "Fusion contract boundary missing; the existing menu script was preserved." /SD IDOK
     Abort
   ${EndIf}
   ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\node_factory.lua"
@@ -373,6 +383,8 @@ Section "Uninstall"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\domain.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\geo.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\catalog.lua"
+  Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\blackmagic_api.lua"
+  Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\fusion_contract.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\node_factory.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\timeline_service.lua"
   RMDir "$LOCALAPPDATA\CartoRig\App\lua\CartoRig"
