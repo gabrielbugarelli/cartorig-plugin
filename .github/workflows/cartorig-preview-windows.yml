@@ -182,6 +182,8 @@ jobs:
             if (Test-Path $owned) { throw "Verified historical CartoRig script not removed: $owned" }
           }
           $verifiedLog = [IO.File]::ReadAllText($cleanupLogPath)
+          Write-Output "Validated legacy cleanup report: $verifiedLog"
+          if (Test-Path $oldLib) { Write-Output "Remaining native library hash: $((Get-FileHash -Algorithm SHA256 $oldLib).Hash.ToLowerInvariant())" }
           foreach ($historical in @('CartoRig Host Probe.lua','CartoRig Native Integration Probe.lua','CartoRig.lua','CartoRigProbe\native_probe.lua')) {
             if (-not $verifiedLog.Contains("REMOVED_VERIFIED: $historical")) { throw "Missing verified removal evidence: $historical" }
           }
