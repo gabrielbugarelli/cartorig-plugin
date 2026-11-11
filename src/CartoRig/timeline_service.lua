@@ -295,8 +295,12 @@ local function ensure_timeline(ctx)
   if not created then return nil,cerr end
   local selected,serr=call(ctx.project,"SetCurrentTimeline",created)
   if selected~=true then
-    pcall(function() ctx.media_pool:DeleteTimelines({created}) end)
-    return nil,"TIMELINE_SELECT_FAILED: "..tostring(serr)
+    local deleted,deleteErr=call(ctx.media_pool,"DeleteTimelines",{created})
+    if deleted~=true then
+      return nil,"TIMELINE_SELECT_FAILED: "..tostring(serr)..
+        "; ROLLBACK_INCOMPLETE: created timeline not deleted: "..tostring(deleteErr)
+    end
+    return nil,"TIMELINE_SELECT_FAILED: "..tostring(serr).."; created timeline removed"
   end
   ctx.timeline=created
   ctx.created_timeline=true
