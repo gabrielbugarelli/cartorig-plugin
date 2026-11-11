@@ -33,10 +33,12 @@ local function fake()
    return true
   end
   function tool:Delete()
+   if comp.fail_delete_for==self.regid then return false end
    for i,v in ipairs(comp.tools) do
     if v==self then table.remove(comp.tools,i);break end
    end
    comp.deleted=comp.deleted+1
+   return true
   end
   self.tools[#self.tools+1]=tool
   self.added[#self.added+1]=tool
@@ -114,6 +116,17 @@ assert(not result2 and type(reason2)=="string" and reason2:match("SCENE_CREATE_F
  "Expected transactional failure, got result="..tostring(result2).." / "..tostring(reason2))
 assert(#rejected.tools==1 and rm.links.Input==nil)
 assert(rejected:GetData("CartoRig.V1.SceneId")==nil)
+local incomplete,im=fake()
+incomplete.fail_link="Input"
+incomplete.fail_delete_for="Fuse.CartoRigCamera"
+local incompleteResult,incompleteReason=factory.create_scene(incomplete,"Incomplete rollback",{localappdata=ROOT})
+assert(incompleteResult==nil and incompleteReason:match("ROLLBACK_INCOMPLETE"))
+local leakedCamera=false
+for _,tool in pairs(incomplete.tools) do
+ if tool.regid=="Fuse.CartoRigCamera" then leakedCamera=true end
+end
+assert(leakedCamera,"fixture must actually leave a created tool behind")
+
 local failed,c=fake()
 failed.fail="Fuse.CartoRigCamera"
 local result,error=factory.create_scene(failed,"Failure",{localappdata=ROOT})
