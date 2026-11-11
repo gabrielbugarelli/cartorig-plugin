@@ -107,6 +107,18 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('legacy_timeline_service_0.6.1.lua',fixture)
         self.assertIn('service061',self.win)
 
+    def test_legacy_comp_migration_requires_exact_content_ownership(self):
+        s=self.nsi
+        verifier=(ROOT/"support/verify-managed-comp-launcher.ps1").read_text(encoding="utf-8")
+        self.assertIn('verify-managed-comp-launcher.ps1',s)
+        self.assertIn('Comp\\cartorig-dev.lua is not an exact recognized CartoRig legacy launcher',s)
+        self.assertIn('Both Utility and Comp cartorig-dev.lua exist',s)
+        self.assertIn('997bd170c2b2a1ea921119c61ce53a5cee53bc1324ee715446c84cd96248ea4a',verifier)
+        self.assertIn('6d1bd1fd52575bea31e73754f3408dbb0351d6089701690e6e82c95240a9b262',verifier)
+        self.assertIn('Replace("`r`n","`n")',verifier)
+        self.assertIn('0.6.3 changed conflicting external Comp/cartorig-dev.lua',self.win)
+        self.assertIn('0.6.3 changed unrecognized/modified legacy Comp launcher',self.win)
+        self.assertIn('Verified 0.5.2 legacy launcher did not migrate to 0.6.3',self.win)
     def test_reviewed_uninstaller_preserves_unowned_comp_entry(self):
         s=self.nsi
         self.assertNotIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua"',s)
