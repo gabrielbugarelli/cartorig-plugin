@@ -76,6 +76,12 @@ function fusion.connected_output(input,label)
   return api.call(input,"GetConnectedOutput")
 end
 
+function fusion.output_tool(output,label)
+  local checked,handleErr=api.require_object(output,label or "Output","GetTool")
+  if not checked then return nil,handleErr end
+  return api.call(output,"GetTool")
+end
+
 function fusion.connect(tool,input_name,target)
   local _,methodErr=api.method(tool,"ConnectInput")
   if methodErr then return nil,methodErr end
@@ -95,8 +101,22 @@ function fusion.connect(tool,input_name,target)
   end
   if target==nil then
     if output~=nil then return nil,"FUSION_DISCONNECT_FAILED: "..tostring(input_name) end
-  elseif output==nil then
+    return true
+  end
+  if output==nil then
     return nil,"FUSION_CONNECT_FAILED: no source on "..tostring(input_name)
+  end
+
+  -- Blackmagic documents GetConnectedOutput() -> Output and Link.GetTool() ->
+  -- owning Tool. Every CartoRig structural connection targets a Tool, so verify
+  -- the upstream Tool identity rather than merely checking for a non-nil link.
+  local sourceTool,sourceErr=fusion.output_tool(output,
+    "connected output for "..tostring(input_name))
+  if not sourceTool then
+    return nil,"FUSION_CONNECT_UNVERIFIED: "..tostring(sourceErr)
+  end
+  if sourceTool~=target then
+    return nil,"FUSION_CONNECT_WRONG_SOURCE: "..tostring(input_name)
   end
   return true
 end
