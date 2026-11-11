@@ -58,6 +58,45 @@ function M.preflight(comp)
  -- Never select, delete, rename, connect to, or change those tools.
  return {external_nodes_preserved=external_count}
 end
+-- Resolve 20 can expose both the three-argument (id, x, y) form
+-- and the four-argument (id, useDefaults, x, y) form of AddTool.
+-- Use explicit coordinates (never auto-connect to an editor's selection).
+-- A nil handle is a failure, not an implicit node or a PASS.
+local function snapshot_count(comp)
+ local list,err=tools(comp)
+ if not list then return nil,err end
+ local number=0
+ for _ in pairs(list) do number=number+1 end
+ return number
+end
+local function add_checked(comp,s)
+ local strategies={
+  {name="AddTool(id,x,y)",call=function() return comp:AddTool(s.regid,s.x,s.y) end},
+  {name="AddTool(id,false,x,y)",call=function() return comp:AddTool(s.regid,false,s.x,s.y) end},
+ }
+ local notes={}
+ for _,method in ipairs(strategies) do
+  local before,be=snapshot_count(comp)
+  if not before then return nil,"Graph inspection before AddTool failed: "..tostring(be) end
+  local ok,value=pcall(method.call)
+  if ok and value and type(value.GetAttrs)=="function" then
+   return value
+  end
+  local after,ae=snapshot_count(comp)
+  if not after then
+   return nil,method.name.." returned without a usable handle; "..tostring(ae)
+  end
+  if after~=before then
+   return nil,method.name.." returned no valid tool handle but the graph changed ("..
+     tostring(before).." -> "..tostring(after)..
+     "). Stop; discard disposable project instead of retrying unsafely"
+  end
+  notes[#notes+1]=method.name.." => "..(ok and tostring(value) or ("ERROR: "..tostring(value)))
+ end
+ return nil,"Cannot add registered Fusion tool "..s.regid..": "..table.concat(notes,"; ")..
+  ". Verify that a writable Fusion Composition is open in the Fusion page"
+end
+
 function M.create(comp,confirmed)
  if confirmed~=true then return nil,"BLOCKED: disposable composition confirmation required" end
  local context,err=M.preflight(comp)
@@ -68,8 +107,8 @@ function M.create(comp,confirmed)
  if not begun then return nil,"BLOCKED: StartUndo: "..tostring(msg) end
  local ok,why=pcall(function()
   for _,s in ipairs(SPEC) do
-   local tool=comp:AddTool(s.regid,false,s.x,s.y)
-   if not tool then error("AddTool failed: "..s.regid) end
+   local tool,add_error=add_checked(comp,s)
+   if not tool then error(add_error) end
    created[#created+1]=tool
    nodes[s.kind]=tool
    if tool:SetAttrs({TOOLS_Name=s.name})==false then error("Rename failed: "..s.kind) end
