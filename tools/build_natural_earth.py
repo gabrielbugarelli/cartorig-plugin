@@ -22,6 +22,8 @@ import hashlib
 import json
 import math
 import re
+import subprocess
+import unicodedata
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -135,6 +137,13 @@ def _number(fields: dict[str, Any], *names: str) -> float | None:
     return None
 
 
+def _ascii_alias(value: str) -> str:
+    return "".join(
+        character for character in unicodedata.normalize("NFKD", value)
+        if not unicodedata.combining(character)
+    )
+
+
 def _aliases(fields: dict[str, Any], canonical: str, extra: Iterable[str] = ()) -> str:
     values: list[str] = []
     seen = {canonical.casefold()}
@@ -143,12 +152,13 @@ def _aliases(fields: dict[str, Any], canonical: str, extra: Iterable[str] = ()) 
         "NAME_PT", "NAME_ES", "NAME_FR", "NAME_DE", "NAME_IT",
         "ABBREV", "POSTAL", "ISO_A2", "ISO_A3", "ADM0_A3", "ADM1_CODE",
     ]
-    for candidate in list(extra) + [_text(fields, field) for field in candidate_names]:
-        candidate = str(candidate or "").strip()
-        key = candidate.casefold()
-        if candidate and candidate not in {"-99", "-1"} and key not in seen:
-            seen.add(key)
-            values.append(candidate.replace("|", "/").replace("\t", " "))
+    for original in [canonical, *extra, *[_text(fields, field) for field in candidate_names]]:
+        for candidate in (str(original or ""), _ascii_alias(str(original or ""))):
+            candidate = candidate.strip()
+            key = candidate.casefold()
+            if candidate and candidate not in {"-99", "-1"} and key not in seen:
+                seen.add(key)
+                values.append(candidate.replace("|", "/").replace("\t", " "))
     return "|".join(values)
 
 
@@ -456,7 +466,22 @@ def _write_border_runtime(source_root: Path, output_root: Path) -> dict[str, Any
     }
 
 
+def _verify_pinned_checkout(source_root: Path, source_commit: str) -> None:
+    """Refuse manifests that misidentify a checked-out Natural Earth revision."""
+    if not (source_root / ".git").exists():
+        return  # Fixture-only source trees have no Git metadata.
+    if not re.fullmatch(r"[0-9a-f]{40}", source_commit):
+        raise ValueError("Natural Earth source commit must be a complete SHA-1")
+    result = subprocess.run(
+        ["git", "-C", str(source_root), "rev-parse", "HEAD"],
+        capture_output=True, text=True, check=True, timeout=30,
+    )
+    if result.stdout.strip().lower() != source_commit.lower():
+        raise ValueError("Natural Earth checkout does not match the pinned source commit")
+
+
 def build(source_root: Path, output_root: Path, source_commit: str) -> dict[str, Any]:
+    _verify_pinned_checkout(source_root, source_commit)
     output_root.mkdir(parents=True, exist_ok=True)
     catalog_rows: list[list[str]] = []
     generated_geometry_paths: dict[str, str] = {}
