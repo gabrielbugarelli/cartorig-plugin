@@ -223,8 +223,13 @@ function Process(req)
   local mapOpacity=read(InMapOpacity,req)
   local oAlpha=(read(InOceanVisible,req)>=0.5 and read(InTransparent,req)<0.5)
      and read(InOceanOpacity,req)*mapOpacity or 0
-  img:Fill(Pixel({R=read(OceanControls[1],req),G=read(OceanControls[2],req),
-    B=read(OceanControls[3],req),A=oAlpha}))
+  -- Transparent background must start as transparent black: hidden RGB must
+  -- never contaminate compositing when an image is placed over footage.
+  local oceanRed=read(OceanControls[1],req)
+  local oceanGreen=read(OceanControls[2],req)
+  local oceanBlue=read(OceanControls[3],req)
+  if oAlpha<=0 then oceanRed,oceanGreen,oceanBlue=0,0,0 end
+  img:Fill(Pixel({R=oceanRed,G=oceanGreen,B=oceanBlue,A=oAlpha}))
   if read(InLandVisible,req)>=0.5 and mapOpacity>0 then
     local shape=getShape(width,height,XAspect,YAspect)
     local ic=ImageChannel(img,req:IsQuick() and 1 or 4)
