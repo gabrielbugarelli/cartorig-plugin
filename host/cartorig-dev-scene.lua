@@ -102,7 +102,7 @@ local window=disp:AddWindow({
   Geometry={220,120,810,630}
 },ui:VGroup{
   ui:Label{Text="CartoRig — Scene",WordWrap=true},
-  ui:Label{Text="Create Scene adds an independent Fusion Composition to the timeline. Open the scene node directly in Fusion to edit its Inspector.",WordWrap=true},
+  ui:Label{Text="Create Scene adds an independent Fusion Composition to the timeline. Select CartoRig nodes directly in Fusion to edit their Inspector.",WordWrap=true},
   ui:HGroup{
     ui:Label{Text="Scene name"},
     ui:LineEdit{ID="SceneTitle",Text="Map Scene",Weight=1},
@@ -143,6 +143,7 @@ local searchResults={}
 items.GeoType:AddItem("All")
 items.GeoType:AddItem("Country")
 items.GeoType:AddItem("State/Province")
+items.GeoType:AddItem("City")
 items.GeoType.CurrentIndex=0
 
 local function read_build_info()
@@ -252,7 +253,7 @@ local function refresh(preferredSceneId)
 end
 
 local function perform_search()
-  local filterByIndex={"All","Country","State"}
+  local filterByIndex={"All","Country","State","City"}
   local filter=filterByIndex[(tonumber(items.GeoType.CurrentIndex) or 0)+1] or "All"
   local query=items.SearchLocation.Text or ""
   local ok2,results,err=pcall(service.search_locations,query,filter)
@@ -268,7 +269,9 @@ local function perform_search()
     local parent=result.parent_name~="" and (" — "..result.parent_name) or ""
     items.SearchResults:AddItem(
       tostring(result.canonical_name).." — "..tostring(result.geo_type)..parent..
-      " | "..tostring(result.geometry).." | "..tostring(result.scale)
+      " | "..tostring(result.geometry)..
+      " | "..tostring(result.dataset_id).." v"..tostring(result.source_version)..
+      " | "..tostring(result.scale)
     )
   end
   if #results==0 then
