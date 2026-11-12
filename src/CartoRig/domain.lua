@@ -159,7 +159,9 @@ function domain.add_region(state, typ, feature)
      not feature.geometry_available or type(feature.source_id) ~= "string" or
      feature.source_id == "" or type(feature.dataset_id) ~= "string" or
      feature.dataset_id == "" or type(feature.source_version) ~= "string" or
-     feature.source_version == "" or feature.source_type ~= typ then
+     feature.source_version == "" or type(feature.scale) ~= "string" or
+     feature.scale == "" or type(feature.geometry_file) ~= "string" or
+     feature.geometry_file == "" or feature.source_type ~= typ then
     return nil, "missing real compatible polygon/source data"
   end
   local slug, serr = domain.slug(feature.canonical_name)
@@ -184,7 +186,8 @@ function domain.add_region(state, typ, feature)
     display_name = feature.canonical_name, node_name = name,
     source = {
       source_id = feature.source_id, source_version = feature.source_version,
-      dataset_id = feature.dataset_id, scale = "1:50m"
+      dataset_id = feature.dataset_id, scale = feature.scale,
+      geometry_file = feature.geometry_file, parent_name = feature.parent_name
     },
     draw_order = priorities[typ], visible = true, style_overrides = {},
     motion = {}
