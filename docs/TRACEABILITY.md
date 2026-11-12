@@ -2,17 +2,18 @@
 
 **Estado de partida:** nenhum teste de host executado. `NOT RUN` não é aprovado.
 
-Fonte normativa: `docs/CartoRig_Especificacao_de_Produto_e_Implementacao_V1.md` (SHA-256 `aa8fc5b394da22f4c78cfdb65a3f5c3cc27958271250c2d2f7b2d63c410b4e5e`).
+Fonte normativa: `docs/CartoRig_Especificacao_de_Produto_e_Implementacao_V1.md` (SHA-256 `af25a7816b0d4cb616f81d30f1c2c77b4c663f783c9f8dc41d96e0b2936427c9`).
 
 Critério `DONE`: node real, UI na superfície contratada, render e persistência, segurança de dependências e teste no host real usando o instalador do mesmo commit/SHA-256. Testes automatizados são executados localmente; GitHub Actions é exclusivamente o compilador/empacotador do instalador.
 
 **Histórico da fundação:** a 0.6.3 foi executada no Resolve Studio 20.3.1 e falhou antes da criação da Scene: o binding Lua incluiu `__flags` no retorno documentado como lista de `GetItemListInTrack()`, e a implementação antiga percorreu a tabela completa com `pairs()`. Esse resultado é evidência de regressão do candidato, não PASS de qualquer A/B.
 
-**Marco A 0.7.0 (candidato, host ainda NOT RUN):** sobre a fundação Blackmagic-contract da 0.6.4, a implementação inclui Scene/WorldMap/Camera físicos, Country/State físicos, busca offline Natural Earth, Admin 0 boundaries, criação por scene/source UUID, Rename estrutural sem seleção de node, Fill/Stroke independente, câmera compartilhada, persistência de fonte/versão/escala/geometria e diagnóstico read-only no Inspector. Testes automatizados locais cobrem domínio, catálogo, transações e UI estrutural; **não alteram nenhum A/B para PASS**.
+**Marco A 0.7.0 (candidato em recuperação para a especificação FINAL, host ainda NOT RUN):** sobre a fundação Blackmagic-contract da 0.6.4, a implementação inclui Scene/WorldMap/Camera físicos, Country/State físicos, busca offline Natural Earth, Admin 0 boundaries, criação por scene/source UUID, Rename estrutural sem seleção de node, Fill/Stroke independente, câmera compartilhada, persistência de fonte/versão/escala/geometria e diagnóstico read-only no Inspector. Testes automatizados locais cobrem domínio, catálogo, transações e UI estrutural; **não alteram nenhum A/B para PASS**.
 
 | Teste | Marco | Ação normativa | Resultado normativo | Implementação | Teste executável | Evidência Actions | Commit / PR | Status |
 |---|---|---|---|---|---|---|---|---|
-| A01 | A | Abrir CartoRig sem composição preparada; Create Scene 5 vezes | IMPLEMENTED 0.7.0; host render NOT RUN | Local: timeline lifecycle + NodeFactory | HOST NOT RUN | feat/milestone-a-regions | NOT RUN |
+| A01 | A | Abrir composição Fusion atual; Create Scene uma vez e Open Scene para reabrir | Source changed for FINAL; host render NOT RUN | SceneService active comp + NodeFactory; no implicit clip | Lua host doubles PASS; Studio NOT RUN | feat/milestone-a-regions | NOT RUN |
+<!-- Scene lifecycle is in the ACTIVE Fusion composition, not automatic Timeline insertion. -->
 | A02 | A | Scene → pesquisar e adicionar `Brazil`, `Argentina`, `Mato Grosso` | IMPLEMENTED 0.7.0; host render NOT RUN | Local: Brazil/Argentina/Mato Grosso Region graph | HOST NOT RUN | feat/milestone-a-regions | NOT RUN |
 | A03 | A | Em Scene, marcar linha do Brasil somente como alvo de `Rename` | IMPLEMENTED 0.7.0; host Inspector behavior NOT RUN | Local: Scene UI structural Rename/no SetActiveTool | HOST NOT RUN | feat/milestone-a-regions | NOT RUN |
 | A04 | A | Fechar Scene; clicar diretamente em `CR_Country_Brazil_001` no Node Editor | IMPLEMENTED 0.7.0 Region Control; host Viewer NOT RUN | Local: Fuse contract + style isolation | HOST NOT RUN | feat/milestone-a-regions | NOT RUN |
