@@ -1,7 +1,7 @@
 name: cartorig-dev Scene Timeline Windows
 on:
   push:
-    branches: ['feat/scene-per-timeline-composition', 'fix/resolve-context-type-guard-061', 'fix/reviewed-timeline-safety-063', 'fix/foundation-063-final', 'fix/blackmagic-api-contracts-064', 'fix/blackmagic-api-contracts-064-final']
+    branches: ['feat/scene-per-timeline-composition', 'fix/resolve-context-type-guard-061', 'fix/reviewed-timeline-safety-063', 'fix/foundation-063-final', 'fix/blackmagic-api-contracts-064', 'fix/blackmagic-api-contracts-064-final', 'feat/milestone-a-regions']
   workflow_dispatch:
 permissions:
   contents: read
@@ -23,6 +23,25 @@ jobs:
       - name: Install free NSIS
         shell: pwsh
         run: choco install nsis --yes --no-progress --limit-output
+      - name: Build pinned Natural Earth runtime with free tooling
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check --no-input pyshp==2.3.1
+          $commit='f1890d9f152c896d250a77557a5751a93d494776'
+          New-Item -ItemType Directory -Force build\natural-earth | Out-Null
+          git -C build\natural-earth init -q
+          git -C build\natural-earth remote add origin https://github.com/nvkelso/natural-earth-vector.git
+          git -C build\natural-earth fetch --depth=1 origin $commit
+          $actual=(git -C build\natural-earth rev-parse FETCH_HEAD).Trim()
+          if ($actual -ne $commit) {throw "Natural Earth commit mismatch: $actual"}
+          git -C build\natural-earth checkout --detach -q FETCH_HEAD
+          python tools\build_natural_earth.py --source-root build\natural-earth --output build\cartorig-data --source-commit $commit
+          if ($LASTEXITCODE -ne 0) {throw 'Natural Earth runtime build failed'}
+          foreach ($required in @('ne_50m_land.lua','ne_catalog.tsv','natural-earth-manifest.json')) {
+            if (!(Test-Path (Join-Path 'build\cartorig-data' $required))) {throw "Missing generated data: $required"}
+          }
+          $geometryCount=@(Get-ChildItem build\cartorig-data\regions -Recurse -File -Filter *.lua).Count
+          if ($geometryCount -lt 1000) {throw "Generated Region geometry set is implausibly small: $geometryCount"}
       - name: Compile historical 0.5.2/0.6.0/0.6.1/0.6.2/0.6.3 and new 0.6.4 installers
         shell: pwsh
         run: |
@@ -69,6 +88,9 @@ jobs:
           $uninstall=Join-Path $app 'Uninstall-CartoRig.exe'
           $module=Join-Path $app 'lua\CartoRig\timeline_service.lua'
           $ui=Join-Path $app 'lua\cartorig_scene_ui.lua'
+          $catalog=Join-Path $app 'data\ne_catalog.tsv'
+          $dataManifest=Join-Path $app 'data\natural-earth-manifest.json'
+          $regionFuse=Join-Path $env:APPDATA 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigRegion.fuse'
           $foreign=Join-Path $root 'Comp\Other Editor.lua'
           New-Item -ItemType Directory -Force (Split-Path -Parent $foreign) | Out-Null
           [IO.File]::WriteAllText($foreign,'Unrelated editor script: leave unchanged')
@@ -171,6 +193,12 @@ jobs:
             if (!(Test-Path $apiBoundary) -or (Get-FileHash $apiBoundary -Algorithm SHA256).Hash -ne (Get-FileHash src/CartoRig/blackmagic_api.lua -Algorithm SHA256).Hash) {throw 'Blackmagic API boundary mismatch'}
             if (!(Test-Path $fusionBoundary) -or (Get-FileHash $fusionBoundary -Algorithm SHA256).Hash -ne (Get-FileHash src/CartoRig/fusion_contract.lua -Algorithm SHA256).Hash) {throw 'Fusion contract boundary mismatch'}
             if (!(Test-Path $ui) -or (Get-FileHash $ui -Algorithm SHA256).Hash -ne (Get-FileHash host/cartorig-dev-scene.lua -Algorithm SHA256).Hash) {throw 'Scene UI mismatch'}
+            if (!(Test-Path $regionFuse) -or (Get-FileHash $regionFuse -Algorithm SHA256).Hash -ne (Get-FileHash fuses/CartoRigRegion.fuse -Algorithm SHA256).Hash) {throw 'Region Fuse mismatch'}
+            if (!(Test-Path $catalog) -or (Get-FileHash $catalog -Algorithm SHA256).Hash -ne (Get-FileHash build/cartorig-data/ne_catalog.tsv -Algorithm SHA256).Hash) {throw 'Offline catalog mismatch'}
+            if (!(Test-Path $dataManifest) -or (Get-FileHash $dataManifest -Algorithm SHA256).Hash -ne (Get-FileHash build/cartorig-data/natural-earth-manifest.json -Algorithm SHA256).Hash) {throw 'Natural Earth manifest mismatch'}
+            $installedGeometry=@(Get-ChildItem (Join-Path $app 'data\regions') -Recurse -File -Filter *.lua).Count
+            $builtGeometry=@(Get-ChildItem build/cartorig-data/regions -Recurse -File -Filter *.lua).Count
+            if ($installedGeometry -ne $builtGeometry -or $installedGeometry -lt 1000) {throw 'Installed Region geometry set mismatch'}
             $all=@(Get-ChildItem -Path $root -Recurse -File -Filter cartorig-dev.lua)
             if ($all.Count -ne 1 -or $all[0].FullName -ne $utility) {throw 'Not exactly one Scripts menu entry'}
             if ((Test-Path "$utility.pending") -or (Test-Path "$utility.backup")) {throw 'Launcher staging residue'}
@@ -186,7 +214,9 @@ jobs:
           [IO.File]::WriteAllText($foreignComp,'external same-name script, not owned by 0.6.4')
           $foreignCompHash=(Get-FileHash $foreignComp -Algorithm SHA256).Hash
           $p=Start-Process -FilePath $uninstall -ArgumentList '/S' -Wait -PassThru
-          if ($p.ExitCode -ne 0 -or (Test-Path $utility) -or (Test-Path $backup) -or (Test-Path $module)) {throw 'Upgrade uninstall failed'}
+          if ($p.ExitCode -ne 0 -or (Test-Path $utility) -or (Test-Path $backup) -or
+              (Test-Path $module) -or (Test-Path $regionFuse) -or
+              (Test-Path (Join-Path $app 'data\regions'))) {throw 'Upgrade uninstall failed or left Milestone A runtime data'}
           if (!(Test-Path $foreignComp) -or (Get-FileHash $foreignComp -Algorithm SHA256).Hash -ne $foreignCompHash) {
             throw 'Uninstaller deleted or changed unowned Comp/cartorig-dev.lua'
           }
@@ -238,7 +268,7 @@ jobs:
           $p=Start-Process -FilePath $new -ArgumentList '/S' -Wait -PassThru
           if ($p.ExitCode -ne 0 -or !(Test-Path $utility)) {throw 'Second clean install failed'}
           $p=Start-Process -FilePath $uninstall -ArgumentList '/S' -Wait -PassThru
-          if ($p.ExitCode -ne 0 -or (Test-Path $utility) -or (Test-Path $sceneFuse)) {throw 'Clean owned-file uninstall failed'}
+          if ($p.ExitCode -ne 0 -or (Test-Path $utility) -or (Test-Path $sceneFuse) -or (Test-Path $regionFuse)) {throw 'Clean owned-file uninstall failed'}
           if ((Get-FileHash $foreign -Algorithm SHA256).Hash -ne $hash) {throw 'Foreign script affected'}
 
           # Direct recognized legacy migration: authentic 0.5.2 Comp launcher must
