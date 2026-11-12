@@ -41,6 +41,7 @@ $files=@(
   (Status "SCENE_UI" (Join-Path $app 'lua\cartorig_scene_ui.lua')),
   (Status "BLACKMAGIC_API" (Join-Path $app 'lua\CartoRig\blackmagic_api.lua')),
   (Status "FUSION_CONTRACT" (Join-Path $app 'lua\CartoRig\fusion_contract.lua')),
+  (Status "RENDER_GEOMETRY" (Join-Path $app 'lua\CartoRig\render_geometry.lua')),
   (Status "NODE_FACTORY" (Join-Path $app 'lua\CartoRig\node_factory.lua')),
   (Status "OFFLINE_LAND" (Join-Path $app 'data\ne_50m_land.lua')),
   (Status "OFFLINE_BORDERS" (Join-Path $app 'data\ne_50m_admin0_borders.lua')),
@@ -70,7 +71,7 @@ if(!$primary){
 }elseif(!$ui){
   $classification="LAUNCHER_PRESENT_UI_MISSING"
 }
-$criticalNames=@("BLACKMAGIC_API","FUSION_CONTRACT","NODE_FACTORY","OFFLINE_LAND","OFFLINE_BORDERS","OFFLINE_CATALOG","DATA_MANIFEST","SCENE_FUSE","WORLDMAP_FUSE","CAMERA_FUSE","REGION_FUSE")
+$criticalNames=@("BLACKMAGIC_API","FUSION_CONTRACT","RENDER_GEOMETRY","NODE_FACTORY","OFFLINE_LAND","OFFLINE_BORDERS","OFFLINE_CATALOG","DATA_MANIFEST","SCENE_FUSE","WORLDMAP_FUSE","CAMERA_FUSE","REGION_FUSE")
 $criticalMissing=@($files | Where-Object { $criticalNames -contains $_.Name -and -not $_.Present })
 $regionRoot=Join-Path $app 'data\regions'
 $regionGeometryCount=if(Test-Path -LiteralPath $regionRoot){
