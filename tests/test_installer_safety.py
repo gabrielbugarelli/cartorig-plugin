@@ -27,6 +27,14 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn("blackmagic_api.lua",self.diagnostic)
         self.assertIn('"FUSION_CONTRACT"',self.diagnostic)
         self.assertIn("fusion_contract.lua",self.diagnostic)
+        self.assertIn('"OFFLINE_CATALOG"',self.diagnostic)
+        self.assertIn("ne_catalog.tsv",self.diagnostic)
+        self.assertIn('"DATA_MANIFEST"',self.diagnostic)
+        self.assertIn("natural-earth-manifest.json",self.diagnostic)
+        self.assertIn('"REGION_FUSE"',self.diagnostic)
+        self.assertIn("CartoRigRegion.fuse",self.diagnostic)
+        self.assertIn("REGION_GEOMETRY_FILES",self.diagnostic)
+        self.assertIn("MILESTONE_A_RUNTIME_INCOMPLETE",self.diagnostic)
 
     def test_build_identity_is_embedded_and_reportable(self):
         s=self.nsi
