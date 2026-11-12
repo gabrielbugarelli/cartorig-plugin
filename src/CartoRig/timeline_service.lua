@@ -2,6 +2,7 @@
 -- Resolve timeline edits are fail-closed: snapshot all tracks, append after the
 -- global end, verify the new item, and rollback only resources created here.
 local factory=require("CartoRig.node_factory")
+local catalog=require("CartoRig.catalog")
 local api=require("CartoRig.blackmagic_api")
 local M={}
 
@@ -653,6 +654,102 @@ function M.list_scenes(resolve)
     return a.track<b.track
   end)
   return results,#warnings>0 and table.concat(warnings," | ") or nil
+end
+
+local catalog_cache={}
+local function catalog_index(opts)
+  opts=opts or {}
+  local root=opts.localappdata or os.getenv("LOCALAPPDATA")
+  if type(root)~="string" or root=="" then
+    return nil,"DATA_MISSING: LOCALAPPDATA unavailable"
+  end
+  local path=root.."\\CartoRig\\App\\data\\ne_catalog.tsv"
+  if catalog_cache[path] then return catalog_cache[path] end
+  local index,err=catalog.open(path)
+  if not index then return nil,err end
+  catalog_cache[path]=index
+  return index
+end
+
+function M.search_locations(query,geo_type,opts)
+  local index,err=catalog_index(opts)
+  if not index then return nil,err end
+  return catalog.search(index,query,geo_type or "All",50)
+end
+
+local function find_scene_context(resolve,scene_id)
+  if type(scene_id)~="string" or scene_id=="" then
+    return nil,"SCENE_ID_REQUIRED: choose a CartoRig Scene"
+  end
+  local base,err=project_context(resolve)
+  if not base then return nil,err end
+  local timeline,terr=call(base.project,"GetCurrentTimeline")
+  if not timeline then return nil,"NO_TIMELINE: "..tostring(terr) end
+  timeline,terr=require_handle(timeline,"GetCurrentTimeline","GetTrackCount")
+  if not timeline then return nil,terr end
+  local total,tErr=call(timeline,"GetTrackCount","video")
+  if type(total)~="number" or total<0 or total~=math.floor(total) then
+    return nil,"TRACK_ACCESS_FAILED: expected video count, got "..type(total)..
+      " ("..tostring(tErr or total)..")"
+  end
+
+  local match=nil
+  for track=1,total do
+    local clips,clipErr=track_items(timeline,"video",track)
+    if not clips then return nil,"TRACK_LIST_FAILED: V"..track..": "..tostring(clipErr) end
+    for _,item in ipairs(clips) do
+      local count=call(item,"GetFusionCompCount")
+      if type(count)=="number" and count>=1 then
+        local comp,cerr=call(item,"GetFusionCompByIndex",1)
+        if comp then
+          local compHandle,handleErr=require_handle(comp,"GetFusionCompByIndex","GetToolList")
+          if not compHandle then return nil,handleErr end
+          local state,inspectErr=factory.inspect(comp)
+          if state and state.has_scene and state.scene_id==scene_id then
+            if match then
+              return nil,"SCENE_ID_COLLISION: more than one composition uses "..scene_id
+            end
+            match={composition=comp,timeline_item=item,timeline=timeline,state=state,track=track}
+          elseif inspectErr and tostring(inspectErr):match("^STATE_INVALID") then
+            return nil,"SCENE_CONTEXT_INVALID: "..tostring(inspectErr)
+          end
+        elseif cerr then
+          return nil,"SCENE_CONTEXT_UNREADABLE: "..tostring(cerr)
+        end
+      end
+    end
+  end
+  if not match then return nil,"SCENE_NOT_FOUND: selected Scene is not in the active timeline" end
+  return match
+end
+
+function M.add_region(resolve,scene_id,source_id,opts)
+  opts=opts or {}
+  local index,indexErr=catalog_index(opts)
+  if not index then return nil,indexErr end
+  local feature,featureErr=catalog.find(index,source_id)
+  if not feature then return nil,featureErr end
+  if feature.geo_type~="Country" and feature.geo_type~="State" then
+    return nil,"REGION_TYPE_UNSUPPORTED: choose a Country or State/Province"
+  end
+
+  local context,contextErr=find_scene_context(resolve,scene_id)
+  if not context then return nil,contextErr end
+  local result,createErr=factory.add_region(context.composition,feature,opts)
+  if not result then return nil,createErr end
+
+  local observed,observeErr=factory.inspect(context.composition)
+  if not observed then return nil,"POST_CREATE_STATE_INVALID: "..tostring(observeErr) end
+  local found=false
+  for _,obj in ipairs(observed.objects) do
+    if obj.id==result.object_id then found=true;break end
+  end
+  if not found then
+    return nil,"POST_CREATE_STATE_INVALID: created Region is absent from persisted composition"
+  end
+  result.scene_id=scene_id
+  result.objects=observed.objects
+  return result
 end
 
 function M.current_scene(resolve)
