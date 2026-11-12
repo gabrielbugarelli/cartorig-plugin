@@ -67,6 +67,7 @@ GitHub Actions installer-only policy or the stable release gate.
   remain accessible through their own Fuses.
 - Motion remains an intentionally nonfunctional placeholder for Milestone D;
   the presence of a page does not imply the presets are implemented.
+- Button and color-change callbacks disable initial notifications, avoiding an unintended reset of saved camera/style state when a Fuse is initialized.
 - Full Camera `Focus Target`, `Fit to Location`, `Fit to Objects` and geometric
   editor workflows have not been validated or completed in this source pass.
   Do not describe Camera Control as specification-complete.
