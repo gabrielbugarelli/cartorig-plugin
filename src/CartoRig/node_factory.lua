@@ -509,6 +509,21 @@ local function create_region_node(comp,info,x,y,created)
     local written,writeErr=fusion.set_data(tool,key,value,info.object_type.." / "..key)
     if not written then error(writeErr) end
   end
+
+  local identity=table.concat({
+    info.object_type.." — "..info.display_name,
+    "Object UUID: "..info.object_id,
+    "Scene UUID: "..info.scene_id
+  },"\n")
+  local geography=table.concat({
+    "Natural Earth "..info.source.scale.." | "..info.source.dataset_id,
+    "Source ID: "..info.source.source_id.." | Version: "..info.source.source_version,
+    "Parent: "..tostring(info.source.parent_name or "")
+  },"\n")
+  local identityWritten,identityErr=fusion.set_input(tool,"IdentityInfo",identity,"Region Identity")
+  if not identityWritten then error(identityErr) end
+  local geographyWritten,geographyErr=fusion.set_input(tool,"GeographyInfo",geography,"Region Geography")
+  if not geographyWritten then error(geographyErr) end
   return tool
 end
 
