@@ -82,6 +82,11 @@ function Create()
     INP_Integer=true, INP_Default=1,
   })
 
+  InResetStyle=self:AddInput("Reset Object Style","ResetStyle",{
+    LINKID_DataType="Number", INPID_InputControl="ButtonControl",
+    INP_DoNotifyChanged=true, INP_External=false,
+  })
+
   self:AddControlPage("Motion")
   self:AddInput("Region motion presets are implemented in Milestone D","MotionStatus",{
     LINKID_DataType="Text", INPID_InputControl="LabelControl",
@@ -95,6 +100,21 @@ end
 -- Editing a Color Picker immediately makes this node independent from the
 -- WorldMap palette. Re-check Inherit to restore the live scene default.
 function NotifyChanged(inp,param,time)
+  if inp==InResetStyle then
+    for i,value in ipairs({214/255,215/255,210/255}) do
+      FillControls[i]:SetSource(Number(value),time)
+    end
+    for i,value in ipairs({117/255,129/255,139/255}) do
+      StrokeControls[i]:SetSource(Number(value),time)
+    end
+    InFillOpacity:SetSource(Number(1),time)
+    InStrokeWidth:SetSource(Number(1),time)
+    InStrokeOpacity:SetSource(Number(1),time)
+    InOpacity:SetSource(Number(1),time)
+    InVisible:SetSource(Number(1),time)
+    InInheritLand:SetSource(Number(1),time)
+    return
+  end
   if FillControls then
     for _,control in ipairs(FillControls) do
       if inp==control and InInheritLand then
