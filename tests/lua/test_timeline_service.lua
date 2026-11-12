@@ -35,6 +35,15 @@ function mockFactory.add_region(comp,feature,opts)
     display_name=feature.canonical_name,node_name=node_name,source=obj.source
   }
 end
+function mockFactory.repair_region_palette(comp)
+  if not comp.sid then return nil,"NO_SCENE" end
+  comp.repair_calls=(comp.repair_calls or 0)+1
+  local regions=0
+  for _,obj in ipairs(comp.objects) do
+    if obj.type=="Country" or obj.type=="State" then regions=regions+1 end
+  end
+  return {regions=regions,expressions_repaired=regions*6}
+end
 function mockFactory.rename_object(comp,object_id,new_name)
   if not comp.sid then return nil,"NO_SCENE" end
   for _,obj in ipairs(comp.objects or {}) do
@@ -372,6 +381,16 @@ local added,addErr=svc.add_region(resolve,targetScene.scene_id,"ne-admin0","br-s
 assert(added,addErr)
 assert(added.scene_id==targetScene.scene_id and added.object_type=="Country")
 assert(#targetScene.composition.objects==beforeCounts[1]+1)
+-- Palette repair targets the selected Scene composition, not whatever
+-- Fusion clip happens to be displayed at the playhead.
+local repairResult,repairErr=svc.repair_palette(resolve,targetScene.scene_id)
+assert(repairResult,repairErr)
+assert(repairResult.regions==1 and repairResult.expressions_repaired==6)
+assert(targetScene.composition.repair_calls==1)
+for n=2,#createdScenes do
+ assert(not createdScenes[n].composition.repair_calls,
+  "selected Scene palette repair must not modify another composition")
+end
 local originalNodeName=added.node_name
 local renamed,renameErr=svc.rename_object(resolve,targetScene.scene_id,added.object_id,
   "Brazil Highlight")
