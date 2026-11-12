@@ -39,6 +39,30 @@ The Region node persists `dataset_id`, `source_id`, `source_version`,
 `scale`, `geometry_file`, parent and draw order. A catalog entry and its
 geometry file must agree before the Fusion graph is mutated.
 
+## Polygon topology and integrity in development runtime
+
+The generator writes `topology_schema=2` for Land and each Country/State
+feature. Each coordinate ring has a parallel `ring_roles` entry
+(`outer` or `hole`) and retains its assigned containing polygon.
+PyShp's shapefile ring organizer distinguishes disjoint islands from holes;
+ring directions are normalized to clockwise exteriors and counterclockwise
+interiors before generating Fuse paths. This prevents turning holes into
+ordinary independent land polygons in the serialized data.
+
+The NodeFactory checks topology before modifying the Fusion graph. Fuses
+also check their runtime topology and source/version/scale metadata. A
+missing or incompatible geometry stops the operation rather than silently
+using a fallback polygon.
+
+When the source checkout includes Git metadata, the generator verifies that
+its actual `HEAD` matches the pinned Natural Earth commit written in the
+manifest. The manifest keeps per-source SHA-256 checksums, a catalog digest,
+and deterministic aggregate geometry-set digests.
+
+Correct display of holes, antimeridian-crossing *polygon* surfaces and
+RGBA in the Resolve Studio 20 Viewer/MediaOut still requires host testing;
+source-data validation alone is not acceptance.
+
 ## Search behavior
 
 The index normalizes case and diacritics at query time and retains canonical
