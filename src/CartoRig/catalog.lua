@@ -92,21 +92,26 @@ function catalog.open(path)
   return { rows = objects, record_count = #objects, schema_version = 1 }
 end
 
-function catalog.find(index, source_id)
+function catalog.find(index,dataset_id,source_id)
   if type(index)~="table" or type(index.rows)~="table" then
     return nil,"offline index is not loaded"
+  end
+  if type(dataset_id)~="string" or dataset_id=="" then
+    return nil,"dataset ID is required"
   end
   if type(source_id)~="string" or source_id=="" then
     return nil,"source ID is required"
   end
   local found=nil
   for _,row in ipairs(index.rows) do
-    if row.source_id==source_id then
-      if found then return nil,"DATA_INTEGRITY: source ID is not unique" end
+    if row.dataset_id==dataset_id and row.source_id==source_id then
+      if found then return nil,"DATA_INTEGRITY: dataset/source identity is not unique" end
       found=row
     end
   end
-  if not found then return nil,"LOCATION_NOT_FOUND: source ID is absent from installed data" end
+  if not found then
+    return nil,"LOCATION_NOT_FOUND: dataset/source identity is absent from installed data"
+  end
   return found
 end
 
