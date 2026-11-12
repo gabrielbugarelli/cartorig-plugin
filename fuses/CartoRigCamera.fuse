@@ -55,10 +55,17 @@ function Process(req)
   -- The WorldMap renders a Fit World equirectangular image before this effect.
   -- Pixels of longitude/latitude are scaled by min(width/360,height/180).
   local w,h=img.Width,img.Height
-  local fit=math.min(w/360,h/180)
+  local xAspect,yAspect=img.XAspect or 1,img.YAspect or 1
+  if type(xAspect)~="number" or xAspect<=0 or
+     type(yAspect)~="number" or yAspect<=0 then
+    error("CAMERA_INVALID_IMAGE_ASPECT: output pixel aspect is unavailable")
+  end
+  -- Exactly the same physical-pixel Fit World scale used by WorldMap/Region.
+  -- Camera controls use normalized x/y positions, not Shape coordinates.
+  local fit=math.min(w*xAspect/360,h*yAspect/180)
   lon=((lon+180)%360)-180
-  local x=0.5-lon*fit/w*zoom
-  local y=0.5-lat*fit/h*zoom
+  local x=0.5-lon*fit/(w*xAspect)*zoom
+  local y=0.5-lat*fit/(h*yAspect)*zoom
   local out=img:Transform(nil,{
     XF_XOffset=x,XF_YOffset=y,XF_XAxis=0.5,XF_YAxis=0.5,
     XF_XSize=zoom,XF_YSize=zoom,XF_Angle=-bearing,
