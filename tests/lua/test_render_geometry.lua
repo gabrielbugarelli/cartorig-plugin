@@ -23,6 +23,13 @@ local dx=select(1,geo.project(wide,90,0))-.5
 local dy=select(2,geo.project(wide,0,45))-1080/(2*1920)
 near(dx*1920*2,dy*1920*2)
 
+local camx,camy=geo.camera_offset(f,-47,-15,2)
+near(camx,0.5-(-47*f.scale/f.width)*2)
+near(camy,0.5-(-15*f.scale/f.height)*2)
+local nonSquareX,nonSquareY=geo.camera_offset(wide,90,45,1)
+near(nonSquareX,0.5-90*wide.scale/(wide.width*wide.xaspect))
+near(nonSquareY,0.5-45*wide.scale/(wide.height*wide.yaspect))
+
 local seam=geo.split_line({170,0,-170,10},false)
 assert(#seam==2 and seam[1][#seam[1]-1]==180 and seam[2][1]==-180)
 near(seam[1][#seam[1]],5);near(seam[2][2],5)
