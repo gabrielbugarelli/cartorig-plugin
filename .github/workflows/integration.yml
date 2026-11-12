@@ -31,7 +31,14 @@ jobs:
           mkdir -p build/natural-earth
           git -C build/natural-earth init -q
           git -C build/natural-earth remote add origin https://github.com/nvkelso/natural-earth-vector.git
-          git -C build/natural-earth fetch --depth=1 origin "$NATURAL_EARTH_COMMIT"
+          git -C build/natural-earth sparse-checkout init --no-cone
+          cat > build/natural-earth/.git/info/sparse-checkout <<'PATTERNS'
+          /50m_physical/ne_50m_land.*
+          /50m_cultural/ne_50m_admin_0_countries.*
+          /10m_cultural/ne_10m_admin_1_states_provinces.*
+          /50m_cultural/ne_50m_populated_places.*
+          PATTERNS
+          git -C build/natural-earth fetch --filter=blob:none --depth=1 origin "$NATURAL_EARTH_COMMIT"
           test "$(git -C build/natural-earth rev-parse FETCH_HEAD)" = "$NATURAL_EARTH_COMMIT"
           git -C build/natural-earth checkout --detach -q FETCH_HEAD
       - name: Build pinned offline Natural Earth runtime
