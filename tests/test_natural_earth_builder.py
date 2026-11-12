@@ -208,6 +208,8 @@ class NaturalEarthBuilderTests(unittest.TestCase):
         datasets = {item["dataset_id"]: item for item in written_manifest["datasets"]}
         self.assertEqual(datasets["natural-earth-land"]["source_version"], "4.1.0")
         self.assertEqual(datasets["natural-earth-land"]["ring_count"], 1)
+        self.assertEqual(datasets["natural-earth-land"]["topology_schema"], 2)
+        self.assertIn("ring_roles=", (self.out / "ne_50m_land.lua").read_text(encoding="utf-8"))
         self.assertTrue((self.out / "ne_50m_land.lua").exists())
         self.assertEqual(datasets["natural-earth-admin0-boundaries"]["source_version"], "5.1.0")
         self.assertEqual(datasets["natural-earth-admin0-boundaries"]["line_count"], 1)
@@ -216,6 +218,33 @@ class NaturalEarthBuilderTests(unittest.TestCase):
         self.assertEqual(datasets["natural-earth-admin1-states-provinces"]["feature_count"], 2)
         self.assertEqual(datasets["natural-earth-populated-places"]["feature_count"], 1)
         self.assertTrue(datasets["natural-earth-admin0-countries"]["source_files_sha256"]["ne_50m_admin_0_countries.shp"])
+
+    def test_polygon_topology_preserves_holes_and_disjoint_islands(self):
+        class Shape:
+            outer = [(-10, -10), (-10, 10), (10, 10), (10, -10), (-10, -10)]
+            hole = [(-4, -4), (4, -4), (4, 4), (-4, 4), (-4, -4)]
+            island = [(20, 20), (20, 30), (30, 30), (30, 20), (20, 20)]
+            points = outer + hole + island
+            parts = [0, 5, 10]
+
+        rings, roles, polygons = builder._topology_rings(Shape())
+        self.assertEqual(polygons, 2)
+        self.assertEqual(roles, ["outer", "hole", "outer"])
+        for ring, role in zip(rings, roles):
+            self.assertEqual(shapefile.is_cw(ring + [ring[0]]), role == "outer")
+
+    def test_polygon_topology_rejects_degenerate_rings(self):
+        class Shape:
+            points = [(1, 1), (2, 2), (3, 3), (1, 1)]
+            parts = [0]
+
+        with self.assertRaisesRegex(ValueError, "degenerate"):
+            builder._topology_rings(Shape())
+
+    def test_accent_insensitive_generated_aliases(self):
+        fields = {"NAME": "São Paulo"}
+        aliases = builder._aliases(fields, "São Paulo")
+        self.assertIn("Sao Paulo", aliases.split("|"))
 
     def test_rejects_sanitized_geometry_filename_collision(self):
         class Shape:
