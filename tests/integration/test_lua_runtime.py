@@ -38,6 +38,9 @@ class LuaRuntimeIntegration(unittest.TestCase):
     def test_shared_render_projection_and_dateline_regressions(self):
         self.invoke("tests/lua/test_render_geometry.lua")
 
+    def test_render_antimeridian_area_stress(self):
+        self.invoke("tests/lua/test_render_fuzz.lua")
+
     def test_blackmagic_api_contract_boundary(self):
         self.invoke("tests/lua/test_blackmagic_api.lua")
 
