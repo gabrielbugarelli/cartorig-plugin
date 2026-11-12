@@ -124,6 +124,14 @@ local window=disp:AddWindow({
     ui:Button{ID="AddState",Text="Add State/Province",Enabled=false},
   },
   ui:Label{Text="Objects in selected Scene (structural list only)",WordWrap=true},
+  ui:HGroup{
+    ui:Label{Text="Structural object"},
+    ui:ComboBox{ID="ObjectContext",Weight=1},
+  },
+  ui:HGroup{
+    ui:LineEdit{ID="RenameObjectName",PlaceholderText="New display name",Weight=1},
+    ui:Button{ID="RenameObject",Text="Rename",Enabled=false},
+  },
   ui:TextEdit{ID="SceneList",ReadOnly=true,Weight=1},
   ui:Label{ID="Status",Text="No structural operation has run in this session.",WordWrap=true},
   ui:HGroup{
@@ -139,6 +147,7 @@ local items=window:GetItems()
 local report=""
 local sceneContexts={}
 local searchResults={}
+local objectContexts={}
 
 items.GeoType:AddItem("All")
 items.GeoType:AddItem("Country")
@@ -187,16 +196,36 @@ local function selected_result()
   return searchResults[index+1]
 end
 
+local function selected_object()
+  local index=tonumber(items.ObjectContext.CurrentIndex)
+  if not index or index<0 then return nil end
+  return objectContexts[index+1]
+end
+
+local function update_rename_controls()
+  local obj=selected_object()
+  local supported=obj and (obj.type=="Country" or obj.type=="State")
+  items.RenameObject.Enabled=supported==true
+  if obj then
+    items.RenameObjectName.Text=tostring(obj.display_name or obj.name or "")
+  else
+    items.RenameObjectName.Text=""
+  end
+end
+
 local function update_add_buttons()
   local result=selected_result()
   items.AddCountry.Enabled=result~=nil and result.geo_type=="Country"
   items.AddState.Enabled=result~=nil and result.geo_type=="State"
 end
 
-local function render_selected_scene()
+local function render_selected_scene(preferredObjectId)
   local scene=selected_scene()
+  items.ObjectContext:Clear()
+  objectContexts={}
   if not scene then
     items.SceneList.PlainText="No CartoRig Scene selected."
+    update_rename_controls()
     return
   end
   local lines={
@@ -210,7 +239,12 @@ local function render_selected_scene()
     if ao~=bo then return ao<bo end
     return tostring(a.name)<tostring(b.name)
   end)
-  for _,obj in ipairs(scene.objects) do
+  local selectedIndex=1
+  for n,obj in ipairs(scene.objects) do
+    objectContexts[#objectContexts+1]=obj
+    items.ObjectContext:AddItem(tostring(obj.type).." — "..
+      tostring(obj.display_name or obj.name).." | "..tostring(obj.name))
+    if preferredObjectId and obj.id==preferredObjectId then selectedIndex=n end
     local detail="• "..tostring(obj.type).." | "..tostring(obj.name)..
       " | "..tostring(obj.id)
     if obj.source then
@@ -218,10 +252,12 @@ local function render_selected_scene()
     end
     lines[#lines+1]=detail
   end
+  if #objectContexts>0 then items.ObjectContext.CurrentIndex=selectedIndex-1 end
   items.SceneList.PlainText=table.concat(lines,"\n")
+  update_rename_controls()
 end
 
-local function refresh(preferredSceneId)
+local function refresh(preferredSceneId,preferredObjectId)
   local previous=preferredSceneId
   if not previous then
     local selected=selected_scene()
@@ -248,7 +284,7 @@ local function refresh(preferredSceneId)
     return
   end
   items.SceneContext.CurrentIndex=selectedIndex-1
-  render_selected_scene()
+  render_selected_scene(preferredObjectId)
   if err then items.Status.Text="Scene list warning: "..tostring(err) end
 end
 
@@ -310,6 +346,9 @@ end
 function window.On.SceneContext.CurrentIndexChanged(ev)
   render_selected_scene()
 end
+function window.On.ObjectContext.CurrentIndexChanged(ev)
+  update_rename_controls()
+end
 function window.On.SearchResults.CurrentIndexChanged(ev)
   update_add_buttons()
 end
@@ -324,6 +363,35 @@ function window.On.AddCountry.Clicked(ev)
 end
 function window.On.AddState.Clicked(ev)
   add_selected("State")
+end
+
+function window.On.RenameObject.Clicked(ev)
+  local scene=selected_scene()
+  local obj=selected_object()
+  if not scene then record("Rename",false,"Choose a structural Scene target");return end
+  if not obj then record("Rename",false,"Choose a structural object");return end
+  if obj.type~="Country" and obj.type~="State" then
+    record("Rename",false,"Milestone A renames Country/State objects only")
+    return
+  end
+  local newName=items.RenameObjectName.Text
+  if type(newName)~="string" or newName:match("^%s*$") then
+    record("Rename",false,"Enter a display name")
+    return
+  end
+  local ok2,value,err=pcall(service.rename_object,resolve,scene.scene_id,obj.id,newName)
+  if not ok2 then
+    record("Rename",false,"Resolve/Fusion API failure: "..tostring(value))
+    return
+  end
+  if not value then
+    record("Rename",false,tostring(err))
+    refresh(scene.scene_id,obj.id)
+    return
+  end
+  record("Rename",true,"Display name changed to "..tostring(value.display_name)..
+    "; UUID and physical node name preserved: "..tostring(value.node_name))
+  refresh(scene.scene_id,obj.id)
 end
 
 function window.On.CreateScene.Clicked(ev)
