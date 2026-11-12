@@ -54,6 +54,17 @@ LAND_DATASET = {
     "required_attributes": [],
 }
 
+BORDER_DATASET = {
+    "stem": "50m_cultural/ne_50m_admin_0_boundary_lines_land",
+    "dataset_id": "natural-earth-admin0-boundaries",
+    "version": "5.1.0",
+    "scale": "1:50m",
+    "feature_type": "Boundary",
+    "geometry": "LineString",
+    "coverage": "Admin 0 land boundary lines represented by Natural Earth 1:50m",
+    "required_attributes": [],
+}
+
 DATASETS = {
     "countries": {
         "stem": "50m_cultural/ne_50m_admin_0_countries",
@@ -209,6 +220,19 @@ def _rings(shape: Any) -> list[list[tuple[float, float]]]:
     return rings
 
 
+def _lines(shape: Any) -> list[list[tuple[float, float]]]:
+    points = shape.points
+    if not points:
+        return []
+    starts = list(shape.parts) + [len(points)]
+    lines: list[list[tuple[float, float]]] = []
+    for index in range(len(starts) - 1):
+        line = [(float(x), float(y)) for x, y in points[starts[index] : starts[index + 1]]]
+        if len(line) >= 2:
+            lines.append(line)
+    return lines
+
+
 def _write_geometry(
     output_root: Path,
     dataset_id: str,
@@ -332,10 +356,64 @@ def _write_land_runtime(source_root: Path, output_root: Path) -> dict[str, Any]:
     }
 
 
+def _write_border_runtime(source_root: Path, output_root: Path) -> dict[str, Any]:
+    spec = BORDER_DATASET
+    stem = spec["stem"]
+    version = _version_from_source(source_root, stem, spec["version"])
+    reader = _reader(source_root, stem)
+    lines: list[list[tuple[float, float]]] = []
+    feature_count = 0
+    for shape in reader.iterShapes():
+        lines.extend(_lines(shape))
+        feature_count += 1
+    if not lines:
+        raise ValueError("Natural Earth Admin 0 boundaries contain no line strings")
+
+    destination = output_root / "ne_50m_admin0_borders.lua"
+    with destination.open("w", encoding="utf-8", newline="\n") as stream:
+        stream.write("-- Generated from pinned Natural Earth 1:50m Admin 0 boundary lines. Do not edit.\n")
+        stream.write("return {")
+        for line in lines:
+            stream.write("{")
+            flattened: list[str] = []
+            for lon, lat in line:
+                if not (-180 <= lon <= 180 and -90 <= lat <= 90):
+                    raise ValueError("Natural Earth boundary contains coordinate outside WGS84 degrees")
+                flattened.extend((_format_number(lon), _format_number(lat)))
+            stream.write(",".join(flattened))
+            stream.write("},")
+        stream.write("}\n")
+
+    return {
+        "dataset_id": spec["dataset_id"],
+        "natural_earth_theme": Path(stem).name,
+        "source_version": version,
+        "scale": spec["scale"],
+        "feature_type": spec["feature_type"],
+        "geometry": spec["geometry"],
+        "coverage": spec["coverage"],
+        "required_attributes": spec["required_attributes"],
+        "installation_status": "bundled",
+        "support_status": "supported",
+        "license": "public domain",
+        "attribution": "Made with Natural Earth",
+        "feature_count": feature_count,
+        "line_count": len(lines),
+        "source_files_sha256": _dataset_source_hashes(source_root, stem),
+        "generated_runtime": {
+            "path": "ne_50m_admin0_borders.lua",
+            "sha256": _sha256(destination),
+        },
+    }
+
+
 def build(source_root: Path, output_root: Path, source_commit: str) -> dict[str, Any]:
     output_root.mkdir(parents=True, exist_ok=True)
     catalog_rows: list[list[str]] = []
-    manifest_datasets: list[dict[str, Any]] = [_write_land_runtime(source_root, output_root)]
+    manifest_datasets: list[dict[str, Any]] = [
+        _write_land_runtime(source_root, output_root),
+        _write_border_runtime(source_root, output_root),
+    ]
 
     for key, spec in DATASETS.items():
         stem = spec["stem"]
