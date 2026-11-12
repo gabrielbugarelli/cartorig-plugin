@@ -56,6 +56,19 @@ assert(a.object_id~=b.object_id)
 assert(a.draw_order==20001 and b.draw_order==20002)
 assert(a.source.scale=="1:50m" and a.source.geometry_file=="regions/NE_50M_ADM0/NE_ID_1.lua")
 assert(a.source.parent_name=="South America")
+local stateFeature={
+  canonical_name="Mato Grosso",geometry_available=true,
+  source_id="ADM1:MT",dataset_id="NE_10M_ADM1",
+  source_version="test-fixture-v1",scale="1:10m",
+  geometry_file="regions/NE_10M_ADM1/ADM1_MT.lua",
+  parent_name="Brazil",source_type="State"
+}
+local mt=assert(d.add_region(state,"State",stateFeature))
+assert(mt.node_name=="CR_State_Brazil_MatoGrosso_001")
+local missingParent={}
+for key,value in pairs(stateFeature) do missingParent[key]=value end
+missingParent.parent_name=""
+assert(d.add_region(state,"State",missingParent)==nil)
 assert(d.validate(state))
 local original=a.object_id
 assert(d.rename(state,original,"Brasil"))
