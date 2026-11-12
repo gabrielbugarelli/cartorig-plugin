@@ -15,12 +15,34 @@ jobs:
     if: ${{ github.event.repository.private == false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      CARTORIG_DATA_DIR: ${{ github.workspace }}/build/cartorig-data
+      NATURAL_EARTH_COMMIT: f1890d9f152c896d250a77557a5751a93d494776
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
       - name: Install Lua 5.1 test interpreter
         run: sudo apt-get -o Acquire::Retries=3 update -qq && sudo apt-get -o Acquire::Retries=3 install -y -qq lua5.1
+      - name: Install pinned free data-build dependency
+        run: python3 -m pip install --disable-pip-version-check --no-input pyshp==2.3.1
+      - name: Checkout pinned Natural Earth source without GitHub Actions billing add-ons
+        run: |
+          mkdir -p build/natural-earth
+          git -C build/natural-earth init -q
+          git -C build/natural-earth remote add origin https://github.com/nvkelso/natural-earth-vector.git
+          git -C build/natural-earth fetch --depth=1 origin "$NATURAL_EARTH_COMMIT"
+          test "$(git -C build/natural-earth rev-parse FETCH_HEAD)" = "$NATURAL_EARTH_COMMIT"
+          git -C build/natural-earth checkout --detach -q FETCH_HEAD
+      - name: Build pinned offline Natural Earth runtime
+        run: |
+          python3 tools/build_natural_earth.py \
+            --source-root build/natural-earth \
+            --output "$CARTORIG_DATA_DIR" \
+            --source-commit "$NATURAL_EARTH_COMMIT"
+          test -s "$CARTORIG_DATA_DIR/ne_catalog.tsv"
+          test -s "$CARTORIG_DATA_DIR/ne_50m_land.lua"
+          test -s "$CARTORIG_DATA_DIR/natural-earth-manifest.json"
       - name: Run real (non-host) source integration suite
         run: python3 scripts/run_integration.py
       - name: Distinguish host validation
