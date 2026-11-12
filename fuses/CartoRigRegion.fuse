@@ -156,7 +156,14 @@ end
 local function get_geometry()
   local path=geometry_path()
   local cached=geometryCache[path]
-  if cached then return cached end
+  if cached then
+    if cached.source_id~=self:GetData("CartoRig.V1.SourceId") or
+       cached.version~=self:GetData("CartoRig.V1.SourceVersion") or
+       cached.scale~=self:GetData("CartoRig.V1.SourceScale") then
+      error("DATA_INCOMPATIBLE: cached Region provenance mismatch")
+    end
+    return cached
+  end
   local ok,data=pcall(dofile,path)
   if not ok or type(data)~="table" or type(data.rings)~="table" or #data.rings==0 then
     error("DATA_INCOMPATIBLE: Region geometry unavailable: "..tostring(data))
