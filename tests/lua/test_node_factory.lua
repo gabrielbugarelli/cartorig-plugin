@@ -130,17 +130,17 @@ assert(assert(factory.inspect(comp)).legacy_title_missing==false)
 local countryGeometryRel="regions/ne_admin0/ne-id-country-br.lua"
 local countryGeometryPath=ROOT.."\\CartoRig\\App\\data\\"..countryGeometryRel:gsub("/","\\")
 local countryGeometry=assert(io.open(countryGeometryPath,"wb"))
-countryGeometry:write('return {source_id="ne-id-country-br",version="fixture-v1",scale="1:50m",rings={{-74,-34,-34,-34,-34,5,-74,5}}}\n')
+countryGeometry:write('return {source_id="ne-id-country-br",version="fixture-v1",scale="1:50m",bbox={-74,-34,-34,5},rings={{-74,-34,-34,-34,-34,5,-74,5}}}\n')
 countryGeometry:close()
 local stateGeometryRel="regions/ne_admin1/ne-id-state-mt.lua"
 local stateGeometryPath=ROOT.."\\CartoRig\\App\\data\\"..stateGeometryRel:gsub("/","\\")
 local stateGeometry=assert(io.open(stateGeometryPath,"wb"))
-stateGeometry:write('return {source_id="ne-id-state-mt",version="fixture-v1",scale="1:10m",rings={{-61,-18,-50,-18,-50,-7,-61,-7}}}\n')
+stateGeometry:write('return {source_id="ne-id-state-mt",version="fixture-v1",scale="1:10m",bbox={-61,-18,-50,-7},rings={{-61,-18,-50,-18,-50,-7,-61,-7}}}\n')
 stateGeometry:close()
 local argentinaGeometryRel="regions/ne_admin0/ne-id-country-ar.lua"
 local argentinaGeometryPath=ROOT.."\\CartoRig\\App\\data\\"..argentinaGeometryRel:gsub("/","\\")
 local argentinaGeometry=assert(io.open(argentinaGeometryPath,"wb"))
-argentinaGeometry:write('return {source_id="ne-id-country-ar",version="fixture-v1",scale="1:50m",rings={{-73,-55,-53,-55,-53,-21,-73,-21}}}\n')
+argentinaGeometry:write('return {source_id="ne-id-country-ar",version="fixture-v1",scale="1:50m",bbox={-73,-55,-53,-21},rings={{-73,-55,-53,-55,-53,-21,-73,-21}}}\n')
 argentinaGeometry:close()
 
 local brazilFeature={
@@ -208,6 +208,17 @@ assert(stateNode:GetData("CartoRig.V1.SourceScale")=="1:10m")
 assert(stateNode:GetInput("IdentityInfo"):find("State — Mato Grosso",1,true))
 assert(stateNode:GetInput("GeographyInfo"):find("Natural Earth 1:10m",1,true))
 assert(stateNode:GetInput("GeographyInfo"):find("Source ID: ne-id-state-mt",1,true))
+assert(stateNode:GetInput("BoundsInfo"):find("W %-61%.000000",1)==1)
+assert(stateNode:GetData("CartoRig.V1.BoundWest")==-61)
+assert(stateNode:GetData("CartoRig.V1.BoundNorth")==-7)
+assert(state1.bounds.west==-61 and state1.bounds.north==-7)
+local persistedState=assert(factory.inspect(comp))
+local persistedMato=nil
+for _,obj in ipairs(persistedState.objects) do
+ if obj.id==state1.object_id then persistedMato=obj;break end
+end
+assert(persistedMato and persistedMato.source.bounds.west==-61 and
+       persistedMato.source.bounds.east==-50 and persistedMato.source.bounds.north==-7)
 
 -- A03 structural Rename changes display metadata only. UUID, physical node name,
 -- style channels, source identity and graph position remain unchanged.
@@ -257,7 +268,7 @@ assert(#comp.tools==beforeMismatch)
 local corruptRegionRel="regions/ne_admin0/corrupt-country.lua"
 local corruptRegionPath=ROOT.."\\CartoRig\\App\\data\\"..corruptRegionRel:gsub("/","\\")
 local corruptRegionFile=assert(io.open(corruptRegionPath,"wb"))
-corruptRegionFile:write('return {source_id="corrupt-country",version="fixture-v1",scale="1:50m",rings={{-74,-34,999,-34,-34,5}}}\n')
+corruptRegionFile:write('return {source_id="corrupt-country",version="fixture-v1",scale="1:50m",bbox={-74,-34,-34,5},rings={{-74,-34,999,-34,-34,5}}}\n')
 corruptRegionFile:close()
 local corruptFeature={
  geo_type="Country",source_type="Country",canonical_name="Corrupt",
