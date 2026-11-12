@@ -261,6 +261,30 @@ class NaturalEarthBuilderTests(unittest.TestCase):
                 self.out,"dataset","A/B","Two","Parent","1","1:50m",Shape(),reserved
             )
 
+    def test_unnamed_admin1_feature_is_excluded_without_invented_name(self):
+        state = builder.DATASETS["states"]["stem"]
+        make_polygon(
+            self.root, state,
+            [("ADM1_CODE", "C"), ("NAME_EN", "C"), ("NAME", "C"),
+             ("ADMIN", "C"), ("ISO_3166_2", "C")],
+            [
+                ({"ADM1_CODE": "BRA-1294", "NAME_EN": "Mato Grosso",
+                  "NAME": "Mato Grosso", "ADMIN": "Brazil"},
+                 [[(-61,-18), (-50,-18), (-50,-7), (-61,-7), (-61,-18)]]),
+                ({"ADM1_CODE": "UNNAMED-001", "NAME_EN": "",
+                  "NAME": "", "ADMIN": "Brazil"},
+                 [[(-60,-30), (-58,-30), (-58,-28), (-60,-28), (-60,-30)]])
+            ],
+        )
+        manifest = builder.build(self.root, self.out, "fixture-commit")
+        state_info = next(item for item in manifest["datasets"]
+                          if item["dataset_id"] == "natural-earth-admin1-states-provinces")
+        self.assertEqual(state_info["feature_count"], 1)
+        self.assertEqual(state_info["unnamed_features_excluded"], 1)
+        self.assertEqual(state_info["unnamed_source_ids"], ["UNNAMED-001"])
+        index = (self.out / "ne_catalog.tsv").read_text(encoding="utf-8")
+        self.assertNotIn("UNNAMED-001", index)
+
     def test_refuses_missing_required_natural_earth_columns(self):
         spec = {**builder.DATASETS["countries"], "required_attributes": ["MISSING_FIELD"]}
         with self.assertRaisesRegex(ValueError, "required Natural Earth attribute missing"):
