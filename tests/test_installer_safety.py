@@ -27,7 +27,11 @@ class InstallerSafetyTests(unittest.TestCase):
             "GitHub Actions must be reserved exclusively for the final installer build")
         s=self.workflow
         self.assertIn("workflow_dispatch:",s)
-        self.assertNotIn("\n  push:",s)
+        # Push is deliberately scoped to changes to the packaging workflow;
+        # implementation commits alone never start an Actions job.
+        self.assertIn("      - feat/milestone-a-regions",s)
+        self.assertIn("      - .github/workflows/scene-timeline-windows.yml",s)
+        self.assertIn("    paths:",s)
         self.assertNotIn("pull_request:",s)
         self.assertIn("build installer only",s)
         self.assertIn("makensis",s.lower())
@@ -104,6 +108,23 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn("SHA256",verifier)
         self.assertIn('Existing Utility cartorig-dev.lua was modified',self.nsi)
         self.assertIn('CartoRig Region Fuse was modified',self.nsi)
+
+    def test_installed_070_fuses_are_upgradeable_without_bypassing_integrity(self):
+        # These hashes are from the actual 0.7.0 installer source at commits
+        # 021695c5 and 195862a6. A newly generated installer must accept a
+        # previous unmodified CartoRig installation, while unknown files
+        # must remain blocked by verify-managed-shared.ps1.
+        expected = {
+            "worldmap-fuse": "fcda8d1ca6f7764927335145f1dd1fbff46e67802af6fbf1b5923f101376d4c6",
+            "camera-fuse": "2bc256cc152881d5a58f588d67f00879cc72c4c3c8bd60b24e72e29792e0a2fd",
+            "region-fuse": "32bc4335475877f20a13af198c5390fb7684346965427898fcb9ae4840f0d652",
+        }
+        for kind, digest in expected.items():
+            self.assertIn(digest,self.shared,
+                f"previous managed 0.7.0 {kind} would be rejected on upgrade")
+        self.assertIn('if($known[$Kind] -contains $hash){ exit 0 }',self.shared)
+        self.assertIn('exit 2',self.shared)
+        self.assertIn('it was preserved and upgrade stopped',self.nsi.lower())
 
     def test_uninstaller_never_deletes_unverified_comp_launcher(self):
         s=self.nsi
