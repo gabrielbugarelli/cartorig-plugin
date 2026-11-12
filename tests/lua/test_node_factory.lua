@@ -356,6 +356,23 @@ assert(repairTool.expressions.WorldLandG=="CR_WorldMap_Main.LandG")
 repairFailComp.fail_palette_port=nil
 assert(factory.repair_region_palette(repairFailComp).expressions_repaired==2)
 
+-- WorldMap is resolved by owned Tool UUID, not by a hard-coded display name.
+local renamedWorldComp,renamedWorldMedia=fake()
+assert(factory.create_scene(renamedWorldComp,"Renamed WorldMap",{localappdata=ROOT}))
+local renamedWorld
+for _,tool in ipairs(renamedWorldComp.tools) do
+ if tool:GetData("CartoRig.V1.ObjectType")=="WorldMap" then renamedWorld=tool end
+end
+assert(renamedWorld)
+renamedWorld:SetAttrs({TOOLS_Name="MyMap"})
+local renamedRegion=assert(factory.add_region(renamedWorldComp,brazilFeature,{localappdata=ROOT}))
+local linked
+for _,tool in ipairs(renamedWorldComp.tools) do
+ if tool:GetData("CartoRig.V1.ObjectId")==renamedRegion.object_id then linked=tool end
+end
+assert(linked and linked.expressions.WorldLandR=="MyMap.LandR",
+  "owned WorldMap must remain a valid palette source after a visible-name change")
+
 -- Class ordering is independent of click order: State added before Country must
 -- still render after Country and before the shared Camera.
 local orderedComp,orderedMedia=fake()
