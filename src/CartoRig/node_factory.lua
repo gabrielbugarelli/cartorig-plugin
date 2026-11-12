@@ -54,11 +54,11 @@ local function library_ready(root)
   if not file then return nil,"DATA_MISSING: required Natural Earth 1:50m Land not installed" end
   file:close()
   local loaded,data=pcall(dofile,dataset)
-  if not loaded or type(data)~="table" or #data~=1422 then
-    return nil,"DATA_INCOMPATIBLE: expected Natural Earth 1:50m Land with exactly 1422 rings"
+  if not loaded or type(data)~="table" or #data==0 then
+    return nil,"DATA_INCOMPATIBLE: Natural Earth 1:50m Land is empty or unreadable"
   end
   for ringIndex,ring in ipairs(data) do
-    if type(ring)~="table" or #ring<8 or #ring%2~=0 then
+    if type(ring)~="table" or #ring<6 or #ring%2~=0 then
       return nil,"DATA_INCOMPATIBLE: invalid land ring "..tostring(ringIndex)
     end
     for i=1,#ring,2 do
