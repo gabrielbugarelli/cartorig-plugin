@@ -63,6 +63,34 @@ function fusion.set_input(tool,name,value,label,time)
   return true
 end
 
+function fusion.get_input(tool,name,time)
+  if time~=nil then return api.call(tool,"GetInput",name,time) end
+  return api.call(tool,"GetInput",name)
+end
+
+function fusion.set_input(tool,name,value,label,time)
+  local _,methodErr=api.method(tool,"SetInput")
+  if methodErr then return nil,methodErr end
+  local _,callErr
+  if time~=nil then
+    _,callErr=api.call(tool,"SetInput",name,value,time)
+  else
+    _,callErr=api.call(tool,"SetInput",name,value)
+  end
+  if callErr then
+    return nil,"FUSION_INPUT_WRITE_FAILED: "..tostring(label or name)..": "..tostring(callErr)
+  end
+  local observed,readErr=fusion.get_input(tool,name,time)
+  if readErr then
+    return nil,"FUSION_INPUT_READ_FAILED: "..tostring(label or name)..": "..tostring(readErr)
+  end
+  if observed~=value then
+    return nil,"FUSION_INPUT_WRITE_UNVERIFIED: "..tostring(label or name)..
+      " expected "..tostring(value).." got "..tostring(observed)
+  end
+  return true
+end
+
 function fusion.set_attrs(tool,values,label)
   local _,err=api.call(tool,"SetAttrs",values)
   if err then return nil,"FUSION_ATTRS_WRITE_FAILED: "..tostring(label)..": "..tostring(err) end
