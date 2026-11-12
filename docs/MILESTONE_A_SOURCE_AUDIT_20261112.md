@@ -121,6 +121,30 @@ implementation and repair workflow still require a fresh Windows installer
 and real Resolve render/Inspector/save/reopen evidence. Do not mark A04/A05
 PASS merely because the source and installer build are valid.
 
+## Additional regression observed in the 0.7.0 palette-binding installer
+
+The user tested installer `a0063804dc238ea627b71498cabdfdaf07557b2d`.
+At 2026-11-12T19:39:38Z the Scene report recorded `Add State` as
+`BLOCKED/FAILED`, with:
+
+`node_factory.lua:728: attempt to index global 'api' (a nil value)`
+
+The new native palette-binding code called `api.call()` seven times without
+declaring `local api=require("CartoRig.blackmagic_api")`. The error was
+introduced in the NodeFactory change and reached the Windows user because
+the source/Lua regression suite was not fully executed before packaging.
+
+The missing lexical import has been added; `tests/test_fuse_contracts.py`
+now asserts that it precedes all `api.call` uses, and
+`tests/lua/test_node_factory.lua` explicitly clears `_G.api` before
+running region-addition tests. Source comparison confirms the previous
+installer fails the import guard and the corrected branch passes it.
+An isolated native Lua 5.4 palette-binding smoke (Brazil, Argentina,
+Mato Grosso, invalid WorldMap, failing expression setter) passed locally.
+These are **not** a substitute for the full Lua 5.1 source suite or actual
+Resolve Studio 20 acceptance. The released installer's fix still requires
+real Add Country and Add State validation.
+
 ## Next gate
 
 In an environment with a full checkout and pinned Natural Earth source, run
