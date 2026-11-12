@@ -93,6 +93,8 @@ class FuseContractTests(unittest.TestCase):
         self.assertIn('tool:GetData("CartoRig.V1.SceneId")', region)
         self.assertIn('world:GetInput("Land"..suffix,req.Time)', region)
         self.assertIn("readnum(InInheritLand,req", region)
+        self.assertIn('"ResetStyle"', region)
+        self.assertIn("InInheritLand:SetSource(Number(1),time)", region)
 
     def test_camera_reset_is_a_native_state_change_not_a_placeholder(self):
         camera = (ROOT/"fuses"/"CartoRigCamera.fuse").read_text(encoding="utf-8")
