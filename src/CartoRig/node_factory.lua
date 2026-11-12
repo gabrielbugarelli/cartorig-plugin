@@ -13,11 +13,19 @@ local TYPE=P.."ObjectType"
 local SOURCE=P.."DatasetSource"
 local TITLE=P.."Title"
 local DISPLAY=P.."DisplayName"
+local DATASET_ID=P.."DatasetId"
+local SOURCE_ID=P.."SourceId"
+local SOURCE_VERSION=P.."SourceVersion"
+local SOURCE_SCALE=P.."SourceScale"
+local GEOMETRY_FILE=P.."GeometryFile"
+local PARENT_NAME=P.."ParentName"
+local DRAW_ORDER=P.."DrawOrder"
 
 local FUSES={
   WorldMap="Fuse.CartoRigWorldMap",
   Camera="Fuse.CartoRigCamera",
-  Scene="Fuse.CartoRigScene"
+  Scene="Fuse.CartoRigScene",
+  Region="Fuse.CartoRigRegion"
 }
 local FUSE_ORDER={"WorldMap","Camera","Scene"}
 local NAMES={WorldMap="CR_WorldMap_Main",Camera="CR_Camera_Main",Scene="CR_Scene_Main"}
