@@ -43,7 +43,9 @@ assert(d.slug("///")==nil)
 local feature={
   canonical_name="Brazil", geometry_available=true,
   source_id="NE_ID:1", dataset_id="NE_50M_ADM0",
-  source_version="test-fixture-v1", source_type="Country"
+  source_version="test-fixture-v1", scale="1:50m",
+  geometry_file="regions/NE_50M_ADM0/NE_ID_1.lua",
+  parent_name="South America", source_type="Country"
 }
 assert(d.add_region(state,"Country",{canonical_name="Nonexistent",source_type="Country"})==nil)
 local a=assert(d.add_region(state,"Country",feature))
@@ -51,6 +53,8 @@ local b=assert(d.add_region(state,"Country",feature))
 assert(a.node_name=="CR_Country_Brazil_001")
 assert(b.node_name=="CR_Country_Brazil_002")
 assert(a.object_id~=b.object_id)
+assert(a.source.scale=="1:50m" and a.source.geometry_file=="regions/NE_50M_ADM0/NE_ID_1.lua")
+assert(a.source.parent_name=="South America")
 assert(d.validate(state))
 local original=a.object_id
 assert(d.rename(state,original,"Brasil"))
