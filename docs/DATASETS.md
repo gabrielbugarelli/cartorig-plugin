@@ -13,6 +13,7 @@ never install Python, GIS tools or source shapefiles.
 | Runtime purpose | Natural Earth source theme | Source version | Scale |
 | --- | --- | ---: | ---: |
 | WorldMap land | `50m_physical/ne_50m_land` | 4.1.0 | 1:50m |
+| WorldMap Admin 0 borders | `50m_cultural/ne_50m_admin_0_boundary_lines_land` | 5.1.0 | 1:50m |
 | Country polygons | `50m_cultural/ne_50m_admin_0_countries` | 5.1.1 | 1:50m |
 | State/Province polygons | `10m_cultural/ne_10m_admin_1_states_provinces` | 5.1.1 | 1:10m |
 | Searchable populated places | `50m_cultural/ne_50m_populated_places` | 5.1.2 | 1:50m |
@@ -26,6 +27,7 @@ That is an explicit per-object source scale: a Mato Grosso node persists
 ## Installed representation
 
 - `data/ne_50m_land.lua`: generated land rings consumed by WorldMap.
+- `data/ne_50m_admin0_borders.lua`: generated Admin 0 land boundary lines consumed by WorldMap.
 - `data/ne_catalog.tsv`: canonical names, aliases, type, hierarchy, stable
   source ID, dataset/version/scale, geometry availability and point coordinates.
 - `data/regions/<dataset>/<source-id>.lua`: one generated polygon geometry file
