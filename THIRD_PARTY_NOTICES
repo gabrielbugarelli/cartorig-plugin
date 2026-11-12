@@ -15,6 +15,9 @@ Bundled runtime datasets generated from that checkout:
 - Natural Earth 1:50m Land — source version 4.1.0.
   Source theme: 50m_physical/ne_50m_land.
   Installed runtime: data/ne_50m_land.lua.
+- Natural Earth Admin 0 Boundary Lines (land) — 1:50m, source version 5.1.0.
+  Source theme: 50m_cultural/ne_50m_admin_0_boundary_lines_land.
+  Installed runtime: data/ne_50m_admin0_borders.lua.
 - Natural Earth Admin 0 Countries — 1:50m, source version 5.1.1.
   Source theme: 50m_cultural/ne_50m_admin_0_countries.
   Installed runtime: per-feature Lua geometry under data/regions plus ne_catalog.tsv.
