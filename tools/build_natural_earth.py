@@ -7,6 +7,8 @@ runtime files. Functional/data tests are executed locally before the installer
 build is dispatched; GitHub Actions is used only to compile/package the installer.
 
 Milestone A sources:
+- Land: Natural Earth 1:50m, v4.1.0.
+- Admin 0 boundary lines (land): Natural Earth 1:50m, v5.1.0.
 - Admin 0 countries: Natural Earth 1:50m, v5.1.1.
 - Admin 1 states/provinces: Natural Earth 1:10m, v5.1.1, used because the
   official 1:50m Admin 1 layer currently contains only USA/Canada and cannot
