@@ -24,7 +24,7 @@ local function colorInput(title,base,group,r,g,b)
       LINKID_DataType="Number", INPID_InputControl="ColorControl",
       IC_ControlGroup=group, IC_ControlID=i-1,
       INP_Default=defaults[i], INP_MinScale=0, INP_MaxScale=1,
-      INP_DoNotifyChanged=(base=="Fill"),
+      INP_DoNotifyChanged=(base=="Fill" or base=="Stroke"),
       INP_MinAllowed=0, INP_MaxAllowed=1,
     })
   end
@@ -60,6 +60,10 @@ function Create()
     INP_MinAllowed=0, INP_MaxAllowed=1,
   })
 
+  InInheritBorder=self:AddInput("Inherit WorldMap Border Color","InheritWorldMapBorder",{
+    LINKID_DataType="Number", INPID_InputControl="CheckboxControl",
+    INP_Integer=true, INP_Default=1,
+  })
   StrokeControls=colorInput("Stroke Color","Stroke",11,117/255,129/255,139/255)
   InStrokeWidth=self:AddInput("Stroke Width (px)","StrokeWidth",{
     LINKID_DataType="Number", INPID_InputControl="SliderControl",
@@ -113,6 +117,7 @@ function NotifyChanged(inp,param,time)
     InOpacity:SetSource(Number(1),time)
     InVisible:SetSource(Number(1),time)
     InInheritLand:SetSource(Number(1),time)
+    InInheritBorder:SetSource(Number(1),time)
     return
   end
   if FillControls then
@@ -123,9 +128,17 @@ function NotifyChanged(inp,param,time)
       end
     end
   end
+  if StrokeControls then
+    for _,control in ipairs(StrokeControls) do
+      if inp==control and InInheritBorder then
+        InInheritBorder:SetSource(Number(0),time)
+        return
+      end
+    end
+  end
 end
 
-local function inherited_land_color(req)
+local function inherited_world_color(req,prefix)
   local scene_id=self:GetData("CartoRig.V1.SceneId")
   if type(scene_id)~="string" or scene_id=="" then
     error("REGION_INHERIT_FAILED: scene UUID missing")
@@ -150,9 +163,9 @@ local function inherited_land_color(req)
   if not world then error("REGION_INHERIT_FAILED: WorldMap not found") end
   local color={}
   for index,suffix in ipairs({"R","G","B"}) do
-    local readOk,value=pcall(function() return world:GetInput("Land"..suffix,req.Time) end)
+    local readOk,value=pcall(function() return world:GetInput(prefix..suffix,req.Time) end)
     if not readOk or type(value)~="number" or value<0 or value>1 then
-      error("REGION_INHERIT_FAILED: WorldMap Land Color unavailable")
+      error("REGION_INHERIT_FAILED: WorldMap "..prefix.." Color unavailable")
     end
     color[index]=value
   end
@@ -264,7 +277,7 @@ function Process(req)
 
   local fill
   if readnum(InInheritLand,req,"Inherit WorldMap Land Color")>=0.5 then
-    fill=inherited_land_color(req)
+    fill=inherited_world_color(req,"Land")
   else
     fill={
       readnum(FillControls[1],req,"Fill R"),
@@ -280,11 +293,17 @@ function Process(req)
     -- Fuse SDK: OutlineOfShape thickness is normalized to image width.
     local outline=shape:OutlineOfShape(width/out.Width,"OLT_Solid","OJT_Bevel",8,"SWM_Normal",8)
     if not outline then error("REGION_RENDER_FAILED: OutlineOfShape returned nil") end
-    paint(out,outline,{
-      readnum(StrokeControls[1],req,"Stroke R"),
-      readnum(StrokeControls[2],req,"Stroke G"),
-      readnum(StrokeControls[3],req,"Stroke B"),
-    },strokeAlpha)
+    local stroke
+    if readnum(InInheritBorder,req,"Inherit WorldMap Border Color")>=0.5 then
+      stroke=inherited_world_color(req,"Border")
+    else
+      stroke={
+        readnum(StrokeControls[1],req,"Stroke R"),
+        readnum(StrokeControls[2],req,"Stroke G"),
+        readnum(StrokeControls[3],req,"Stroke B"),
+      }
+    end
+    paint(out,outline,stroke,strokeAlpha)
   end
 
   OutImage:Set(req,out)
