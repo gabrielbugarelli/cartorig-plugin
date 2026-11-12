@@ -160,15 +160,13 @@ local function get_geometry()
       end
     end
     -- Cache only fully validated source data; cap memory across distinct Regions.
-    if not cached then
-      geometryCache[path]=data
-      cacheOrder[#cacheOrder+1]=path
-      if #cacheOrder>MAX_GEOMETRY_CACHE then
-        local oldest=table.remove(cacheOrder,1)
-        geometryCache[oldest]=nil
-      end
+    geometryCache[path]=data
+    cacheOrder[#cacheOrder+1]=path
+    if #cacheOrder>MAX_GEOMETRY_CACHE then
+      local oldest=table.remove(cacheOrder,1)
+      geometryCache[oldest]=nil
     end
-    end
+  end
   return data
 end
 
