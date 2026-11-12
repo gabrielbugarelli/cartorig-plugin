@@ -773,6 +773,12 @@ function M.add_region(resolve,scene_id,dataset_id,source_id,opts)
   return result
 end
 
+function M.repair_palette(resolve,scene_id)
+  local context,contextErr=find_scene_context(resolve,scene_id)
+  if not context then return nil,contextErr end
+  return factory.repair_region_palette(context.composition)
+end
+
 function M.rename_object(resolve,scene_id,object_id,new_name)
   if type(object_id)~="string" or object_id=="" then
     return nil,"OBJECT_ID_REQUIRED: choose a structural object"
