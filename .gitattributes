@@ -1,0 +1,4 @@
+# Preserve the byte-for-byte normative product contract on Windows checkouts.
+# Git for Windows otherwise applies CRLF and invalidates the pinned SHA-256.
+docs/CartoRig_Especificacao_de_Produto_e_Implementacao_V1.md text eol=lf
+docs/SPECIFICATION.sha256 text eol=lf
