@@ -45,7 +45,7 @@ jobs:
           git -C build\natural-earth checkout --detach -q FETCH_HEAD
           python tools\build_natural_earth.py --source-root build\natural-earth --output build\cartorig-data --source-commit $commit
           if ($LASTEXITCODE -ne 0) {throw 'Natural Earth runtime build failed'}
-          foreach ($required in @('ne_50m_land.lua','ne_catalog.tsv','natural-earth-manifest.json')) {
+          foreach ($required in @('ne_50m_land.lua','ne_50m_admin0_borders.lua','ne_catalog.tsv','natural-earth-manifest.json')) {
             if (!(Test-Path (Join-Path 'build\cartorig-data' $required))) {throw "Missing generated data: $required"}
           }
           $geometryCount=@(Get-ChildItem build\cartorig-data\regions -Recurse -File -Filter *.lua).Count
@@ -96,6 +96,7 @@ jobs:
           $uninstall=Join-Path $app 'Uninstall-CartoRig.exe'
           $module=Join-Path $app 'lua\CartoRig\timeline_service.lua'
           $ui=Join-Path $app 'lua\cartorig_scene_ui.lua'
+          $borders=Join-Path $app 'data\ne_50m_admin0_borders.lua'
           $catalog=Join-Path $app 'data\ne_catalog.tsv'
           $dataManifest=Join-Path $app 'data\natural-earth-manifest.json'
           $regionFuse=Join-Path $env:APPDATA 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigRegion.fuse'
@@ -202,6 +203,7 @@ jobs:
             if (!(Test-Path $fusionBoundary) -or (Get-FileHash $fusionBoundary -Algorithm SHA256).Hash -ne (Get-FileHash src/CartoRig/fusion_contract.lua -Algorithm SHA256).Hash) {throw 'Fusion contract boundary mismatch'}
             if (!(Test-Path $ui) -or (Get-FileHash $ui -Algorithm SHA256).Hash -ne (Get-FileHash host/cartorig-dev-scene.lua -Algorithm SHA256).Hash) {throw 'Scene UI mismatch'}
             if (!(Test-Path $regionFuse) -or (Get-FileHash $regionFuse -Algorithm SHA256).Hash -ne (Get-FileHash fuses/CartoRigRegion.fuse -Algorithm SHA256).Hash) {throw 'Region Fuse mismatch'}
+            if (!(Test-Path $borders) -or (Get-FileHash $borders -Algorithm SHA256).Hash -ne (Get-FileHash build/cartorig-data/ne_50m_admin0_borders.lua -Algorithm SHA256).Hash) {throw 'WorldMap border runtime mismatch'}
             if (!(Test-Path $catalog) -or (Get-FileHash $catalog -Algorithm SHA256).Hash -ne (Get-FileHash build/cartorig-data/ne_catalog.tsv -Algorithm SHA256).Hash) {throw 'Offline catalog mismatch'}
             if (!(Test-Path $dataManifest) -or (Get-FileHash $dataManifest -Algorithm SHA256).Hash -ne (Get-FileHash build/cartorig-data/natural-earth-manifest.json -Algorithm SHA256).Hash) {throw 'Natural Earth manifest mismatch'}
             $installedGeometry=@(Get-ChildItem (Join-Path $app 'data\regions') -Recurse -File -Filter *.lua).Count
