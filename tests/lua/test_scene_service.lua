@@ -5,7 +5,7 @@ local saved={
   catalog=package.loaded["CartoRig.catalog"],
   service=package.loaded["CartoRig.scene_service"],
 }
-local a,b={},{ }
+local a,b={GetToolList=function() return {} end},{GetToolList=function() return {} end}
 local function state(comp)
   return comp.state or {has_scene=false,scene_id=nil,title=nil,objects={}}
 end
