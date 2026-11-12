@@ -209,6 +209,23 @@ local mismatchResult,mismatchErr=factory.add_region(comp,mismatched,{localappdat
 assert(mismatchResult==nil and mismatchErr:match("DATA_INCOMPATIBLE"))
 assert(#comp.tools==beforeMismatch)
 
+local corruptRegionRel="regions/ne_admin0/corrupt-country.lua"
+local corruptRegionPath=ROOT.."\\CartoRig\\App\\data\\"..corruptRegionRel:gsub("/","\\")
+local corruptRegionFile=assert(io.open(corruptRegionPath,"wb"))
+corruptRegionFile:write('return {source_id="corrupt-country",version="fixture-v1",scale="1:50m",rings={{-74,-34,999,-34,-34,5}}}\n')
+corruptRegionFile:close()
+local corruptFeature={
+ geo_type="Country",source_type="Country",canonical_name="Corrupt",
+ parent_name="South America",geometry_available=true,geometry="Polygon",
+ source_id="corrupt-country",dataset_id="ne_admin0",source_version="fixture-v1",
+ scale="1:50m",geometry_file=corruptRegionRel
+}
+local beforeCorrupt=#comp.tools
+local corruptRegionResult,corruptRegionErr=factory.add_region(comp,corruptFeature,{localappdata=ROOT})
+assert(corruptRegionResult==nil and corruptRegionErr:match("DATA_INCOMPATIBLE"))
+assert(#comp.tools==beforeCorrupt,"invalid Region coordinates must block before graph mutation")
+os.remove(corruptRegionPath)
+
 -- Class ordering is independent of click order: State added before Country must
 -- still render after Country and before the shared Camera.
 local orderedComp,orderedMedia=fake()
