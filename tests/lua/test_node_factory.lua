@@ -23,11 +23,13 @@ local function fake()
  function comp:AddTool(regid,x,y)
   if type(x)~="number" or type(y)~="number" then error("AddTool 3-arg expected") end
   if self.fail==regid then return nil end
-  local tool={regid=regid,name=regid..tostring(#self.tools+1),data={},links={},inside=comp}
+  local tool={regid=regid,name=regid..tostring(#self.tools+1),data={},links={},inputs={},inside=comp}
   function tool:GetAttrs() return {TOOLS_RegID=self.regid,TOOLS_Name=self.name} end
   function tool:SetAttrs(dict) if dict.TOOLS_Name then self.name=dict.TOOLS_Name end end
   function tool:SetData(k,v) self.data[k]=v end
   function tool:GetData(k) return self.data[k] end
+  function tool:SetInput(k,v) self.inputs[k]=v end
+  function tool:GetInput(k) return self.inputs[k] end
   function tool:FindInput(port)
    local parent=self
    return {GetConnectedOutput=function()
@@ -155,6 +157,9 @@ assert(currentCameraSource==stateNode,"newest Region must feed Camera")
 assert(stateNode.links.Background~=nil and stateNode.links.Background:GetData("CartoRig.V1.ObjectType")=="Country")
 assert(stateNode:GetData("CartoRig.V1.GeometryFile")==stateGeometryRel)
 assert(stateNode:GetData("CartoRig.V1.SourceScale")=="1:10m")
+assert(stateNode:GetInput("IdentityInfo"):find("State — Mato Grosso",1,true))
+assert(stateNode:GetInput("GeographyInfo"):find("Natural Earth 1:10m",1,true))
+assert(stateNode:GetInput("GeographyInfo"):find("Source ID: ne-id-state-mt",1,true))
 
 local originalCountry2Id=countryNodes[2]:GetData("CartoRig.V1.ObjectId")
 countryNodes[2]:SetData("CartoRig.V1.ObjectId",countryNodes[1]:GetData("CartoRig.V1.ObjectId"))
