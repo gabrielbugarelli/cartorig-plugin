@@ -44,6 +44,45 @@ class GeneratedNaturalEarthRuntime(unittest.TestCase):
         georgia=[r for r in self.rows if r["canonical_name"]=="Georgia"]
         self.assertGreaterEqual(len({r["geo_type"] for r in georgia}),2)
 
+    def test_generated_hashes_match_manifest_and_region_topology(self):
+        import hashlib
+
+        def sha256(path: Path) -> str:
+            return hashlib.sha256(path.read_bytes()).hexdigest()
+
+        expected_catalog = self.manifest["generated"]["catalog"]
+        self.assertEqual(sha256(self.root / expected_catalog["path"]),
+                         expected_catalog["sha256"])
+        self.assertEqual(len(self.rows), expected_catalog["record_count"])
+
+        for dataset in self.manifest["datasets"]:
+            runtime = dataset.get("generated_runtime")
+            if runtime:
+                self.assertEqual(sha256(self.root / runtime["path"]),
+                                 runtime["sha256"])
+            expected_set = dataset.get("generated_geometry_set_sha256")
+            if expected_set:
+                folder = self.root / "regions" / dataset["dataset_id"]
+                geometry = sorted(folder.glob("*.lua"))
+                self.assertEqual(len(geometry), dataset["generated_geometry_count"])
+                checksum = hashlib.sha256()
+                for file in geometry:
+                    checksum.update(file.name.encode("utf-8"))
+                    checksum.update(bytes.fromhex(sha256(file)))
+                self.assertEqual(checksum.hexdigest(), expected_set)
+
+        land = (self.root / "ne_50m_land.lua").read_text(encoding="utf-8")
+        self.assertIn("topology_schema=2", land)
+        self.assertIn("ring_roles={", land)
+        for geo_type, name in (("Country", "Brazil"),
+                               ("Country", "Argentina"),
+                               ("State", "Mato Grosso")):
+            feature = self.find(geo_type=geo_type, name=name)
+            content = (self.root / feature["geometry_file"]).read_text(encoding="utf-8")
+            self.assertIn("topology_schema=2", content)
+            self.assertIn("ring_roles={", content)
+            self.assertIn("source_id=", content)
+
     def test_manifest_pins_exact_source_commit_versions_and_scales(self):
         self.assertEqual(
             self.manifest["source_commit"],
