@@ -211,6 +211,7 @@ Section "Install cartorig-dev"
   File "/oname=timeline_service.lua" "..\src\CartoRig\timeline_service.lua"
   SetOutPath "$LOCALAPPDATA\CartoRig\App\data"
   File "/oname=ne_50m_land.lua" "..\build\cartorig-data\ne_50m_land.lua"
+  File "/oname=ne_50m_admin0_borders.lua" "..\build\cartorig-data\ne_50m_admin0_borders.lua"
   File "/oname=ne_catalog.tsv" "..\build\cartorig-data\ne_catalog.tsv"
   File "/oname=natural-earth-manifest.json" "..\build\cartorig-data\natural-earth-manifest.json"
   SetOutPath "$LOCALAPPDATA\CartoRig\App\data\regions"
@@ -243,6 +244,10 @@ Section "Install cartorig-dev"
   ${EndIf}
   ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\data\ne_50m_land.lua"
     MessageBox MB_OK|MB_ICONSTOP "Offline map data missing; the existing menu script was preserved." /SD IDOK
+    Abort
+  ${EndIf}
+  ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\data\ne_50m_admin0_borders.lua"
+    MessageBox MB_OK|MB_ICONSTOP "Offline map border data missing; the existing menu script was preserved." /SD IDOK
     Abort
   ${EndIf}
   ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\data\ne_catalog.tsv"
@@ -425,6 +430,7 @@ Section "Uninstall"
   RMDir "$LOCALAPPDATA\CartoRig\App\lua\CartoRig"
   RMDir "$LOCALAPPDATA\CartoRig\App\lua"
   Delete "$LOCALAPPDATA\CartoRig\App\data\ne_50m_land.lua"
+  Delete "$LOCALAPPDATA\CartoRig\App\data\ne_50m_admin0_borders.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\data\ne_catalog.tsv"
   Delete "$LOCALAPPDATA\CartoRig\App\data\natural-earth-manifest.json"
   RMDir /r "$LOCALAPPDATA\CartoRig\App\data\regions"
