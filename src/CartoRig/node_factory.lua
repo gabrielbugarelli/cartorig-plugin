@@ -462,6 +462,18 @@ local function region_data_ready(feature,root)
      data.scale~=feature.scale then
     return nil,"DATA_INCOMPATIBLE: Region geometry provenance does not match catalog"
   end
+  for ringIndex,ring in ipairs(data.rings) do
+    if type(ring)~="table" or #ring<6 or #ring%2~=0 then
+      return nil,"DATA_INCOMPATIBLE: invalid Region ring "..tostring(ringIndex)
+    end
+    for i=1,#ring,2 do
+      local lon,lat=ring[i],ring[i+1]
+      if type(lon)~="number" or type(lat)~="number" or lon~=lon or lat~=lat or
+         lon<-180 or lon>180 or lat<-90 or lat>90 then
+        return nil,"DATA_INCOMPATIBLE: invalid coordinate in Region ring "..tostring(ringIndex)
+      end
+    end
+  end
   return path
 end
 
