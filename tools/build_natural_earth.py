@@ -503,6 +503,7 @@ def build(source_root: Path, output_root: Path, source_commit: str) -> dict[str,
         version = _version_from_source(source_root, stem, spec["version"])
         reader = _reader(source_root, stem, spec)
         count = 0
+        unnamed_source_ids: list[str] = []
         seen_source_ids: set[str] = set()
         for shape_record in reader.iterShapeRecords():
             fields = _field_map(shape_record.record)
@@ -518,7 +519,16 @@ def build(source_root: Path, output_root: Path, source_commit: str) -> dict[str,
             )
             if shape_record.shape.shapeType not in expected_types:
                 raise ValueError(f"{geo_type} {source_id} has incompatible shape type")
-            canonical = _canonical(fields, geo_type)
+            # Natural Earth Admin 1 includes genuinely unnamed subdivisions.
+            # Never invent a label or map a source ID to a fake name. Record
+            # excluded IDs explicitly so coverage remains auditable.
+            try:
+                canonical = _canonical(fields, geo_type)
+            except ValueError:
+                if geo_type != "State":
+                    raise
+                unnamed_source_ids.append(source_id)
+                continue
             parent = _parent(fields, geo_type)
             aliases = _aliases(
                 fields,
@@ -583,6 +593,8 @@ def build(source_root: Path, output_root: Path, source_commit: str) -> dict[str,
                 "license": "public domain",
                 "attribution": "Made with Natural Earth",
                 "feature_count": count,
+                "unnamed_features_excluded": len(unnamed_source_ids),
+                "unnamed_source_ids": unnamed_source_ids,
                 "source_files_sha256": _dataset_source_hashes(source_root, stem),
             }
         )
