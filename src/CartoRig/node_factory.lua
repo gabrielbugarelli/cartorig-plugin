@@ -410,4 +410,220 @@ function factory.create_scene(comp,title,opts)
   }
 end
 
+
+local function safe_geometry_relative(path)
+  return type(path)=="string" and path~="" and
+    not path:find("..",1,true) and not path:match("^[/\\]") and
+    not path:match("^[A-Za-z]:")
+end
+
+local function region_data_ready(feature,root)
+  if type(feature)~="table" or not safe_geometry_relative(feature.geometry_file) then
+    return nil,"DATA_INCOMPATIBLE: Region geometry path is invalid"
+  end
+  local drive=root or os.getenv("LOCALAPPDATA")
+  if type(drive)~="string" or drive=="" then
+    return nil,"DATA_MISSING: local data directory unavailable"
+  end
+  local relative=feature.geometry_file:gsub("/","\\")
+  local path=drive.."\\CartoRig\\App\\data\\"..relative
+  local file=io.open(path,"rb")
+  if not file then return nil,"DATA_MISSING: Region geometry not installed: "..feature.geometry_file end
+  file:close()
+  local ok,data=pcall(dofile,path)
+  if not ok or type(data)~="table" or type(data.rings)~="table" or #data.rings==0 then
+    return nil,"DATA_INCOMPATIBLE: Region geometry cannot be loaded"
+  end
+  if data.source_id~=feature.source_id or data.version~=feature.source_version or
+     data.scale~=feature.scale then
+    return nil,"DATA_INCOMPATIBLE: Region geometry provenance does not match catalog"
+  end
+  return path
+end
+
+local function state_from_inspection(existing)
+  local state={
+    schema_version="1.0.0",scene_id=existing.scene_id,
+    title=existing.title or "Map Scene",objects={}
+  }
+  for _,obj in ipairs(existing.objects) do
+    state.objects[#state.objects+1]={
+      object_id=obj.id,scene_id=obj.scene_id,object_type=obj.type,
+      display_name=obj.display_name,node_name=obj.name,
+      draw_order=obj.draw_order or -1,source=obj.source,
+      visible=true,style_overrides={},motion={}
+    }
+  end
+  return state
+end
+
+local function find_owned_tool(list,kind)
+  local found,count=nil,0
+  for index,tool in ipairs(list) do
+    local owned,ownedErr=read_data(tool,OWNER,"tool "..index.." Owned")
+    if ownedErr then return nil,ownedErr end
+    if owned==true then
+      local objectType,typeErr=read_data(tool,TYPE,"tool "..index.." ObjectType")
+      if typeErr then return nil,typeErr end
+      if objectType==kind then
+        found=tool
+        count=count+1
+      end
+    end
+  end
+  if count~=1 then
+    return nil,"STATE_INVALID: expected exactly one "..tostring(kind).." node, found "..tostring(count)
+  end
+  return found
+end
+
+local function create_region_node(comp,info,x,y,created)
+  local tool,toolErr=fusion.add_tool(comp,FUSES.Region,x,y)
+  if not tool then error("NODE_CREATE_FAILED: "..tostring(toolErr)) end
+  created[#created+1]=tool
+
+  local attr,attrErr=fusion.attrs(tool,info.object_type)
+  if not attr then error(attrErr) end
+  local observed=attr.TOOLS_RegID
+  if observed~=FUSES.Region and observed~=FUSES.Region:sub(6) then
+    error("NODE_TYPE_MISMATCH: expected "..FUSES.Region.." got "..tostring(observed))
+  end
+
+  local renamed,renameErr=fusion.set_attrs(tool,{TOOLS_Name=info.node_name},info.object_type)
+  if not renamed then error(renameErr) end
+  local renamedAttrs,renamedErr=fusion.attrs(tool,info.object_type)
+  if not renamedAttrs then error(renamedErr) end
+  if renamedAttrs.TOOLS_Name~=info.node_name then
+    error("NODE_RENAME_FAILED: "..tostring(info.node_name))
+  end
+
+  local metadata={
+    [OWNER]=true,[OBJECT]=info.object_id,[TYPE]=info.object_type,
+    [SCENE_KEY]=info.scene_id,[VERSION]="1.0.0",[DISPLAY]=info.display_name,
+    [DATASET_ID]=info.source.dataset_id,[SOURCE_ID]=info.source.source_id,
+    [SOURCE_VERSION]=info.source.source_version,[SOURCE_SCALE]=info.source.scale,
+    [GEOMETRY_FILE]=info.source.geometry_file,
+    [PARENT_NAME]=info.source.parent_name or "",[DRAW_ORDER]=info.draw_order
+  }
+  for key,value in pairs(metadata) do
+    local written,writeErr=fusion.set_data(tool,key,value,info.object_type.." / "..key)
+    if not written then error(writeErr) end
+  end
+  return tool
+end
+
+function factory.add_region(comp,feature,opts)
+  opts=opts or {}
+  if type(feature)~="table" or (feature.geo_type~="Country" and feature.geo_type~="State") then
+    return nil,"REGION_TYPE_UNSUPPORTED: Milestone A adds Country or State only"
+  end
+
+  local existing,inspectErr=factory.inspect(comp)
+  if not existing then return nil,inspectErr end
+  if not existing.has_scene then return nil,"NO_SCENE: create a CartoRig Scene first" end
+
+  local geometryPath,dataErr=region_data_ready(feature,opts.localappdata)
+  if not geometryPath then return nil,dataErr end
+
+  local state=state_from_inspection(existing)
+  local proposal,proposalErr=domain.add_region(state,feature.geo_type,feature)
+  if not proposal then return nil,proposalErr end
+
+  local camera,cameraErr=find_owned_tool(existing.existing_tools,"Camera")
+  if not camera then return nil,cameraErr end
+  local cameraInput,inputErr=input_of(camera,"Input")
+  if not cameraInput then return nil,"CAMERA_INPUT_UNAVAILABLE: "..tostring(inputErr) end
+  local previousOutput,outputErr=fusion.connected_output(cameraInput,"Camera.Input")
+  if outputErr then return nil,"CAMERA_INPUT_UNREADABLE: "..tostring(outputErr) end
+  if not previousOutput then return nil,"CAMERA_INPUT_MISSING: managed map chain is disconnected" end
+  local previousTool,sourceErr=fusion.output_tool(previousOutput,"Camera input source")
+  if not previousTool then return nil,"CAMERA_INPUT_UNREADABLE: "..tostring(sourceErr) end
+
+  local previousOwned,ownedErr=read_data(previousTool,OWNER,"Camera input source Owned")
+  if ownedErr then return nil,ownedErr end
+  local previousScene,sceneErr=read_data(previousTool,SCENE_KEY,"Camera input source SceneId")
+  if sceneErr then return nil,sceneErr end
+  local previousType,typeErr=read_data(previousTool,TYPE,"Camera input source ObjectType")
+  if typeErr then return nil,typeErr end
+  if previousOwned~=true or previousScene~=existing.scene_id or
+     (previousType~="WorldMap" and previousType~="Country" and
+      previousType~="State" and previousType~="Continent") then
+    return nil,"UNSAFE_GRAPH: Camera input is not a managed WorldMap/Region chain"
+  end
+
+  local started,startErr=fusion.start_undo(comp,"CartoRig - Add "..feature.geo_type)
+  if not started then return nil,"FUSION_API_ERROR: StartUndo: "..tostring(startErr) end
+
+  local created={}
+  local region=nil
+  local succeeded,why=pcall(function()
+    local regionCount=0
+    for _,obj in ipairs(existing.objects) do
+      if obj.type=="Country" or obj.type=="State" or obj.type=="Continent" then
+        regionCount=regionCount+1
+      end
+    end
+    region=create_region_node(comp,proposal,-2+regionCount*2,4,created)
+    connect(region,"Background",previousTool)
+    connect(camera,"Input",region)
+
+    local observed,observedErr=factory.inspect(comp)
+    if not observed then error(observedErr) end
+    local found=nil
+    for _,obj in ipairs(observed.objects) do
+      if obj.id==proposal.object_id then found=obj;break end
+    end
+    if not found or found.type~=proposal.object_type or
+       not found.source or found.source.source_id~=proposal.source.source_id or
+       found.source.geometry_file~=proposal.source.geometry_file or
+       found.draw_order~=proposal.draw_order then
+      error("REGION_STATE_FAILED: post-create reconstruction differs from proposal")
+    end
+  end)
+
+  local function rollback_region()
+    local cleanup={}
+    local restored,restoreErr=fusion.connect(camera,"Input",previousTool)
+    if not restored then cleanup[#cleanup+1]="Camera restore: "..tostring(restoreErr) end
+    for i=#created,1,-1 do
+      local deleted,deleteErr=fusion.delete_tool(created[i])
+      if not deleted then cleanup[#cleanup+1]="Region delete: "..tostring(deleteErr) end
+    end
+    local ended,endErr=fusion.end_undo(comp,false)
+    if not ended then cleanup[#cleanup+1]="EndUndo(false): "..tostring(endErr) end
+    local observed,postErr=factory.inspect(comp)
+    if not observed then
+      cleanup[#cleanup+1]="post-rollback inspect: "..tostring(postErr)
+    else
+      for _,obj in ipairs(observed.objects) do
+        if obj.id==proposal.object_id then
+          cleanup[#cleanup+1]="Region object remained after rollback"
+          break
+        end
+      end
+    end
+    return #cleanup==0,table.concat(cleanup,"; ")
+  end
+
+  if not succeeded then
+    local clean,cleanupErr=rollback_region()
+    return nil,"REGION_CREATE_FAILED: "..tostring(why)..
+      (clean and "; transaction rolled back" or "; ROLLBACK_INCOMPLETE: "..cleanupErr)
+  end
+
+  local ended,endErr=fusion.end_undo(comp,true)
+  if not ended then
+    local clean,cleanupErr=rollback_region()
+    return nil,"UNDO_ERROR: "..tostring(endErr)..
+      (clean and "; transaction rolled back" or "; ROLLBACK_INCOMPLETE: "..cleanupErr)
+  end
+
+  return {
+    object_id=proposal.object_id,scene_id=proposal.scene_id,
+    object_type=proposal.object_type,display_name=proposal.display_name,
+    node_name=proposal.node_name,source=proposal.source,draw_order=proposal.draw_order,
+    geometry_path=geometryPath
+  }
+end
+
 return factory
