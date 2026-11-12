@@ -166,12 +166,25 @@ function domain.add_region(state, typ, feature)
   end
   local slug, serr = domain.slug(feature.canonical_name)
   if not slug then return nil, serr end
+  local parent_slug=nil
+  if typ=="State" then
+    if type(feature.parent_name)~="string" or feature.parent_name:gsub("%s","")=="" then
+      return nil,"State source requires a parent country"
+    end
+    parent_slug,serr=domain.slug(feature.parent_name)
+    if not parent_slug then return nil,serr end
+  end
   local taken, used = {}, { [state.scene_id] = true }
   for _, o in ipairs(state.objects) do
     taken[o.node_name] = true
     used[o.object_id] = true
   end
-  local prefix = "CR_" .. typ .. "_" .. slug .. "_"
+  local prefix
+  if typ=="State" then
+    prefix="CR_State_"..parent_slug.."_"..slug.."_"
+  else
+    prefix="CR_"..typ.."_"..slug.."_"
+  end
   local name
   for i = 1, 999 do
     local candidate = prefix .. string.format("%03d", i)
