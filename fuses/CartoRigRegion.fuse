@@ -25,6 +25,7 @@ local function colorInput(title,base,group,r,g,b)
       IC_ControlGroup=group, IC_ControlID=i-1,
       INP_Default=defaults[i], INP_MinScale=0, INP_MaxScale=1,
       INP_DoNotifyChanged=(base=="Fill" or base=="Stroke"),
+      INP_InitialNotify=false,
       INP_MinAllowed=0, INP_MaxAllowed=1,
     })
   end
@@ -88,7 +89,7 @@ function Create()
 
   InResetStyle=self:AddInput("Reset Object Style","ResetStyle",{
     LINKID_DataType="Number", INPID_InputControl="ButtonControl",
-    INP_DoNotifyChanged=true, INP_External=false,
+    INP_DoNotifyChanged=true, INP_InitialNotify=false, INP_External=false,
   })
 
   self:AddControlPage("Motion")
