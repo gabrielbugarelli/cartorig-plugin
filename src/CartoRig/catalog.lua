@@ -1,5 +1,6 @@
 -- Offline Natural Earth catalog reader. No network, geocoding or synthesized entries.
--- Expected install-time data generated only from verified Natural Earth 1:50m.
+-- Expected install-time data generated only from the pinned Natural Earth manifest.
+-- Dataset scale is preserved per row (Admin 0 1:50m; Admin 1 may be 1:10m where explicitly declared).
 local catalog = {}
 local accent = {
   ["á"]="a", ["à"]="a", ["â"]="a", ["ã"]="a", ["ä"]="a", ["å"]="a",
