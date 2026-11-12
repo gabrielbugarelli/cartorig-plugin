@@ -739,6 +739,88 @@ local function link_region_palette(region,world)
   end
 end
 
+-- Explicit, idempotent migration for Regions created before native palette
+-- bindings existed. It is never run by a render thread, Scene listing, or
+-- project-open hook: the user requests it from the structural Scene UI.
+function factory.repair_region_palette(comp)
+  local existing,inspectErr=factory.inspect(comp)
+  if not existing then return nil,inspectErr end
+  if not existing.has_scene then return nil,"NO_SCENE: Scene is required for palette repair" end
+  local chain,chainErr=managed_region_chain(existing)
+  if not chain then return nil,chainErr end
+  local changed={}
+  local candidates={}
+  local worldAttrs,worldErr=fusion.attrs(chain.world,"palette parent WorldMap")
+  if not worldAttrs then return nil,"REGION_PALETTE_REPAIR_FAILED: "..tostring(worldErr) end
+  if worldAttrs.TOOLS_Name~=NAMES.WorldMap then
+    return nil,"REGION_PALETTE_REPAIR_FAILED: WorldMap name differs from managed identity"
+  end
+  for _,obj in ipairs(chain.regions) do
+    for _,prefix in ipairs({"Land","Border"}) do
+      for _,suffix in ipairs({"R","G","B"}) do
+        local target="World"..prefix..suffix
+        local expected=NAMES.WorldMap.."."..prefix..suffix
+        local input,inputErr=fusion.find_input(obj._tool,target)
+        if not input then
+          return nil,"REGION_PALETTE_REPAIR_FAILED: "..obj.name.."."..target..": "..tostring(inputErr)
+        end
+        local observed,readErr=api.call(input,"GetExpression")
+        if readErr then
+          return nil,"REGION_PALETTE_REPAIR_FAILED: cannot read "..obj.name.."."..target..
+            ": "..tostring(readErr)
+        end
+        if observed~=nil and observed~="" and observed~=expected then
+          return nil,"REGION_PALETTE_REPAIR_FAILED: custom expression preserved at "..
+            obj.name.."."..target
+        end
+        if observed~=expected then
+          candidates[#candidates+1]={input=input,expected=expected,
+            label=obj.name.."."..target}
+        end
+      end
+    end
+  end
+  if #candidates==0 then
+    return {regions=#chain.regions,expressions_repaired=0}
+  end
+  local started,startErr=fusion.start_undo(comp,"CartoRig - Repair Region Palette Links")
+  if not started then return nil,"REGION_PALETTE_REPAIR_FAILED: "..tostring(startErr) end
+
+  local function rollback(reason)
+    local errors={}
+    for index=#changed,1,-1 do
+      local item=changed[index]
+      local _,resetErr=api.call(item.input,"SetExpression",nil)
+      local observed,readErr=api.call(item.input,"GetExpression")
+      if resetErr or readErr or (observed~=nil and observed~="") then
+        errors[#errors+1]="cannot restore "..item.label..": "..
+          tostring(resetErr or readErr or observed)
+      end
+    end
+    local ended,endErr=fusion.end_undo(comp,false)
+    if not ended then errors[#errors+1]="EndUndo(false): "..tostring(endErr) end
+    return nil,"REGION_PALETTE_REPAIR_FAILED: "..tostring(reason)..
+      (#errors==0 and "; transaction rolled back" or
+        "; ROLLBACK_INCOMPLETE: "..table.concat(errors,"; "))
+  end
+
+  for _,item in ipairs(candidates) do
+    -- Record before SetExpression: even a thrown proxy call may have changed
+    -- the input and must be included in rollback.
+    changed[#changed+1]=item
+    local _,setErr=api.call(item.input,"SetExpression",item.expected)
+    if setErr then return rollback(item.label..": "..tostring(setErr)) end
+    local observed,readErr=api.call(item.input,"GetExpression")
+    if readErr or observed~=item.expected then
+      return rollback(item.label.." expression readback mismatch: "..
+        tostring(readErr or observed))
+    end
+  end
+  local ended,endErr=fusion.end_undo(comp,true)
+  if not ended then return rollback(endErr) end
+  return {regions=#chain.regions,expressions_repaired=#candidates}
+end
+
 function factory.add_region(comp,feature,opts)
   opts=opts or {}
   if type(feature)~="table" or (feature.geo_type~="Country" and feature.geo_type~="State") then
