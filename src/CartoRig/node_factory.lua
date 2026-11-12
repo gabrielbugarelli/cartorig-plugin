@@ -69,6 +69,30 @@ local function library_ready(root)
       end
     end
   end
+
+  local borders=drive.."\\CartoRig\\App\\data\\ne_50m_admin0_borders.lua"
+  local borderFile=io.open(borders,"rb")
+  if not borderFile then
+    return nil,"DATA_MISSING: required Natural Earth 1:50m Admin 0 boundaries not installed"
+  end
+  borderFile:close()
+  local bordersLoaded,borderData=pcall(dofile,borders)
+  if not bordersLoaded or type(borderData)~="table" or #borderData==0 then
+    return nil,"DATA_INCOMPATIBLE: Natural Earth Admin 0 boundaries are empty or unreadable"
+  end
+  for lineIndex,line in ipairs(borderData) do
+    if type(line)~="table" or #line<4 or #line%2~=0 then
+      return nil,"DATA_INCOMPATIBLE: invalid border line "..tostring(lineIndex)
+    end
+    for i=1,#line,2 do
+      local lon,lat=line[i],line[i+1]
+      if type(lon)~="number" or type(lat)~="number" or lon~=lon or lat~=lat or
+         lon<-180 or lon>180 or lat<-90 or lat>90 then
+        return nil,"DATA_INCOMPATIBLE: invalid coordinate in border line "..tostring(lineIndex)
+      end
+    end
+  end
+
   validated_datasets[dataset]=true
   return dataset
 end
