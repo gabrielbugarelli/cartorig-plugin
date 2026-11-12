@@ -1,7 +1,8 @@
 -- Isolated unit fakes: verifies safety and domain logic, NOT Fusion host acceptance.
 local factory=require("CartoRig.node_factory")
 local domain=require("CartoRig.domain")
-local dataPath="tests/fixtures/local-data-test\\CartoRig\\App\\data\\ne_50m_land.lua"
+local ROOT="tests/fixtures/local-data-test"
+local dataPath=ROOT.."\\CartoRig\\App\\data\\ne_50m_land.lua"
 local f=assert(io.open(dataPath,"wb"))
 f:write("local t={}\nfor i=1,1422 do t[i]={0,0,1,0,1,1,0,1} end\nreturn t\n")
 f:close()
@@ -87,7 +88,6 @@ assert(inspectOk and inspectResult==nil and tostring(inspectReason):match("NO_CO
  "Fusion proxy lookup failure must become a diagnostic, not escape as Lua exception; pcall="..
  tostring(inspectOk).." result="..tostring(inspectResult).." reason="..tostring(inspectReason))
 
-local ROOT="tests/fixtures/local-data-test"
 local broken,bmedia=fake()
 assert(factory.create_scene(broken,"X",{localappdata="nonexistent"})==nil)
 assert(#broken.tools==1 and not broken.data["CartoRig.V1.SceneId"])
