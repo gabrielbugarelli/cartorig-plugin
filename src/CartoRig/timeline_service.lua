@@ -325,10 +325,18 @@ local function save_marks(timeline)
   for kind,range in pairs(marks) do
     local normalized,rangeErr=api.named_dict(range,"GetMarkInOut."..kind,{["in"]=true,["out"]=true})
     if not normalized then return nil,rangeErr end
-    if type(normalized["in"])~="number" or type(normalized["out"])~="number" then
-      return nil,"MARK_STATE_INVALID: "..tostring(kind).." mark range is incomplete"
+    -- Resolve omits unset In/Out keys. A partial audio range is valid
+    -- external timeline state and must be preserved, not rejected or filled.
+    -- An empty dictionary is equivalent to an absent range.
+    for _,edge in ipairs({"in","out"}) do
+      local value=normalized[edge]
+      if value~=nil and (type(value)~="number" or value~=value or
+         value==math.huge or value==-math.huge) then
+        return nil,"MARK_STATE_INVALID: "..tostring(kind).." "..edge..
+          " must be a finite frame number"
+      end
     end
-    marks[kind]=normalized
+    marks[kind]=next(normalized) and normalized or nil
   end
   return marks
 end
@@ -354,6 +362,12 @@ local function restore_marks(timeline,marks)
         return nil,"MARK_RESTORE_FAILED: ClearMarkInOut("..kind.."): "..tostring(clearErr)
       end
     elseif desired~=nil and (current==nil or current["in"]~=desired["in"] or current["out"]~=desired["out"]) then
+      -- The API can read partial marks, but SetMarkInOut requires both
+      -- endpoints. Never invent a missing one during rollback.
+      if desired["in"]==nil or desired["out"]==nil then
+        return nil,"MARK_RESTORE_UNSUPPORTED: "..kind..
+          " has partial In/Out marks that changed; manual recovery required"
+      end
       local restored,restoreErr=call(timeline,"SetMarkInOut",desired["in"],desired["out"],kind)
       if restored~=true then
         return nil,"MARK_RESTORE_FAILED: SetMarkInOut("..kind.."): "..tostring(restoreErr)
@@ -368,7 +382,14 @@ local function restore_marks(timeline,marks)
   return true
 end
 local function clear_video_marks(timeline,marks)
-  if not (marks and marks.video) then return true end
+  local video=marks and marks.video
+  if not video then return true end
+  -- Clearing a partially marked *video* range would destroy user state:
+  -- Resolve cannot restore it through SetMarkInOut(in,out). Fail before
+  -- insertion instead of modifying existing editorial marks.
+  if video["in"]==nil or video["out"]==nil then
+    return nil,"MARK_STATE_UNSUPPORTED: partial video In/Out cannot be safely cleared and restored"
+  end
   local cleared,err=call(timeline,"ClearMarkInOut","video")
   if cleared~=true then return nil,"MARK_CLEAR_FAILED: "..tostring(err) end
   return true
