@@ -24,7 +24,8 @@ $known=@{
   )
   'camera-fuse'=@(
     '617eaf8578fce3ac21f150eff6124c71070149995e3753cad082b2bde04f4cb3',
-    '1c63278ea99b73e2dd1c97dcfdff713fdc9c39b8ad7966128d198955dd93799b' # Milestone A render geometry
+    '1c63278ea99b73e2dd1c97dcfdff713fdc9c39b8ad7966128d198955dd93799b',
+    'c4575ce83cd10c45ee290e936e93c62f15432b11ec81b73e1bf5741039cec5cd' # shared camera projection
   )
   'region-fuse'=@(
     '4fd67310e2dce94b36e47ad710b7bc8e82865b73dcc90ebb732f04c3d40951ed',
