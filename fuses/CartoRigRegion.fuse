@@ -6,6 +6,24 @@ FuRegisterClass("CartoRigRegion", CT_Tool, {
   REG_NoMotionBlurCtrls=true, REG_NoBlendCtrls=true, REG_Version=1,
 })
 
+-- Same WGS84 projection and seam clipping as CartoRig WorldMap.
+local sharedGeometry=nil
+local function geometry()
+  if sharedGeometry then return sharedGeometry end
+  local root=os.getenv("LOCALAPPDATA")
+  if type(root)~="string" or root=="" then
+    error("DATA_MISSING: CartoRig render geometry directory unavailable")
+  end
+  local chunk,err=loadfile(root.."\\CartoRig\\App\\lua\\CartoRig\\render_geometry.lua")
+  if not chunk then error("RENDER_GEOMETRY_MISSING: "..tostring(err)) end
+  local result=chunk()
+  if type(result)~="table" or type(result.frame)~="function" or
+     type(result.fill_shape)~="function" or type(result.line_shape)~="function" then
+    error("RENDER_GEOMETRY_INVALID: incompatible CartoRig geometry module")
+  end
+  sharedGeometry=result
+  return sharedGeometry
+end
 local geometryCache={}
 
 local function readnum(input,req,label)
@@ -104,14 +122,27 @@ end
 local function get_geometry()
   local path=geometry_path()
   local cached=geometryCache[path]
-  if cached then return cached end
-  local ok,data=pcall(dofile,path)
-  if not ok or type(data)~="table" or type(data.rings)~="table" or #data.rings==0 then
-    error("DATA_INCOMPATIBLE: Region geometry unavailable: "..tostring(data))
+  local data=nil
+  if cached then
+    data=cached
+  else
+    local ok,loaded=pcall(dofile,path)
+    if not ok then
+      error("DATA_INCOMPATIBLE: Region geometry unavailable: "..tostring(loaded))
+    end
+    data=loaded
   end
-  local expected=self:GetData("CartoRig.V1.SourceId")
-  if type(expected)~="string" or expected=="" or data.source_id~=expected then
-    error("DATA_INCOMPATIBLE: Region source identity mismatch")
+  if type(data)~="table" or type(data.rings)~="table" or #data.rings==0 then
+    error("DATA_INCOMPATIBLE: Region geometry is empty or malformed")
+  end
+  -- Cache reuse must not bypass per-node identity/scale/version validation.
+  local sourceId=self:GetData("CartoRig.V1.SourceId")
+  local version=self:GetData("CartoRig.V1.SourceVersion")
+  local scale=self:GetData("CartoRig.V1.SourceScale")
+  if type(sourceId)~="string" or sourceId=="" or data.source_id~=sourceId or
+     type(version)~="string" or version=="" or data.version~=version or
+     type(scale)~="string" or scale=="" or data.scale~=scale then
+    error("DATA_INCOMPATIBLE: Region source identity/version/scale mismatch")
   end
   for ringIndex,ring in ipairs(data.rings) do
     if type(ring)~="table" or #ring<6 or #ring%2~=0 then
@@ -129,18 +160,16 @@ local function get_geometry()
   return data
 end
 
-local function make_shape(data,w,h)
-  local shape=Shape()
-  local worldscale=math.min(w/360,h/180)
-  local xscale=worldscale/w
-  for _,ring in ipairs(data.rings) do
-    shape:MoveTo(0.5+ring[1]*xscale,(h*0.5+ring[2]*worldscale)/w)
-    for i=3,#ring,2 do
-      shape:LineTo(0.5+ring[i]*xscale,(h*0.5+ring[i+1]*worldscale)/w)
-    end
-    shape:Close()
-  end
-  return shape
+local function make_shape(data,w,h,xaspect,yaspect)
+  local geo=geometry()
+  return geo.fill_shape(data.rings,geo.frame(w,h,xaspect,yaspect))
+end
+
+local function make_stroke_shape(data,w,h,xaspect,yaspect)
+  local geo=geometry()
+  -- Stroke original source boundaries, not the artificial clipping edges
+  -- introduced when a polygon crosses ±180 degrees longitude.
+  return geo.line_shape(data.rings,geo.frame(w,h,xaspect,yaspect),true)
 end
 
 local function paint(out,shape,color,alpha)
@@ -170,7 +199,7 @@ function Process(req)
   local out=input:CopyOf()
   if not out then error("REGION_RENDER_FAILED: Image:CopyOf returned no image") end
   local data=get_geometry()
-  local shape=make_shape(data,out.Width,out.Height)
+  local shape=make_shape(data,out.Width,out.Height,out.XAspect,out.YAspect)
 
   paint(out,shape,{
     readnum(FillControls[1],req,"Fill R"),
@@ -181,8 +210,10 @@ function Process(req)
   local width=readnum(InStrokeWidth,req,"Stroke Width")
   local strokeAlpha=readnum(InStrokeOpacity,req,"Stroke Opacity")*opacity
   if width>0 and strokeAlpha>0 then
-    -- Fuse SDK: OutlineOfShape thickness is normalized to image width.
-    local outline=shape:OutlineOfShape(width/out.Width,"OLT_Solid","OJT_Bevel",8,"SWM_Normal",8)
+    -- Do not outline clipped fill contours: that would draw fake vertical
+    -- borders on the international date line.
+    local boundary=make_stroke_shape(data,out.Width,out.Height,out.XAspect,out.YAspect)
+    local outline=boundary:OutlineOfShape(width/out.Width,"OLT_Solid","OJT_Bevel",8,"SWM_Normal",8)
     if not outline then error("REGION_RENDER_FAILED: OutlineOfShape returned nil") end
     paint(out,outline,{
       readnum(StrokeControls[1],req,"Stroke R"),
