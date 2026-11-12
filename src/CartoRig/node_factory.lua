@@ -707,6 +707,38 @@ local function managed_region_chain(existing)
   return {world=world,camera=camera,regions=regions}
 end
 
+-- Fusion renders Fuses on worker contexts where Comp:GetToolList is not
+-- available. Bind the parent WorldMap channels as native Fusion expressions
+-- while NodeFactory is on the editor/script thread. Region:Process only
+-- evaluates its own six numeric inputs and never traverses the composition.
+local function link_region_palette(region,world)
+  local attrs,attrsErr=fusion.attrs(world,"palette parent WorldMap")
+  if not attrs then error("REGION_PALETTE_BIND_FAILED: "..tostring(attrsErr)) end
+  if attrs.TOOLS_Name~=NAMES.WorldMap then
+    error("REGION_PALETTE_BIND_FAILED: WorldMap was renamed; cannot bind palette safely")
+  end
+  for _,prefix in ipairs({"Land","Border"}) do
+    for _,suffix in ipairs({"R","G","B"}) do
+      local target="World"..prefix..suffix
+      local expression=NAMES.WorldMap.."."..prefix..suffix
+      local input,inputErr=fusion.find_input(region,target)
+      if not input then
+        error("REGION_PALETTE_BIND_FAILED: "..target..": "..tostring(inputErr))
+      end
+      local _,setErr=api.call(input,"SetExpression",expression)
+      if setErr then
+        error("REGION_PALETTE_BIND_FAILED: SetExpression "..target..": "..tostring(setErr))
+      end
+      local readback,readErr=api.call(input,"GetExpression")
+      if readErr or readback~=expression then
+        error("REGION_PALETTE_BIND_FAILED: "..target..
+          " expression cannot be verified (observed "..tostring(readback)..
+          "; "..tostring(readErr)..")")
+      end
+    end
+  end
+end
+
 function factory.add_region(comp,feature,opts)
   opts=opts or {}
   if type(feature)~="table" or (feature.geo_type~="Country" and feature.geo_type~="State") then
@@ -749,6 +781,7 @@ function factory.add_region(comp,feature,opts)
   local region=nil
   local succeeded,why=pcall(function()
     region=create_region_node(comp,proposal,-2+regionCount*2,4,created)
+    link_region_palette(region,chain.world)
     connect(region,"Background",predecessor)
     connect(successor,successorPort,region)
 
