@@ -1,15 +1,56 @@
-# CartoRig — offline data inventory, partial Marco A
+# CartoRig — offline Natural Earth data inventory
 
-- Dataset: Natural Earth 1:50m Land polygons.
-- Original GeoJSON: `geojson/ne_50m_land.geojson`.
-- Source: `nvkelso/natural-earth-vector` at commit `ca96624a56bd078437bca8184e78163e5039ad19` (2022-06-02).
-- Exact source URL: https://github.com/nvkelso/natural-earth-vector/blob/ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_50m_land.geojson
-- Runtime representation: `data/ne_50m_land.lua`. Git blob SHA-1 `5b3ea7e3acf76928b29d083ba2208495ae9d4b58`.
-- Geometry: 1,420 GeoJSON features, 1,422 rings, 60,669 vertex pairs. Each original numeric coordinate is preserved; no fabricated geography, no synthetic polygons, no online API.
-- CRS: WGS84 angular lon/lat, GeoJSON CRS84; projection used by CartoRig is equirectangular 2D.
-- License: public domain, attribution voluntary; CartoRig credits "Made with Natural Earth." See `THIRD_PARTY_NOTICES`.
-- The installer bundles this file locally and verifies its exact SHA-256 against the checked-in file in GitHub Actions.
-- **Unimplemented**: full Natural Earth Admin 0/1, populated places, border lines and the corresponding index. The Land file is not a substitute. WorldMap/Region full features are NOT DONE.
-- End-user rendering and validation with Resolve Studio 20 is still pending.
+CartoRig builds its installed geography from one pinned checkout of
+`nvkelso/natural-earth-vector`:
 
-Source terms: https://www.naturalearthdata.com/about/terms-of-use/
+`f1890d9f152c896d250a77557a5751a93d494776`
+
+The build runs in GitHub Actions with `tools/build_natural_earth.py`. End users
+never install Python, GIS tools or source shapefiles.
+
+## Bundled Milestone A datasets
+
+| Runtime purpose | Natural Earth source theme | Source version | Scale |
+| --- | --- | ---: | ---: |
+| WorldMap land | `50m_physical/ne_50m_land` | 4.1.0 | 1:50m |
+| Country polygons | `50m_cultural/ne_50m_admin_0_countries` | 5.1.1 | 1:50m |
+| State/Province polygons | `10m_cultural/ne_10m_admin_1_states_provinces` | 5.1.1 | 1:10m |
+| Searchable populated places | `50m_cultural/ne_50m_populated_places` | 5.1.2 | 1:50m |
+
+Natural Earth's 1:50m Admin 1 v5.1.1 layer currently covers USA and Canada
+rather than the Brazil subdivisions required by the CartoRig acceptance flow.
+CartoRig therefore uses Natural Earth's 1:10m Admin 1 layer for State/Province.
+That is an explicit per-object source scale: a Mato Grosso node persists
+`1:10m`; it is never relabeled as 1:50m.
+
+## Installed representation
+
+- `data/ne_50m_land.lua`: generated land rings consumed by WorldMap.
+- `data/ne_catalog.tsv`: canonical names, aliases, type, hierarchy, stable
+  source ID, dataset/version/scale, geometry availability and point coordinates.
+- `data/regions/<dataset>/<source-id>.lua`: one generated polygon geometry file
+  per Country/State feature, loaded by that Region node.
+- `data/natural-earth-manifest.json`: source commit, source file hashes,
+  versions, scales, coverage, feature counts and generated set hashes.
+
+The Region node persists `dataset_id`, `source_id`, `source_version`,
+`scale`, `geometry_file`, parent and draw order. A catalog entry and its
+geometry file must agree before the Fusion graph is mutated.
+
+## Search behavior
+
+The index normalizes case and diacritics at query time and retains canonical
+Unicode names. Aliases such as `Brasil/Brazil` and ASCII variants such as
+`Sao Paulo/São Paulo` are indexed locally. Homonyms retain type and hierarchy,
+so Country/State/City results are not collapsed.
+
+No address geocoder, road network, online API or invented municipal polygon is
+part of this data package.
+
+## Licensing
+
+Natural Earth data is public domain. CartoRig credits “Made with Natural Earth.”
+See `THIRD_PARTY_NOTICES` and https://www.naturalearthdata.com/about/terms-of-use/.
+
+Host Viewer/Inspector/render and save/reopen remain subject to the Resolve Studio
+20 test gate; generating or installing these files alone is not acceptance.
