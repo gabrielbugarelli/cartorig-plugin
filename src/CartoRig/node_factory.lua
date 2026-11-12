@@ -61,7 +61,14 @@ local function library_ready(root)
   if not loaded or type(data)~="table" or #data==0 then
     return nil,"DATA_INCOMPATIBLE: Natural Earth 1:50m Land is empty or unreadable"
   end
+  if data.topology_schema~=2 or type(data.ring_roles)~="table" or
+     #data.ring_roles~=#data then
+    return nil,"DATA_INCOMPATIBLE: Natural Earth Land polygon topology missing"
+  end
   for ringIndex,ring in ipairs(data) do
+    if data.ring_roles[ringIndex]~="outer" and data.ring_roles[ringIndex]~="hole" then
+      return nil,"DATA_INCOMPATIBLE: invalid Land polygon ring role"
+    end
     if type(ring)~="table" or #ring<6 or #ring%2~=0 then
       return nil,"DATA_INCOMPATIBLE: invalid land ring "..tostring(ringIndex)
     end
@@ -492,6 +499,10 @@ local function region_data_ready(feature,root)
   if not ok or type(data)~="table" or type(data.rings)~="table" or #data.rings==0 then
     return nil,"DATA_INCOMPATIBLE: Region geometry cannot be loaded"
   end
+  if data.topology_schema~=2 or type(data.ring_roles)~="table" or
+     #data.ring_roles~=#data.rings then
+    return nil,"DATA_INCOMPATIBLE: Region polygon topology unavailable"
+  end
   if data.source_id~=feature.source_id or data.version~=feature.source_version or
      data.scale~=feature.scale then
     return nil,"DATA_INCOMPATIBLE: Region geometry provenance does not match catalog"
@@ -506,6 +517,9 @@ local function region_data_ready(feature,root)
     return nil,"DATA_INCOMPATIBLE: Region geometry bounds are invalid"
   end
   for ringIndex,ring in ipairs(data.rings) do
+    if data.ring_roles[ringIndex]~="outer" and data.ring_roles[ringIndex]~="hole" then
+      return nil,"DATA_INCOMPATIBLE: invalid Region ring role"
+    end
     if type(ring)~="table" or #ring<6 or #ring%2~=0 then
       return nil,"DATA_INCOMPATIBLE: invalid Region ring "..tostring(ringIndex)
     end
