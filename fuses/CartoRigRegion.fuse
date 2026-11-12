@@ -1,0 +1,184 @@
+-- CartoRig Region: physical Country/State renderer used by Milestone A.
+-- Each instance loads exactly one generated Natural Earth feature geometry.
+FuRegisterClass("CartoRigRegion", CT_Tool, {
+  REGS_Name="CartoRig Region", REGS_Category="CartoRig",
+  REGS_OpIconString="REG", REGS_OpDescription="CartoRig geographic Region",
+  REG_NoMotionBlurCtrls=true, REG_NoBlendCtrls=true, REG_Version=1,
+})
+
+local geometryCache={}
+
+local function readnum(input,req,label)
+  local p=input:GetValue(req)
+  if not p or type(p.Value)~="number" then
+    error("REGION_CONTROL_UNAVAILABLE: "..tostring(label))
+  end
+  return p.Value
+end
+
+local function colorInput(title,base,group,r,g,b)
+  local defaults={r,g,b}
+  local inputs={}
+  for i,suffix in ipairs({"R","G","B"}) do
+    inputs[i]=self:AddInput(i==1 and title or suffix,base..suffix,{
+      LINKID_DataType="Number", INPID_InputControl="ColorControl",
+      IC_ControlGroup=group, IC_ControlID=i-1,
+      INP_Default=defaults[i], INP_MinScale=0, INP_MaxScale=1,
+      INP_MinAllowed=0, INP_MaxAllowed=1,
+    })
+  end
+  return inputs
+end
+
+function Create()
+  self:AddControlPage("Control")
+  self:AddInput("Region identity/geography are persisted by CartoRig Scene","IdentityInfo",{
+    LINKID_DataType="Text", INPID_InputControl="LabelControl",
+    INP_Passive=true, INP_External=false,
+  })
+
+  FillControls=colorInput("Fill Color","Fill",10,214/255,215/255,210/255)
+  InFillOpacity=self:AddInput("Fill Opacity","FillOpacity",{
+    LINKID_DataType="Number", INPID_InputControl="SliderControl",
+    INP_Default=1, INP_MinScale=0, INP_MaxScale=1,
+    INP_MinAllowed=0, INP_MaxAllowed=1,
+  })
+
+  StrokeControls=colorInput("Stroke Color","Stroke",11,117/255,129/255,139/255)
+  InStrokeWidth=self:AddInput("Stroke Width (px)","StrokeWidth",{
+    LINKID_DataType="Number", INPID_InputControl="SliderControl",
+    INP_Default=1, INP_MinScale=0, INP_MaxScale=40,
+    INP_MinAllowed=0, INP_MaxAllowed=40,
+  })
+  InStrokeOpacity=self:AddInput("Stroke Opacity","StrokeOpacity",{
+    LINKID_DataType="Number", INPID_InputControl="SliderControl",
+    INP_Default=1, INP_MinScale=0, INP_MaxScale=1,
+    INP_MinAllowed=0, INP_MaxAllowed=1,
+  })
+
+  InOpacity=self:AddInput("Opacity","Opacity",{
+    LINKID_DataType="Number", INPID_InputControl="SliderControl",
+    INP_Default=1, INP_MinScale=0, INP_MaxScale=1,
+    INP_MinAllowed=0, INP_MaxAllowed=1,
+  })
+  InVisible=self:AddInput("Visibility","Visibility",{
+    LINKID_DataType="Number", INPID_InputControl="CheckboxControl",
+    INP_Integer=true, INP_Default=1,
+  })
+
+  self:AddControlPage("Motion")
+  self:AddInput("Region motion presets are implemented in Milestone D","MotionStatus",{
+    LINKID_DataType="Text", INPID_InputControl="LabelControl",
+    INP_Passive=true, INP_External=false,
+  })
+
+  InImage=self:AddInput("Background","Background",{LINKID_DataType="Image",LINK_Main=1})
+  OutImage=self:AddOutput("Output","Output",{LINKID_DataType="Image",LINK_Main=1})
+end
+
+local function geometry_path()
+  local localapp=os.getenv("LOCALAPPDATA")
+  if not localapp or localapp=="" then
+    error("DATA_MISSING: LOCALAPPDATA is unavailable")
+  end
+  local relative=self:GetData("CartoRig.V1.GeometryFile")
+  if type(relative)~="string" or relative=="" or
+     relative:find("..",1,true) or relative:match("^[/\\]") or relative:match("^[A-Za-z]:") then
+    error("DATA_INCOMPATIBLE: invalid Region geometry path")
+  end
+  relative=relative:gsub("/","\\")
+  return localapp.."\\CartoRig\\App\\data\\"..relative
+end
+
+local function get_geometry()
+  local path=geometry_path()
+  local cached=geometryCache[path]
+  if cached then return cached end
+  local ok,data=pcall(dofile,path)
+  if not ok or type(data)~="table" or type(data.rings)~="table" or #data.rings==0 then
+    error("DATA_INCOMPATIBLE: Region geometry unavailable: "..tostring(data))
+  end
+  local expected=self:GetData("CartoRig.V1.SourceId")
+  if type(expected)~="string" or expected=="" or data.source_id~=expected then
+    error("DATA_INCOMPATIBLE: Region source identity mismatch")
+  end
+  for ringIndex,ring in ipairs(data.rings) do
+    if type(ring)~="table" or #ring<6 or #ring%2~=0 then
+      error("DATA_INCOMPATIBLE: invalid Region ring "..tostring(ringIndex))
+    end
+    for i=1,#ring,2 do
+      local lon,lat=ring[i],ring[i+1]
+      if type(lon)~="number" or type(lat)~="number" or
+         lon~=lon or lat~=lat or lon<-180 or lon>180 or lat<-90 or lat>90 then
+        error("DATA_INCOMPATIBLE: invalid Region coordinate")
+      end
+    end
+  end
+  geometryCache[path]=data
+  return data
+end
+
+local function make_shape(data,w,h)
+  local shape=Shape()
+  local worldscale=math.min(w/360,h/180)
+  local xscale=worldscale/w
+  for _,ring in ipairs(data.rings) do
+    shape:MoveTo(0.5+ring[1]*xscale,(h*0.5+ring[2]*worldscale)/w)
+    for i=3,#ring,2 do
+      shape:LineTo(0.5+ring[i]*xscale,(h*0.5+ring[i+1]*worldscale)/w)
+    end
+    shape:Close()
+  end
+  return shape
+end
+
+local function paint(out,shape,color,alpha)
+  if alpha<=0 then return end
+  local ic=ImageChannel(out,8)
+  local cs=ChannelStyle()
+  cs.Color=Pixel({R=color[1],G=color[2],B=color[3],A=alpha})
+  ic:SetStyleFill(FillStyle())
+  ic:ShapeFill(shape)
+  ic:PutToImage("CM_Merge",cs)
+end
+
+function Process(req)
+  local input=InImage:GetValue(req)
+  if not input then error("REGION_INPUT_MISSING: Background must be connected") end
+  if readnum(InVisible,req,"Visibility")<0.5 then
+    OutImage:Set(req,input)
+    return
+  end
+
+  local opacity=readnum(InOpacity,req,"Opacity")
+  if opacity<=0 then
+    OutImage:Set(req,input)
+    return
+  end
+
+  local out=input:CopyOf()
+  if not out then error("REGION_RENDER_FAILED: Image:CopyOf returned no image") end
+  local data=get_geometry()
+  local shape=make_shape(data,out.Width,out.Height)
+
+  paint(out,shape,{
+    readnum(FillControls[1],req,"Fill R"),
+    readnum(FillControls[2],req,"Fill G"),
+    readnum(FillControls[3],req,"Fill B"),
+  },readnum(InFillOpacity,req,"Fill Opacity")*opacity)
+
+  local width=readnum(InStrokeWidth,req,"Stroke Width")
+  local strokeAlpha=readnum(InStrokeOpacity,req,"Stroke Opacity")*opacity
+  if width>0 and strokeAlpha>0 then
+    -- Fuse SDK: OutlineOfShape thickness is normalized to image width.
+    local outline=shape:OutlineOfShape(width/out.Width,"OLT_Solid","OJT_Bevel",8,"SWM_Normal",8)
+    if not outline then error("REGION_RENDER_FAILED: OutlineOfShape returned nil") end
+    paint(out,outline,{
+      readnum(StrokeControls[1],req,"Stroke R"),
+      readnum(StrokeControls[2],req,"Stroke G"),
+      readnum(StrokeControls[3],req,"Stroke B"),
+    },strokeAlpha)
+  end
+
+  OutImage:Set(req,out)
+end
