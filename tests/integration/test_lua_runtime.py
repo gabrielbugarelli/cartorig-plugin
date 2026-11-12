@@ -1,4 +1,4 @@
-"""Exercise actual Lua source modules on a free runner, no Resolve acceptance mock."""
+"""Exercise Lua source modules locally; mocked tests are not Resolve host acceptance."""
 from __future__ import annotations
 import os
 from pathlib import Path
