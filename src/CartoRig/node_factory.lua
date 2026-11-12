@@ -20,6 +20,10 @@ local SOURCE_SCALE=P.."SourceScale"
 local GEOMETRY_FILE=P.."GeometryFile"
 local PARENT_NAME=P.."ParentName"
 local DRAW_ORDER=P.."DrawOrder"
+local BOUND_WEST=P.."BoundWest"
+local BOUND_SOUTH=P.."BoundSouth"
+local BOUND_EAST=P.."BoundEast"
+local BOUND_NORTH=P.."BoundNorth"
 
 local FUSES={
   WorldMap="Fuse.CartoRigWorldMap",
@@ -140,17 +144,29 @@ function factory.inspect(comp)
         if parentErr then return nil,parentErr end
         local drawOrder,drawErr=read_data(tool,DRAW_ORDER,"tool "..index.." DrawOrder")
         if drawErr then return nil,drawErr end
+        local west,westErr=read_data(tool,BOUND_WEST,"tool "..index.." BoundWest")
+        if westErr then return nil,westErr end
+        local south,southErr=read_data(tool,BOUND_SOUTH,"tool "..index.." BoundSouth")
+        if southErr then return nil,southErr end
+        local east,eastErr=read_data(tool,BOUND_EAST,"tool "..index.." BoundEast")
+        if eastErr then return nil,eastErr end
+        local north,northErr=read_data(tool,BOUND_NORTH,"tool "..index.." BoundNorth")
+        if northErr then return nil,northErr end
         if type(datasetId)~="string" or datasetId=="" or
            type(sourceId)~="string" or sourceId=="" or
            type(sourceVersion)~="string" or sourceVersion=="" or
            type(scale)~="string" or scale=="" or
            type(geometryFile)~="string" or geometryFile=="" or
-           type(drawOrder)~="number" then
-          return nil,"STATE_INVALID: Region provenance is incomplete"
+           type(drawOrder)~="number" or type(west)~="number" or
+           type(south)~="number" or type(east)~="number" or type(north)~="number" or
+           west<-180 or west>180 or east<-180 or east>180 or
+           south<-90 or south>90 or north<-90 or north>90 or south>north then
+          return nil,"STATE_INVALID: Region provenance/bounds are incomplete"
         end
         obj.source={
           dataset_id=datasetId,source_id=sourceId,source_version=sourceVersion,
-          scale=scale,geometry_file=geometryFile,parent_name=parentName
+          scale=scale,geometry_file=geometryFile,parent_name=parentName,
+          bounds={west=west,south=south,east=east,north=north}
         }
         obj.draw_order=drawOrder
       end
@@ -480,6 +496,15 @@ local function region_data_ready(feature,root)
      data.scale~=feature.scale then
     return nil,"DATA_INCOMPATIBLE: Region geometry provenance does not match catalog"
   end
+  if type(data.bbox)~="table" or #data.bbox~=4 then
+    return nil,"DATA_INCOMPATIBLE: Region geometry has no valid bounds"
+  end
+  local west,south,east,north=data.bbox[1],data.bbox[2],data.bbox[3],data.bbox[4]
+  if type(west)~="number" or type(south)~="number" or type(east)~="number" or
+     type(north)~="number" or west<-180 or west>180 or east<-180 or east>180 or
+     south<-90 or south>90 or north<-90 or north>90 or south>north then
+    return nil,"DATA_INCOMPATIBLE: Region geometry bounds are invalid"
+  end
   for ringIndex,ring in ipairs(data.rings) do
     if type(ring)~="table" or #ring<6 or #ring%2~=0 then
       return nil,"DATA_INCOMPATIBLE: invalid Region ring "..tostring(ringIndex)
@@ -492,7 +517,7 @@ local function region_data_ready(feature,root)
       end
     end
   end
-  return path
+  return {path=path,bounds={west=west,south=south,east=east,north=north}}
 end
 
 local function state_from_inspection(existing)
@@ -557,7 +582,9 @@ local function create_region_node(comp,info,x,y,created)
     [DATASET_ID]=info.source.dataset_id,[SOURCE_ID]=info.source.source_id,
     [SOURCE_VERSION]=info.source.source_version,[SOURCE_SCALE]=info.source.scale,
     [GEOMETRY_FILE]=info.source.geometry_file,
-    [PARENT_NAME]=info.source.parent_name or "",[DRAW_ORDER]=info.draw_order
+    [PARENT_NAME]=info.source.parent_name or "",[DRAW_ORDER]=info.draw_order,
+    [BOUND_WEST]=info.source.bounds.west,[BOUND_SOUTH]=info.source.bounds.south,
+    [BOUND_EAST]=info.source.bounds.east,[BOUND_NORTH]=info.source.bounds.north
   }
   for key,value in pairs(metadata) do
     local written,writeErr=fusion.set_data(tool,key,value,info.object_type.." / "..key)
@@ -574,10 +601,15 @@ local function create_region_node(comp,info,x,y,created)
     "Source ID: "..info.source.source_id.." | Version: "..info.source.source_version,
     "Parent: "..tostring(info.source.parent_name or "")
   },"\n")
+  local bounds=string.format("W %.6f | S %.6f | E %.6f | N %.6f",
+    info.source.bounds.west,info.source.bounds.south,
+    info.source.bounds.east,info.source.bounds.north)
   local identityWritten,identityErr=fusion.set_input(tool,"IdentityInfo",identity,"Region Identity")
   if not identityWritten then error(identityErr) end
   local geographyWritten,geographyErr=fusion.set_input(tool,"GeographyInfo",geography,"Region Geography")
   if not geographyWritten then error(geographyErr) end
+  local boundsWritten,boundsErr=fusion.set_input(tool,"BoundsInfo",bounds,"Region Bounds")
+  if not boundsWritten then error(boundsErr) end
   return tool
 end
 
@@ -671,12 +703,13 @@ function factory.add_region(comp,feature,opts)
   if not existing then return nil,inspectErr end
   if not existing.has_scene then return nil,"NO_SCENE: create a CartoRig Scene first" end
 
-  local geometryPath,dataErr=region_data_ready(feature,opts.localappdata)
-  if not geometryPath then return nil,dataErr end
+  local geometry, dataErr=region_data_ready(feature,opts.localappdata)
+  if not geometry then return nil,dataErr end
 
   local state=state_from_inspection(existing)
   local proposal,proposalErr=domain.add_region(state,feature.geo_type,feature)
   if not proposal then return nil,proposalErr end
+  proposal.source.bounds=geometry.bounds
 
   local chain,chainErr=managed_region_chain(existing)
   if not chain then return nil,chainErr end
@@ -769,7 +802,7 @@ function factory.add_region(comp,feature,opts)
     object_id=proposal.object_id,scene_id=proposal.scene_id,
     object_type=proposal.object_type,display_name=proposal.display_name,
     node_name=proposal.node_name,source=proposal.source,draw_order=proposal.draw_order,
-    geometry_path=geometryPath
+    geometry_path=geometry.path,bounds=proposal.source.bounds
   }
 end
 
