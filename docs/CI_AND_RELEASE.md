@@ -18,7 +18,10 @@ The repository contains one manual workflow:
 
 `.github/workflows/scene-timeline-windows.yml`
 
-It is triggered only by `workflow_dispatch` and performs packaging duties:
+It can be triggered by `workflow_dispatch`. On the active Milestone A
+development branch, a commit that changes **only the installer workflow file**
+may also trigger packaging; ordinary implementation commits do not run Actions.
+Both paths execute the same build-only job:
 
 1. check out the committed CartoRig source;
 2. fetch the exact pinned Natural Earth commit;
@@ -44,6 +47,21 @@ Before dispatching the installer build, the developer must execute and review lo
 - specification SHA / traceability structure verification.
 
 Every failure is corrected before the build request. Tests and implementation are reviewed together after each increment.
+
+## Safe upgrade of CartoRig-owned shared files
+
+The installer must accept an unmodified previous CartoRig installation and
+must not overwrite independently authored files in Resolve's shared folders.
+Before building an updated `.fuse` or launcher, refresh the normalized SHA-256
+allowlist in `support/verify-managed-shared.ps1` using exact bytes from the
+reviewed previous installer and the newly committed source. Keep historical
+CartoRig hashes to support upgrades and uninstall, and do not replace the
+allowlist with filename-only or wildcard checks.
+
+The local `tests/test_installer_safety.py` verifies that all source files
+distributed by the current installer are recognized by the ownership verifier.
+An installer build is not proof of an upgrade unless this local test passes
+and an actual old-to-new installation has been checked on Windows.
 
 ## Host gate
 
