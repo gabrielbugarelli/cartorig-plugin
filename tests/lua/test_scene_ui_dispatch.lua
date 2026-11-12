@@ -84,7 +84,8 @@ function service.search_locations(query,filter)
   assert(filter=="Country")
   return {{
     geo_type="Country",canonical_name="Brazil",parent_name="South America",
-    source_id="br-source",geometry="Polygon",scale="1:50m"
+    source_id="br-source",dataset_id="natural-earth-admin0-countries",
+    source_version="5.1.1",geometry="Polygon",scale="1:50m"
   }}
 end
 function service.add_region(received,scene_id,source_id)
@@ -132,6 +133,8 @@ function dispatcher:RunLoop()
   items.GeoType.CurrentIndex=1
   self.window.On.Search.Clicked({})
   assert(items.AddCountry.Enabled==true and items.AddState.Enabled==false)
+  assert(items.SearchResults._items[1]:find("natural-earth-admin0-countries v5.1.1",1,true),
+    "Search result must expose dataset/version provenance")
   self.window.On.AddCountry.Clicked({})
 end
 function dispatcher:ExitLoop() end
