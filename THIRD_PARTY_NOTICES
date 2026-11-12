@@ -1,23 +1,40 @@
 CartoRig — third-party resource notices
 
-CartoRig original Lua code and scripts: MIT, see LICENSE.
+CartoRig original Lua code, Fuses and scripts: MIT, see LICENSE.
 
 NATURAL EARTH
-- Resource: Natural Earth 1:50m Land, vector polygons (ne_50m_land.geojson).
-- Origin: https://github.com/nvkelso/natural-earth-vector/tree/ca96624a56bd078437bca8184e78163e5039ad19/geojson
-- Exact source commit: ca96624a56bd078437bca8184e78163e5039ad19 (2022-06-02).
-- Source: geojson/ne_50m_land.geojson.
-- Installed runtime representation: data/ne_50m_land.lua (1,422 rings, 60,669
-  original vertex pairs, unmodified numeric coordinate values).
-- Distribution terms: PUBLIC DOMAIN. The authors waive rights to use and
-  redistribute map data for personal and commercial use.
-- Attribution: Made with Natural Earth. www.naturalearthdata.com
-- Terms: https://www.naturalearthdata.com/about/terms-of-use/
-- Maintainers include Nathaniel Vaughn Kelso, Tom Patterson and collaborators.
-- Version is pinned per source commit; map geometry is NOT silently updated.
+Natural Earth map data is in the public domain. CartoRig credits:
+"Made with Natural Earth. Free vector and raster map data @ naturalearthdata.com."
 
-The V1 also requires Admin 0, Admin 1, Populated Places, borders and other
-sources. THEY ARE NOT BUNDLED YET. Do not claim full V1 offline coverage.
+Pinned build source repository:
+https://github.com/nvkelso/natural-earth-vector
+Exact source commit used by the Milestone A data build:
+f1890d9f152c896d250a77557a5751a93d494776
+
+Bundled runtime datasets generated from that checkout:
+- Natural Earth 1:50m Land — source version 4.1.0.
+  Source theme: 50m_physical/ne_50m_land.
+  Installed runtime: data/ne_50m_land.lua.
+- Natural Earth Admin 0 Countries — 1:50m, source version 5.1.1.
+  Source theme: 50m_cultural/ne_50m_admin_0_countries.
+  Installed runtime: per-feature Lua geometry under data/regions plus ne_catalog.tsv.
+- Natural Earth Admin 1 States/Provinces — 1:10m, source version 5.1.1.
+  Source theme: 10m_cultural/ne_10m_admin_1_states_provinces.
+  Natural Earth's 1:50m Admin 1 v5.1.1 layer currently represents USA/Canada
+  only, so CartoRig uses the 1:10m Natural Earth Admin 1 source for required
+  subdivisions such as Mato Grosso. The actual 1:10m scale is persisted on each
+  State object and is never presented as 1:50m.
+- Natural Earth Populated Places — 1:50m, source version 5.1.2.
+  Source theme: 50m_cultural/ne_50m_populated_places.
+  Installed runtime: point records in ne_catalog.tsv.
+
+The generated natural-earth-manifest.json records source commit, dataset version,
+scale, coverage, source-file SHA-256 hashes, generated geometry counts and
+generated runtime hashes. Geometry is generated in GitHub Actions; the end user
+does not download or prepare geodata manually.
+
+Natural Earth terms:
+https://www.naturalearthdata.com/about/terms-of-use/
 
 NSIS INSTALLER
 - Build-time tool: NSIS 3.x from Chocolatey community packages on a standard
@@ -27,4 +44,13 @@ NSIS INSTALLER
 - Runtime Fusion Fuses and scripts are Lua source; no proprietary Resolve SDK
   or DaVinci Resolve binaries are redistributed.
 
-Other third-party code or datasets are not currently bundled.
+PYSH (PYSHAPEFILE)
+- Build-time only dependency: pyshp 2.3.1.
+- Used by GitHub Actions to read the pinned Natural Earth shapefiles and generate
+  CartoRig's offline runtime representation.
+- It is not installed on the end user's machine by CartoRig.
+- Project: https://github.com/GeospatialPython/pyshp
+- License: MIT.
+
+No DaVinci Resolve binaries, proprietary SDK binaries, online map tiles or paid
+services are bundled.
