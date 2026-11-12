@@ -4,15 +4,24 @@ import os
 from pathlib import Path
 import subprocess
 import unittest
+import shutil
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-LUA = os.getenv("CARTORIG_LUA_EXECUTABLE", "lua5.1")
+configured = os.getenv("CARTORIG_LUA_EXECUTABLE")
+if configured:
+    LUA = [configured]
+else:
+    executable = next((shutil.which(x) for x in ("lua5.1", "luajit", "lua")
+                       if shutil.which(x)), None)
+    LUA = [executable] if executable else [
+        sys.executable, str(ROOT / "scripts/lua_ctypes_runner.py")]
 
 class LuaRuntimeIntegration(unittest.TestCase):
     def invoke(self, script, *args):
         env = dict(os.environ)
         env["LUA_PATH"] = str(ROOT / "src/?.lua") + ";" + str(ROOT / "src/?/init.lua") + ";;"
-        result = subprocess.run([LUA, str(ROOT / script), *map(str,args)], cwd=ROOT, env=env,
+        result = subprocess.run([*LUA, str(ROOT / script), *map(str,args)], cwd=ROOT, env=env,
                                 capture_output=True, text=True, timeout=40, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + "\n" + result.stderr)
         self.assertIn("PASS", result.stdout)
