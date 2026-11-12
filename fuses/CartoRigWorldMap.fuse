@@ -124,7 +124,7 @@ function Create()
   })
   InResetStyle=self:AddInput("Reset WorldMap Style","ResetStyle",{
     LINKID_DataType="Number",INPID_InputControl="ButtonControl",
-    INP_DoNotifyChanged=true,INP_External=false,
+    INP_DoNotifyChanged=true,INP_InitialNotify=false,INP_External=false,
   })
   self:AddInput("Source: Natural Earth 1:50m land + Admin 0 boundaries (local)", "SourceInfo",{
     LINKID_DataType="Text", INPID_InputControl="LabelControl",INP_Passive=true,INP_External=false,
