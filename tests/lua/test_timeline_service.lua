@@ -35,6 +35,20 @@ function mockFactory.add_region(comp,feature,opts)
     display_name=feature.canonical_name,node_name=node_name,source=obj.source
   }
 end
+function mockFactory.rename_object(comp,object_id,new_name)
+  if not comp.sid then return nil,"NO_SCENE" end
+  for _,obj in ipairs(comp.objects or {}) do
+    if obj.id==object_id then
+      if obj.type~="Country" and obj.type~="State" then return nil,"RENAME_UNSUPPORTED" end
+      obj.display_name=new_name
+      return {
+        object_id=obj.id,object_type=obj.type,node_name=obj.name,
+        display_name=new_name,scene_id=comp.sid
+      }
+    end
+  end
+  return nil,"OBJECT_NOT_FOUND"
+end
 package.loaded["CartoRig.node_factory"]=mockFactory
 package.loaded["CartoRig.timeline_service"]=nil
 local svc=require("CartoRig.timeline_service")
@@ -358,9 +372,21 @@ local added,addErr=svc.add_region(resolve,targetScene.scene_id,"ne-admin0","br-s
 assert(added,addErr)
 assert(added.scene_id==targetScene.scene_id and added.object_type=="Country")
 assert(#targetScene.composition.objects==beforeCounts[1]+1)
+local originalNodeName=added.node_name
+local renamed,renameErr=svc.rename_object(resolve,targetScene.scene_id,added.object_id,
+  "Brazil Highlight")
+assert(renamed,renameErr)
+assert(renamed.object_id==added.object_id and renamed.node_name==originalNodeName)
+assert(renamed.display_name=="Brazil Highlight")
+for _,obj in ipairs(targetScene.composition.objects) do
+  if obj.id==added.object_id then
+    assert(obj.display_name=="Brazil Highlight" and obj.name==originalNodeName,
+      "Rename must update display name only")
+  end
+end
 for n=2,#createdScenes do
   assert(#createdScenes[n].composition.objects==beforeCounts[n],
-    "Add Region must not mutate another Scene composition")
+    "Add/Rename Region must not mutate another Scene composition")
 end
 local stateResults=assert(svc.search_locations("Mato Grosso","State",{localappdata=ROOT}))
 assert(#stateResults==1 and stateResults[1].scale=="1:10m")
