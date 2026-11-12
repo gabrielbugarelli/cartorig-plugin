@@ -217,6 +217,21 @@ class NaturalEarthBuilderTests(unittest.TestCase):
         self.assertEqual(datasets["natural-earth-populated-places"]["feature_count"], 1)
         self.assertTrue(datasets["natural-earth-admin0-countries"]["source_files_sha256"]["ne_50m_admin_0_countries.shp"])
 
+    def test_rejects_sanitized_geometry_filename_collision(self):
+        class Shape:
+            points=[(-10.0,-10.0),(10.0,-10.0),(10.0,10.0),(-10.0,10.0),(-10.0,-10.0)]
+            parts=[0]
+            bbox=[-10.0,-10.0,10.0,10.0]
+
+        reserved={}
+        builder._write_geometry(
+            self.out,"dataset","A:B","One","Parent","1","1:50m",Shape(),reserved
+        )
+        with self.assertRaisesRegex(ValueError,"geometry path collision"):
+            builder._write_geometry(
+                self.out,"dataset","A/B","Two","Parent","1","1:50m",Shape(),reserved
+            )
+
     def test_rejects_source_version_mismatch(self):
         version_file = self.root / f'{builder.DATASETS["states"]["stem"]}.VERSION.txt'
         version_file.write_text("wrong-version\n", encoding="utf-8")
