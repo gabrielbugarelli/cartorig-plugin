@@ -53,7 +53,7 @@ function Process(req)
     error("CAMERA_INVALID_POSE: control out of range")
   end
   -- The WorldMap renders a Fit World equirectangular image before this effect.
-  -- Pixels of longitude/latitude are scaled by min(width/360,height/180).
+  -- Longitude/latitude use the shared physical-pixel Fit World scale.
   local w,h=img.Width,img.Height
   local xAspect,yAspect=img.XAspect or 1,img.YAspect or 1
   if type(xAspect)~="number" or xAspect<=0 or
