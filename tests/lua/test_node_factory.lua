@@ -39,7 +39,12 @@ local function fake()
    end}
   end
   function tool:ConnectInput(port,other)
-   if comp.fail_link==port and comp.fail_link_regid==self.regid then return false end
+   if comp.fail_link==port and comp.fail_link_regid==self.regid then
+    if comp.fail_link_once then
+     comp.fail_link=nil;comp.fail_link_regid=nil;comp.fail_link_once=nil
+    end
+    return false
+   end
    if comp.fail_link==port and not comp.fail_link_regid and self.regid=="MediaOut" then return false end
    self.links[port]=other
    return true
@@ -216,10 +221,10 @@ for _,tool in ipairs(rollbackComp.tools) do
 end
 rollbackComp.fail_link="Input"
 rollbackComp.fail_link_regid="Fuse.CartoRigCamera"
+rollbackComp.fail_link_once=true
 local regionFailure,regionFailureErr=factory.add_region(rollbackComp,brazilFeature,{localappdata=ROOT})
 assert(regionFailure==nil and regionFailureErr:match("REGION_CREATE_FAILED"))
-rollbackComp.fail_link=nil
-rollbackComp.fail_link_regid=nil
+assert(not regionFailureErr:match("ROLLBACK_INCOMPLETE"),regionFailureErr)
 assert(rollbackCamera.links.Input==rollbackWorld,
  "failed Region transaction must restore Camera -> WorldMap")
 local rolledBackState=assert(factory.inspect(rollbackComp))
