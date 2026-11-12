@@ -431,6 +431,48 @@ local emptyMarks,emptyMarksErr=svc.create(r2b,"No marks")
 assert(emptyMarks,emptyMarksErr)
 assert(next(t2b.marks)==nil,"empty In/Out state must remain empty after Scene creation")
 
+-- Resolve documents omitted keys for unset timeline In/Out points. Audio
+-- marks are not modified by Create Scene: accept empty and one-sided audio
+-- entries, preserve them exactly, and avoid manufacturing an endpoint.
+for _,audioMarks in ipairs({
+  {__case="empty"},
+  {__case="in only",["in"]=12},
+  {__case="out only",["out"]=34},
+}) do
+  local r,p,t=fake(true)
+  t:AddTrack("video")
+  t.marks={video={["in"]=4,["out"]=8},audio={}}
+  if audioMarks.__case=="in only" then t.marks.audio["in"]=audioMarks["in"] end
+  if audioMarks.__case=="out only" then t.marks.audio["out"]=audioMarks["out"] end
+  local expectedIn,expectedOut=t.marks.audio["in"],t.marks.audio["out"]
+  local created,createErr=svc.create(r,"One-sided audio marks: "..audioMarks.__case)
+  assert(created,createErr)
+  assert(t.created==1,"audio In/Out must not block scene insertion")
+  assert(t.marks.audio["in"]==expectedIn and t.marks.audio["out"]==expectedOut,
+    "audio marks must be preserved without fabricating endpoints")
+  assert(t.marks.video["in"]==4 and t.marks.video["out"]==8,
+    "complete video marks must still be restored after insertion")
+end
+
+-- A partial VIDEO mark must not be cleared: SetMarkInOut requires two
+-- endpoints, so destructive clearing cannot be undone faithfully.
+local rPartial,pPartial,tPartial=fake(true)
+tPartial:AddTrack("video")
+tPartial.marks.video={["in"]=22}
+local partial,partialErr=svc.create(rPartial,"Unsafe partial video mark")
+assert(partial==nil and partialErr:find("MARK_STATE_UNSUPPORTED",1,true))
+assert(tPartial.created==0 and tPartial.marks.video["in"]==22 and
+  tPartial.marks.video["out"]==nil, "one-sided video mark must remain untouched")
+
+-- Invalid numeric types remain a hard error, not an excuse to silently clear
+-- marks or coerce values from the external Resolve API.
+local rBadMark,pBadMark,tBadMark=fake(true)
+tBadMark:AddTrack("video")
+tBadMark.marks.audio={["in"]="invalid",["out"]=10}
+local invalidMark,invalidMarkErr=svc.create(rBadMark,"Invalid audio mark type")
+assert(invalidMark==nil and invalidMarkErr:find("MARK_STATE_INVALID",1,true))
+assert(tBadMark.created==0,"invalid host mark values must block insertion")
+
 -- A public non-list key is not binding metadata and must fail closed rather
 -- than being silently ignored.
 local r2c,p2c,t2c=fake(true)
