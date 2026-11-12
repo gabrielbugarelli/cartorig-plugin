@@ -91,6 +91,24 @@ function catalog.open(path)
   return { rows = objects, record_count = #objects, schema_version = 1 }
 end
 
+function catalog.find(index, source_id)
+  if type(index)~="table" or type(index.rows)~="table" then
+    return nil,"offline index is not loaded"
+  end
+  if type(source_id)~="string" or source_id=="" then
+    return nil,"source ID is required"
+  end
+  local found=nil
+  for _,row in ipairs(index.rows) do
+    if row.source_id==source_id then
+      if found then return nil,"DATA_INTEGRITY: source ID is not unique" end
+      found=row
+    end
+  end
+  if not found then return nil,"LOCATION_NOT_FOUND: source ID is absent from installed data" end
+  return found
+end
+
 function catalog.search(index, query, geo_type, limit)
   if type(index) ~= "table" or type(index.rows) ~= "table" then
     return nil, "offline index is not loaded"
