@@ -352,8 +352,16 @@ def _version_from_source(root: Path, stem: str, expected: str) -> str:
     return actual
 
 
-def _reader(root: Path, stem: str) -> shapefile.Reader:
-    return shapefile.Reader(str(root / f"{stem}.shp"), encoding="utf-8")
+def _reader(root: Path, stem: str, spec: dict[str, Any] | None = None) -> shapefile.Reader:
+    reader = shapefile.Reader(str(root / f"{stem}.shp"), encoding="utf-8")
+    if spec:
+        columns = {str(field[0]).upper() for field in reader.fields[1:]}
+        for alternatives in spec["required_attributes"]:
+            if not any(field in columns for field in alternatives.upper().split("/")):
+                raise ValueError(
+                    f"{stem}: required Natural Earth attribute missing: {alternatives}"
+                )
+    return reader
 
 
 def _write_land_runtime(source_root: Path, output_root: Path) -> dict[str, Any]:
@@ -493,12 +501,23 @@ def build(source_root: Path, output_root: Path, source_commit: str) -> dict[str,
     for key, spec in DATASETS.items():
         stem = spec["stem"]
         version = _version_from_source(source_root, stem, spec["version"])
-        reader = _reader(source_root, stem)
+        reader = _reader(source_root, stem, spec)
         count = 0
+        seen_source_ids: set[str] = set()
         for shape_record in reader.iterShapeRecords():
             fields = _field_map(shape_record.record)
             geo_type = spec["geo_type"]
             source_id = _source_id(fields, geo_type)
+            if source_id in seen_source_ids:
+                raise ValueError(f"{geo_type} has duplicate Natural Earth source ID: {source_id}")
+            seen_source_ids.add(source_id)
+            expected_types = (
+                {shapefile.POINT, shapefile.POINTZ, shapefile.POINTM}
+                if geo_type == "City" else
+                {shapefile.POLYGON, shapefile.POLYGONZ, shapefile.POLYGONM}
+            )
+            if shape_record.shape.shapeType not in expected_types:
+                raise ValueError(f"{geo_type} {source_id} has incompatible shape type")
             canonical = _canonical(fields, geo_type)
             parent = _parent(fields, geo_type)
             aliases = _aliases(
