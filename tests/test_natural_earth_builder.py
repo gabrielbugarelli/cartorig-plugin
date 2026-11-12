@@ -261,6 +261,29 @@ class NaturalEarthBuilderTests(unittest.TestCase):
                 self.out,"dataset","A/B","Two","Parent","1","1:50m",Shape(),reserved
             )
 
+    def test_refuses_missing_required_natural_earth_columns(self):
+        spec = {**builder.DATASETS["countries"], "required_attributes": ["MISSING_FIELD"]}
+        with self.assertRaisesRegex(ValueError, "required Natural Earth attribute missing"):
+            builder._reader(self.root, spec["stem"], spec)
+
+    def test_rejects_duplicate_country_source_ids(self):
+        country = builder.DATASETS["countries"]["stem"]
+        make_polygon(
+            self.root, country,
+            [("NE_ID", "C"), ("NAME_EN", "C"), ("NAME", "C"),
+             ("CONTINENT", "C"), ("ADM0_A3", "C")],
+            [
+                ({"NE_ID": "duplicate", "NAME_EN": "Brazil",
+                  "NAME": "Brazil", "CONTINENT": "South America"},
+                 [[(-74, -34), (-34, -34), (-34, 5), (-74, 5), (-74, -34)]]),
+                ({"NE_ID": "duplicate", "NAME_EN": "Argentina",
+                  "NAME": "Argentina", "CONTINENT": "South America"},
+                 [[(-73, -55), (-53, -55), (-53, -21), (-73, -21), (-73, -55)]]),
+            ],
+        )
+        with self.assertRaisesRegex(ValueError, "duplicate Natural Earth source ID"):
+            builder.build(self.root, self.out, "fixture-commit")
+
     def test_rejects_source_version_mismatch(self):
         version_file = self.root / f'{builder.DATASETS["states"]["stem"]}.VERSION.txt'
         version_file.write_text("wrong-version\n", encoding="utf-8")
