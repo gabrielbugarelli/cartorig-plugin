@@ -208,7 +208,7 @@ Section "Install cartorig-dev"
   File "/oname=blackmagic_api.lua" "..\src\CartoRig\blackmagic_api.lua"
   File "/oname=fusion_contract.lua" "..\src\CartoRig\fusion_contract.lua"
   File "/oname=node_factory.lua" "..\src\CartoRig\node_factory.lua"
-  File "/oname=timeline_service.lua" "..\src\CartoRig\timeline_service.lua"
+  File "/oname=scene_service.lua" "..\src\CartoRig\scene_service.lua"
   SetOutPath "$LOCALAPPDATA\CartoRig\App\data"
   File "/oname=ne_50m_land.lua" "..\build\cartorig-data\ne_50m_land.lua"
   File "/oname=ne_50m_admin0_borders.lua" "..\build\cartorig-data\ne_50m_admin0_borders.lua"
@@ -275,8 +275,8 @@ Section "Install cartorig-dev"
     Abort
   ${EndIf}
 
-  ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\timeline_service.lua"
-    MessageBox MB_OK|MB_ICONSTOP "TimelineService missing; old entry preserved." /SD IDOK
+  ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\scene_service.lua"
+    MessageBox MB_OK|MB_ICONSTOP "SceneService missing; old entry preserved." /SD IDOK
     Abort
   ${EndIf}
   ; Activate the new Utility entry before retiring the previous Comp entry.
@@ -426,6 +426,7 @@ Section "Uninstall"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\blackmagic_api.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\fusion_contract.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\node_factory.lua"
+  Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\scene_service.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\timeline_service.lua"
   RMDir "$LOCALAPPDATA\CartoRig\App\lua\CartoRig"
   RMDir "$LOCALAPPDATA\CartoRig\App\lua"
