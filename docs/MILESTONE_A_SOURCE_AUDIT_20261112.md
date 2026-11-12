@@ -92,6 +92,35 @@ GitHub Actions installer-only policy or the stable release gate.
   licensed Windows host is verified. Antimeridian polygon clipping and
   reliable rendering of nested holes are explicit acceptance risks.
 
+## Resolve Studio observed rendering failure and correction (2026-11-12)
+
+A genuine Windows/Resolve user session confirmed that Create Scene rendered the
+offline WorldMap, but adding Brazil, Argentina and Mato Grosso caused the
+Region chain to fail. The Console reported:
+
+`CartoRigRegion.fuse:150: REGION_INHERIT_FAILED: unable to inspect managed WorldMap`
+
+followed by dependent Camera/Scene/MediaOut input failures. Root cause:
+`CartoRigRegion.Process` attempted to enumerate and query other Fusion Tools
+from the render thread. The graph's physical sequence itself was connected.
+
+The corrected Region Fuse has six hidden numeric inputs
+`WorldLandR/G/B` and `WorldBorderR/G/B` evaluated via normal
+`Input:GetValue(req)`. On region creation, NodeFactory installs and verifies
+native Fusion expressions such as `CR_WorldMap_Main.LandR` before connecting
+the Region to the render chain. The renderer no longer invokes
+`Comp:GetToolList` or cross-tool `GetInput`.
+
+Existing 0.7.0 compositions can use the explicit Scene UI button
+**Repair WorldMap Color Links (Existing Regions)**. This operation performs
+a transactional, idempotent binding of missing palette expressions while
+preserving unrelated links and custom Region controls.
+
+The user-observed failure is established; the corrected palette expression
+implementation and repair workflow still require a fresh Windows installer
+and real Resolve render/Inspector/save/reopen evidence. Do not mark A04/A05
+PASS merely because the source and installer build are valid.
+
 ## Next gate
 
 In an environment with a full checkout and pinned Natural Earth source, run
