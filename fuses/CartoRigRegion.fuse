@@ -32,6 +32,24 @@ local function colorInput(title,base,group,r,g,b)
   return inputs
 end
 
+-- These six numeric inputs are driven by native Fusion expressions installed
+-- by NodeFactory before connecting the Region into the rendered image graph.
+-- The render thread must never call Composition:GetToolList/GetInput or
+-- inspect unrelated Tools. Defaults preserve the known 0.7.0 palette when an
+-- existing project is opened before its palette links are explicitly migrated.
+local function inherited_color_inputs(name,prefix,defaults)
+  local result={}
+  for index,suffix in ipairs({"R","G","B"}) do
+    result[index]=self:AddInput("WorldMap "..name.." "..suffix,"World"..prefix..suffix,{
+      LINKID_DataType="Number",INPID_InputControl="SliderControl",
+      IC_Visible=false,INP_External=true,INP_Active=true,
+      INP_Default=defaults[index],INP_MinScale=0,INP_MaxScale=1,
+      INP_MinAllowed=0,INP_MaxAllowed=1,
+    })
+  end
+  return result
+end
+
 function Create()
   self:AddControlPage("Control")
   InIdentityInfo=self:AddInput("Identity","IdentityInfo",{
@@ -50,6 +68,8 @@ function Create()
     TEC_Wrap=true, TEC_ReadOnly=true, INP_Passive=true, INP_External=false,
   })
 
+  WorldLandControls=inherited_color_inputs("Land","Land",{214/255,215/255,210/255})
+  WorldBorderControls=inherited_color_inputs("Border","Border",{117/255,129/255,139/255})
   InInheritLand=self:AddInput("Inherit WorldMap Land Color","InheritWorldMapFill",{
     LINKID_DataType="Number", INPID_InputControl="CheckboxControl",
     INP_Integer=true, INP_Default=1,
@@ -139,34 +159,12 @@ function NotifyChanged(inp,param,time)
   end
 end
 
-local function inherited_world_color(req,prefix)
-  local scene_id=self:GetData("CartoRig.V1.SceneId")
-  if type(scene_id)~="string" or scene_id=="" then
-    error("REGION_INHERIT_FAILED: scene UUID missing")
-  end
-  if not self.Comp then error("REGION_INHERIT_FAILED: composition unavailable") end
-  local ok,list=pcall(function() return self.Comp:GetToolList(false) end)
-  if not ok or type(list)~="table" then
-    error("REGION_INHERIT_FAILED: unable to inspect managed WorldMap")
-  end
-  local world=nil
-  for _,tool in pairs(list) do
-    local valid,owned,kind,sid=pcall(function()
-      return tool:GetData("CartoRig.V1.Owned"),
-             tool:GetData("CartoRig.V1.ObjectType"),
-             tool:GetData("CartoRig.V1.SceneId")
-    end)
-    if valid and owned==true and kind=="WorldMap" and sid==scene_id then
-      if world then error("REGION_INHERIT_FAILED: ambiguous WorldMap") end
-      world=tool
-    end
-  end
-  if not world then error("REGION_INHERIT_FAILED: WorldMap not found") end
+local function inherited_world_color(req,inputs,prefix)
   local color={}
   for index,suffix in ipairs({"R","G","B"}) do
-    local readOk,value=pcall(function() return world:GetInput(prefix..suffix,req.Time) end)
-    if not readOk or type(value)~="number" or value<0 or value>1 then
-      error("REGION_INHERIT_FAILED: WorldMap "..prefix.." Color unavailable")
+    local value=readnum(inputs[index],req,"WorldMap "..prefix.." "..suffix)
+    if value~=value or value<0 or value>1 then
+      error("REGION_INHERIT_FAILED: invalid linked WorldMap "..prefix.." "..suffix)
     end
     color[index]=value
   end
@@ -278,7 +276,7 @@ function Process(req)
 
   local fill
   if readnum(InInheritLand,req,"Inherit WorldMap Land Color")>=0.5 then
-    fill=inherited_world_color(req,"Land")
+    fill=inherited_world_color(req,WorldLandControls,"Land")
   else
     fill={
       readnum(FillControls[1],req,"Fill R"),
@@ -296,7 +294,7 @@ function Process(req)
     if not outline then error("REGION_RENDER_FAILED: OutlineOfShape returned nil") end
     local stroke
     if readnum(InInheritBorder,req,"Inherit WorldMap Border Color")>=0.5 then
-      stroke=inherited_world_color(req,"Border")
+      stroke=inherited_world_color(req,WorldBorderControls,"Border")
     else
       stroke={
         readnum(StrokeControls[1],req,"Stroke R"),
