@@ -752,6 +752,32 @@ function M.add_region(resolve,scene_id,dataset_id,source_id,opts)
   return result
 end
 
+function M.rename_object(resolve,scene_id,object_id,new_name)
+  if type(object_id)~="string" or object_id=="" then
+    return nil,"OBJECT_ID_REQUIRED: choose a structural object"
+  end
+  if type(new_name)~="string" or new_name:match("^%s*$") then
+    return nil,"RENAME_NAME_REQUIRED: enter a display name"
+  end
+  local context,contextErr=find_scene_context(resolve,scene_id)
+  if not context then return nil,contextErr end
+
+  local result,renameErr=factory.rename_object(context.composition,object_id,new_name)
+  if not result then return nil,renameErr end
+
+  local observed,observeErr=factory.inspect(context.composition)
+  if not observed then return nil,"POST_RENAME_STATE_INVALID: "..tostring(observeErr) end
+  local found=nil
+  for _,obj in ipairs(observed.objects) do
+    if obj.id==object_id then found=obj;break end
+  end
+  if not found or found.display_name~=new_name or found.name~=result.node_name then
+    return nil,"POST_RENAME_STATE_INVALID: renamed object was not reconstructed exactly"
+  end
+  result.objects=observed.objects
+  return result
+end
+
 function M.current_scene(resolve)
   local base,err=project_context(resolve)
   if not base then return nil,err end
