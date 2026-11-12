@@ -92,9 +92,10 @@ class FuseContractTests(unittest.TestCase):
         self.assertIn('function M.clip_ring(flat)',core)
         self.assertIn('function M.split_line(flat,closed)',core)
         self.assertIn('function M.line_shape(lines,frame,closed)',core)
-        self.assertIn('local fit=math.min(w*xAspect/360,h*yAspect/180)',camera)
-        self.assertIn('local x=0.5-lon*fit/(w*xAspect)*zoom',camera)
-        self.assertIn('local y=0.5-lat*fit/(h*yAspect)*zoom',camera)
+        self.assertIn('function M.camera_offset(frame,lon,lat,zoom)',core)
+        self.assertIn('render_geometry.lua',camera)
+        self.assertIn('geo.frame(img.Width,img.Height,img.XAspect,img.YAspect)',camera)
+        self.assertIn('geo.camera_offset(frame,lon,lat,zoom)',camera)
 
     def test_factory_hard_fail_on_unregistered_fuses(self):
         source=(ROOT/"src/CartoRig/node_factory.lua").read_text(encoding="utf-8")
