@@ -28,7 +28,8 @@ local function fake()
  function comp:AddTool(regid,x,y)
   if type(x)~="number" or type(y)~="number" then error("AddTool 3-arg expected") end
   if self.fail==regid then return nil end
-  local tool={regid=regid,name=regid..tostring(#self.tools+1),data={},links={},inputs={},inside=comp}
+  local tool={regid=regid,name=regid..tostring(#self.tools+1),
+    data={},links={},inputs={},expressions={},inside=comp}
   function tool:GetAttrs() return {TOOLS_RegID=self.regid,TOOLS_Name=self.name} end
   function tool:SetAttrs(dict) if dict.TOOLS_Name then self.name=dict.TOOLS_Name end end
   function tool:SetData(k,v) self.data[k]=v end
@@ -37,11 +38,20 @@ local function fake()
   function tool:GetInput(k) return self.inputs[k] end
   function tool:FindInput(port)
    local parent=self
-   return {GetConnectedOutput=function()
-    local source=parent.links[port]
-    if not source then return nil end
-    return {GetTool=function() return source end}
-   end}
+   return {
+    GetConnectedOutput=function()
+     local source=parent.links[port]
+     if not source then return nil end
+     return {GetTool=function() return source end}
+    end,
+    SetExpression=function(_,expression)
+     if comp.fail_palette_port==port and parent.regid=="Fuse.CartoRigRegion" then
+      error("synthetic palette expression binding failure")
+     end
+     parent.expressions[port]=expression
+    end,
+    GetExpression=function() return parent.expressions[port] end,
+   }
   end
   function tool:ConnectInput(port,other)
    if comp.fail_link==port and comp.fail_link_regid==self.regid then
@@ -167,6 +177,13 @@ for _,tool in ipairs(comp.tools) do
  if tool:GetData("CartoRig.V1.ObjectId")==country1.object_id then brazilTool=tool;break end
 end
 assert(brazilTool,"created Brazil Tool must be discoverable by object UUID")
+for _,prefix in ipairs({"Land","Border"}) do
+ for _,channel in ipairs({"R","G","B"}) do
+  local id="World"..prefix..channel
+  assert(brazilTool.expressions[id]=="CR_WorldMap_Main."..prefix..channel,
+    "Region must bind palette through native Fusion expressions before rendering: "..id)
+ end
+end
 brazilTool:SetInput("FillR",0.12)
 brazilTool:SetInput("FillG",0.34)
 brazilTool:SetInput("FillB",0.56)
@@ -281,6 +298,23 @@ local corruptRegionResult,corruptRegionErr=factory.add_region(comp,corruptFeatur
 assert(corruptRegionResult==nil and corruptRegionErr:match("DATA_INCOMPATIBLE"))
 assert(#comp.tools==beforeCorrupt,"invalid Region coordinates must block before graph mutation")
 os.remove(corruptRegionPath)
+
+-- Failed native palette linking must abort and roll back the new Region,
+-- preserving the original WorldMap -> Camera connection.
+local paletteFailComp,paletteFailMedia=fake()
+assert(factory.create_scene(paletteFailComp,"Palette failure",{localappdata=ROOT}))
+local paletteCamera,paletteWorld
+for _,tool in ipairs(paletteFailComp.tools) do
+ if tool.name=="CR_Camera_Main" then paletteCamera=tool end
+ if tool.name=="CR_WorldMap_Main" then paletteWorld=tool end
+end
+paletteFailComp.fail_palette_port="WorldBorderG"
+local badPalette,badPaletteErr=factory.add_region(paletteFailComp,brazilFeature,{localappdata=ROOT})
+assert(badPalette==nil and badPaletteErr:find("REGION_PALETTE_BIND_FAILED",1,true),
+  "broken palette binding must fail the transaction: "..tostring(badPaletteErr))
+assert(not badPaletteErr:find("ROLLBACK_INCOMPLETE",1,true),badPaletteErr)
+assert(paletteCamera.links.Input==paletteWorld)
+assert(#assert(factory.inspect(paletteFailComp)).objects==3)
 
 -- Class ordering is independent of click order: State added before Country must
 -- still render after Country and before the shared Camera.
