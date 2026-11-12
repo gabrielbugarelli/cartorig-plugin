@@ -355,6 +355,24 @@ function factory.create_scene(comp,title,opts)
       if not written then error(writeErr) end
     end
 
+    local identity=table.concat({
+      "Title: "..state.title,
+      "Scene UUID: "..state.scene_id,
+      "Schema: "..state.schema_version
+    },"\n")
+    local links="WorldMap → Camera → Scene → MediaOut\nManaged graph verified at creation"
+    local dataInfo=table.concat({
+      "Natural Earth Land 4.1.0 — 1:50m",
+      "Natural Earth Admin 0 boundaries 5.1.0 — 1:50m",
+      "Offline runtime; no network dependency"
+    },"\n")
+    local identityWritten,identityErr=fusion.set_input(nodes.Scene,"SceneIdentity",identity,"Scene Identity")
+    if not identityWritten then error(identityErr) end
+    local linksWritten,linksErr=fusion.set_input(nodes.Scene,"SceneLinks",links,"Scene Links")
+    if not linksWritten then error(linksErr) end
+    local dataWritten,dataErr=fusion.set_input(nodes.Scene,"SceneData",dataInfo,"Scene Data")
+    if not dataWritten then error(dataErr) end
+
     local observed,observedErr=factory.inspect(comp)
     if not observed or not observed.has_scene or
        observed.scene_id~=state.scene_id or observed.title~=state.title then
