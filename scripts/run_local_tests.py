@@ -27,18 +27,18 @@ import unittest
 ROOT=Path(__file__).resolve().parents[1]
 
 
-def lua_executable() -> str:
+def lua_command() -> list[str]:
     configured=os.getenv("CARTORIG_LUA_EXECUTABLE")
     if configured:
-        return configured
+        return [configured]
     for candidate in ("lua5.1","luajit","lua"):
         found=shutil.which(candidate)
         if found:
-            return found
-    raise RuntimeError(
-        "No Lua runtime found. Set CARTORIG_LUA_EXECUTABLE to a local Lua "
-        "5.1/LuaJIT-compatible executable or wrapper."
-    )
+            return [found]
+    fallback=ROOT/"scripts/lua_ctypes_runner.py"
+    if fallback.is_file():
+        return [sys.executable,str(fallback)]
+    raise RuntimeError("No local Lua runtime or ctypes fallback is available")
 
 
 def run_unittest_paths(paths: list[Path], *, env: dict[str,str]) -> bool:
@@ -60,9 +60,8 @@ def python_source_tests(env: dict[str,str]) -> bool:
 
 
 def lua_contract_tests(env: dict[str,str]) -> bool:
-    exe=lua_executable()
+    command=lua_command()
     env=dict(env)
-    env["CARTORIG_LUA_EXECUTABLE"]=exe
     env["LUA_PATH"]=str(ROOT/"src/?.lua")+";"+str(ROOT/"src/?/init.lua")+";;"
     scripts=sorted((ROOT/"tests/lua").glob("test_*.lua"))
     if not scripts:
@@ -82,7 +81,7 @@ def lua_contract_tests(env: dict[str,str]) -> bool:
             args=[str(source)]
         print("LOCAL LUA:",script.relative_to(ROOT))
         result=subprocess.run(
-            [exe,str(script),*args],cwd=ROOT,env=env,
+            [*command,str(script),*args],cwd=ROOT,env=env,
             text=True,capture_output=True,timeout=60,check=False,
         )
         if result.stdout:
@@ -111,7 +110,7 @@ def generated_data_tests(env: dict[str,str]) -> bool:
     if not run_unittest_paths([path],env=env):
         return False
 
-    exe=lua_executable()
+    command=lua_command()
     lua_env=dict(env)
     lua_env["LUA_PATH"]=str(ROOT/"src/?.lua")+";"+str(ROOT/"src/?/init.lua")+";;"
     for script,args in (
@@ -119,7 +118,7 @@ def generated_data_tests(env: dict[str,str]) -> bool:
         (ROOT/"tests/lua/test_land_source.lua",[root/"ne_50m_land.lua"]),
     ):
         result=subprocess.run(
-            [exe,str(script),*map(str,args)],cwd=ROOT,env=lua_env,
+            [*command,str(script),*map(str,args)],cwd=ROOT,env=lua_env,
             text=True,capture_output=True,timeout=120,check=False,
         )
         if result.stdout:
