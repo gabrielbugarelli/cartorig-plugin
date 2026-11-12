@@ -51,6 +51,10 @@ class GeneratedNaturalEarthRuntime(unittest.TestCase):
         )
         datasets={d["dataset_id"]:d for d in self.manifest["datasets"]}
         self.assertEqual(datasets["natural-earth-land"]["source_version"],"4.1.0")
+        self.assertEqual(datasets["natural-earth-admin0-boundaries"]["source_version"],"5.1.0")
+        self.assertEqual(datasets["natural-earth-admin0-boundaries"]["scale"],"1:50m")
+        self.assertGreater(datasets["natural-earth-admin0-boundaries"]["line_count"],10)
+        self.assertTrue((self.root / "ne_50m_admin0_borders.lua").is_file())
         self.assertEqual(datasets["natural-earth-admin0-countries"]["source_version"],"5.1.1")
         self.assertEqual(datasets["natural-earth-admin1-states-provinces"]["source_version"],"5.1.1")
         self.assertEqual(datasets["natural-earth-populated-places"]["source_version"],"5.1.2")
