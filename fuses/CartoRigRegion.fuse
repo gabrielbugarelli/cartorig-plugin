@@ -42,6 +42,11 @@ function Create()
     INPS_DefaultText="Natural Earth source not initialized", TEC_Lines=3,
     TEC_Wrap=true, TEC_ReadOnly=true, INP_Passive=true, INP_External=false,
   })
+  InBoundsInfo=self:AddInput("Fit Bounds","BoundsInfo",{
+    LINKID_DataType="Text", INPID_InputControl="TextEditControl",
+    INPS_DefaultText="Bounds not initialized", TEC_Lines=2,
+    TEC_Wrap=true, TEC_ReadOnly=true, INP_Passive=true, INP_External=false,
+  })
 
   FillControls=colorInput("Fill Color","Fill",10,214/255,215/255,210/255)
   InFillOpacity=self:AddInput("Fill Opacity","FillOpacity",{
