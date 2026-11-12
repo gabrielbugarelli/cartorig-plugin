@@ -3,7 +3,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory=$true)][string]$Path,
-  [Parameter(Mandatory=$true)][ValidateSet('launcher','scene-fuse','worldmap-fuse','camera-fuse')][string]$Kind
+  [Parameter(Mandatory=$true)][ValidateSet('launcher','scene-fuse','worldmap-fuse','camera-fuse','region-fuse')][string]$Kind
 )
 $ErrorActionPreference='Stop'
 $known=@{
@@ -12,8 +12,12 @@ $known=@{
     'c088214364f1226508348ebe662ed310a253fd5606253ab211307d7c17a3672f'  # 0.6.3
   )
   'scene-fuse'=@('17c28628c767353a7a558674f202371d325655bba5613e195b02fe603ab93759')
-  'worldmap-fuse'=@('e01a3e4c6823495612ccf11149a73f8f988e35ce1fa539028c8de1d06f6c9960')
+  'worldmap-fuse'=@(
+    'e01a3e4c6823495612ccf11149a73f8f988e35ce1fa539028c8de1d06f6c9960',
+    'bebdbb180e72781773c345c8d3a278cb64e48fbbb3ab3482e9fb161aa5ae4bdd'
+  )
   'camera-fuse'=@('617eaf8578fce3ac21f150eff6124c71070149995e3753cad082b2bde04f4cb3')
+  'region-fuse'=@('4fd67310e2dce94b36e47ad710b7bc8e82865b73dcc90ebb732f04c3d40951ed')
 }
 try {
   if(-not [IO.File]::Exists($Path)){ exit 3 }
