@@ -207,6 +207,7 @@ Section "Install cartorig-dev"
   File "/oname=catalog.lua" "..\src\CartoRig\catalog.lua"
   File "/oname=blackmagic_api.lua" "..\src\CartoRig\blackmagic_api.lua"
   File "/oname=fusion_contract.lua" "..\src\CartoRig\fusion_contract.lua"
+  File "/oname=render_geometry.lua" "..\src\CartoRig\render_geometry.lua"
   File "/oname=node_factory.lua" "..\src\CartoRig\node_factory.lua"
   File "/oname=timeline_service.lua" "..\src\CartoRig\timeline_service.lua"
   SetOutPath "$LOCALAPPDATA\CartoRig\App\data"
@@ -236,6 +237,10 @@ Section "Install cartorig-dev"
   ${EndIf}
   ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\fusion_contract.lua"
     MessageBox MB_OK|MB_ICONSTOP "Fusion contract boundary missing; the existing menu script was preserved." /SD IDOK
+    Abort
+  ${EndIf}
+  ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\render_geometry.lua"
+    MessageBox MB_OK|MB_ICONSTOP "CartoRig render geometry module missing; the existing menu script was preserved." /SD IDOK
     Abort
   ${EndIf}
   ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\node_factory.lua"
@@ -425,6 +430,7 @@ Section "Uninstall"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\catalog.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\blackmagic_api.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\fusion_contract.lua"
+  Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\render_geometry.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\node_factory.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\timeline_service.lua"
   RMDir "$LOCALAPPDATA\CartoRig\App\lua\CartoRig"
