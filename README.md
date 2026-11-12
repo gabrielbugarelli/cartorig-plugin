@@ -12,32 +12,49 @@ The nine required physical authoring nodes are Scene, WorldMap, Camera, Continen
 
 ## Current implementation state
 
-The current **0.7.0 Milestone A candidate** implements the complete non-host vertical slice for Scene, WorldMap, Camera, Country and State. The single `cartorig-dev` Utility script opens Scene without a prepared Fusion Composition; each Create Scene inserts an independent Fusion Composition and builds WorldMap → Regions → Camera → Scene → the composition's existing MediaOut. Scene is strictly structural: it can search the installed offline catalog, choose a target Scene, add Country/State nodes and rename their display names by UUID without selecting a Fusion node. Direct node selection in Fusion remains the only editing surface for Control/Motion.
+**Milestone A is under repair and NOT ACCEPTED.** The single normative V1
+product contract is [the exact FINAL specification](docs/CartoRig_Especificacao_de_Produto_e_Implementacao_V1.md),
+pinned by [SHA-256](docs/SPECIFICATION.sha256).
 
-WorldMap renders pinned Natural Earth 1:50m Land and Admin 0 boundary lines. Country uses pinned Natural Earth Admin 0 1:50m polygons; State uses Natural Earth Admin 1 1:10m where the required Brazil subdivisions are absent from the official 1:50m Admin 1 layer, with the actual scale persisted per object. Search indexes pinned Populated Places 1:50m and preserves aliases, Unicode names, type and hierarchy. Country/State are independent physical `CartoRigRegion` Fuses with their own Fill, Stroke, opacity and visibility controls, persisted dataset/source/version/scale/geometry metadata and deterministic draw order before the shared Camera. Scene exposes read-only identity, managed links and dataset diagnostics.
+The current development branch introduces an active-Fusion-composition Scene
+service: **Create Scene** must initialize the current composition once, and
+**Open Scene** must read the current Scene without adding nodes. Unlike older
+0.7.0 previews, no timeline item is to be inserted implicitly. Scene UI actions
+must refuse to mutate another active composition.
 
-All source/unit/integration tests are executed locally in the development environment. GitHub Actions is reserved exclusively for the manual Windows installer build. **Resolve Studio 20 Viewer/Inspector/render/save-reopen validation is still NOT RUN**, so no A/B case is claimed PASS and the stable V1 release gate remains closed.
+The foundation retains physical WorldMap, Camera, Scene, Country and State
+Fuses, an offline Natural Earth catalog, source/version metadata, native
+Inspector pages and transactional graph construction. The new UI and host
+integration have **not yet passed** full Lua/Python source tests or validation
+in a licensed Resolve Studio 20 host. In particular, live Region palette
+inheritance, camera Focus/Fit, polygon antimeridian clipping and project
+save/reopen remain acceptance risks.
 
-- [Single-entry cartorig-dev Windows preview, upgrade and editor test](docs/CARTORIG_PREVIEW_TEST.md)
-- [Blackmagic Resolve/Fusion API contracts used by CartoRig](docs/BLACKMAGIC_API_CONTRACTS.md)
+**Do not interpret a GitHub Actions Success as feature acceptance.** GitHub
+Actions exclusively builds Windows installer artifacts; functional tests are
+run separately in a development environment and the licensed host.
+
+- [Current Fusion composition test protocol](docs/CARTORIG_PREVIEW_TEST.md)
+- [Host/API contracts](docs/BLACKMAGIC_API_CONTRACTS.md)
 - [Engineering plan](docs/IMPLEMENTATION_PLAN.md)
-- [40-test traceability](docs/TRACEABILITY.md)
-- [CI, release and zero-cost policy](docs/CI_AND_RELEASE.md)
+- [40-case traceability](docs/TRACEABILITY.md)
+- [CI and free GitHub resource policy](docs/CI_AND_RELEASE.md)
 - [Licensing and third-party notices](THIRD_PARTY_NOTICES)
-- [Milestone A source audit, fixes and pending host evidence](docs/MILESTONE_A_SOURCE_AUDIT_20261112.md)
-- [Pinned specification digest](docs/SPECIFICATION.sha256)
 
-## Required end-user workflow (upon implementation)
+## Required end-user workflow (Milestone A target)
 
-1. From Resolve Edit or Fusion, use **Workspace → Scripts → cartorig-dev → Create Scene**. CartoRig inserts a Fusion Composition clip automatically and connects the output.
-2. In Scene, add Country **Brazil** (and other geographic objects). Close Scene.
-3. Click `CR_Country_Brazil_001` directly in Fusion's Node Editor.
-4. Edit **Control → Fill Color** for only that Country.
-5. Use Scene to add Argentina and a Route, explicitly confirm both anchors, then select the Route node in Node Editor; adjust **Control** and apply **Motion → Draw Path**.
-6. Edit channels using Fusion Spline/Keyframes, compose with MediaOut and render with Deliver.
+1. Open the desired Fusion composition on Resolve's **Fusion** page.
+2. Use **Workspace → Scripts → cartorig-dev** to open Scene.
+3. Select **Create Scene** only if this composition does not yet contain a
+   CartoRig Scene. It creates WorldMap, Camera and Scene nodes and connects
+   the composition's output; it does **not** insert a timeline clip.
+4. For a composition already containing CartoRig, select **Open Scene**. This
+   reconstructs the structural object list without creating new nodes.
+5. Search the offline catalog and add Country Brazil, Country Argentina and
+   State Mato Grosso to the currently bound Scene.
+6. Close Scene, select each physical Region node in the Fusion Node Editor,
+   and adjust its **Control** properties in the native Inspector.
+7. Save, close and reopen the Resolve project, then render with Scene closed.
+   Repeat Open Scene to verify the persisted structural list.
 
-These are mandatory workflows, **not current functional instructions**.
-
-## License
-
-Own code: MIT — see [LICENSE](LICENSE). The development installer builds its offline runtime from one pinned Natural Earth source checkout (public domain): Land, Admin 0 boundaries/countries, Admin 1 States/Provinces and Populated Places. Exact versions, scales, source commit and redistribution notice are recorded in [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES) and [docs/DATASETS.md](docs/DATASETS.md).
+**Status:** implementation target, not yet a verified end-to-end host PASS.
