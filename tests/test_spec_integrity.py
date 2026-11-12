@@ -15,7 +15,7 @@ class NormativeSpecificationIntegrity(unittest.TestCase):
         self.assertEqual(
             hashlib.sha256(SPEC.read_bytes()).hexdigest(),words[0],
             "V1 FINAL spec bytes changed during Windows checkout; check .gitattributes")
-        self.assertFalse(SPEC.read_bytes().count(b"\\r\\n"),
+        self.assertFalse(SPEC.read_bytes().count(bytes((13,10))),
             "The normative V1 FINAL spec must remain LF-only in all checkouts")
 
 if __name__=="__main__":
