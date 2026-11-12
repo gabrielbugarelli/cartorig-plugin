@@ -109,6 +109,18 @@ class NaturalEarthBuilderTests(unittest.TestCase):
             ],
         )
 
+        make_polygon(
+            self.root,
+            builder.LAND_DATASET["stem"],
+            [("NAME", "C")],
+            [
+                (
+                    {"NAME": "Land"},
+                    [[(-180, -60), (180, -60), (180, 85), (-180, 85), (-180, -60)]],
+                )
+            ],
+        )
+
         place_fields = [
             ("NE_ID", "C"), ("NAME", "C"), ("NAMEPAR", "C"), ("NAMEASCII", "C"),
             ("ADM0NAME", "C"), ("ADM1NAME", "C")
@@ -128,7 +140,7 @@ class NaturalEarthBuilderTests(unittest.TestCase):
             ],
         )
 
-        for spec in builder.DATASETS.values():
+        for spec in [builder.LAND_DATASET, *builder.DATASETS.values()]:
             version_file = self.root / f'{spec["stem"]}.VERSION.txt'
             version_file.write_text(spec["version"] + "\n", encoding="utf-8")
 
@@ -165,6 +177,9 @@ class NaturalEarthBuilderTests(unittest.TestCase):
             (self.out / "natural-earth-manifest.json").read_text(encoding="utf-8")
         )
         datasets = {item["dataset_id"]: item for item in written_manifest["datasets"]}
+        self.assertEqual(datasets["natural-earth-land"]["source_version"], "4.1.0")
+        self.assertEqual(datasets["natural-earth-land"]["ring_count"], 1)
+        self.assertTrue((self.out / "ne_50m_land.lua").exists())
         self.assertEqual(datasets["natural-earth-admin0-countries"]["feature_count"], 2)
         self.assertEqual(datasets["natural-earth-admin1-states-provinces"]["feature_count"], 2)
         self.assertEqual(datasets["natural-earth-populated-places"]["feature_count"], 1)
