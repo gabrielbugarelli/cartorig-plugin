@@ -53,6 +53,29 @@ Results must remain typed/hierarchical and work with internet disabled. Country 
 3. The Scene action must not select a Fusion node, change the active Inspector or alter Brazil's physical node name/UUID.
 4. The physical node remains `CR_Country_Brazil_001`; only the display metadata changes.
 
+### Existing Scene recovery — palette links
+
+A Scene created with the earlier 0.7.0 build can contain Regions whose
+`Inherit WorldMap Land/Border Color` controls used an unsupported
+render-time composition lookup. After installing this build, close/reopen the
+project to reload the updated Fuse and:
+
+1. Open **Workspace → Scripts → cartorig-dev**.
+2. Select that **existing Scene** as the structural target.
+3. Click **Repair WorldMap Color Links (Existing Regions)**.
+4. Confirm the report says the expected palette channels were linked. This
+   action does not create or delete Region nodes and does not alter UUIDs,
+   geometry, image connections, or local Fill/Stroke overrides.
+5. Close Scene, render the original composition again, and verify the
+   `REGION_INHERIT_FAILED` error is absent. Change the WorldMap Land/Border
+   colors: linked Regions with inheritance enabled should track the new values.
+6. Repeat Repair on the same Scene: the report should show **0** additional
+   expressions changed. Save/reopen and render again.
+
+Palette repair is explicit and transactional. A foreign or conflicting custom
+expression is preserved; repair stops with an error instead of overwriting it.
+Do not manually delete existing nodes as a workaround.
+
 ### A04/A05 — native Inspector and independent rendering
 
 1. Close Scene.
