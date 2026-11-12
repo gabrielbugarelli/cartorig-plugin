@@ -1,128 +1,80 @@
-# cartorig-dev 0.7.0 — Milestone A editor validation
+# CartoRig 0.7.0 — Milestone A host-validation candidate
 
 **Windows · DaVinci Resolve Studio 20 · development build, not V1 release.**
 
-The only Scripts entry is **Workspace → Scripts → cartorig-dev**. It is installed in the Utility scope and does not require a manually prepared Fusion Composition, Python, SDK, terminal or network access on the editor machine.
+This test plan follows the exact pinned **V1 FINAL** specification.
+`Create Scene` operates only on the active Fusion composition.
+`Open Scene` is explicit and read-only. Neither command inserts a new
+timeline clip.
 
-## Build and verification policy
+## Build and source gate
 
-All source, Lua, Python, integration, Natural Earth fixture, repository and installer-policy tests are executed in the development environment **before** an installer build is requested.
+- GitHub Actions is exclusively the **build-only** Windows installer packager;
+  free GitHub resources only. Actions does not execute source tests.
+- Download the candidate artifact containing `cartorig-dev-0.7.0-win64.exe`,
+  `SHA256SUMS.txt`, `manifest.json` and the local-test source snapshot.
+- The source/full-data regression gate is run in a separate development
+  environment with `CARTORIG_DATA_DIR=build/cartorig-data`.
+- A green source gate or a green installer build **does not** mark Resolve
+  Studio host tests as PASS.
 
-GitHub Actions is used only to compile/package the final Windows installer from committed source and the pinned Natural Earth source commit. A green build is not a product test and is not Resolve acceptance.
+## Install / active composition
 
-Resolve Studio host results remain `NOT RUN` until observed with the exact installer SHA-256.
+1. Close Resolve, install the reviewed build and reopen Resolve.
+2. Use a disposable project and prepare a Fusion composition in the
+   appropriate Fusion workflow. Switch to the **Fusion** page and make the
+   intended composition current. The plugin will not create a timeline clip.
+3. Open **Workspace → Scripts → cartorig-dev**.
+4. Press **Create Scene** once. Verify the active composition has physical
+   `CR_WorldMap_Main`, `CR_Camera_Main`, `CR_Scene_Main`
+   connected to MediaOut, and the map appears in Viewer.
+5. Click **Create Scene** a second time: it must refuse without duplicating
+   the graph or changing the UUID.
+6. Click **Open Scene**: the existing structural list must be reconstructed
+   with no new or deleted Tool.
 
-## Install
+## Countries and states
 
-1. Close DaVinci Resolve.
-2. Download the manually built artifact for the candidate commit.
-3. Extract and run **`cartorig-dev-0.7.0-win64.exe`**.
-4. Restart Resolve and open a disposable project/timeline.
-5. Stay on the **Edit** page. Do **not** create a Fusion Composition manually.
-6. Open **Workspace → Scripts → cartorig-dev**.
+1. Search for **Brazil** and add Country.
+2. Search for **Argentina** and add Country.
+3. Search for **Mato Grosso** and add State/Province.
+4. Verify three physical Region nodes are connected in the correct order,
+   all have distinct object UUIDs and valid source metadata.
+5. Render while Scene is closed. Check the Fusion Console for errors.
+6. Select each node **directly in the Node Editor**. In native Inspector
+   Control, change Fill Color, Stroke, Opacity, Visibility and independent
+   style overrides. Brazil's edits must not mutate Argentina, State or
+   WorldMap. Test inherited WorldMap Land and Border color channels.
 
-## Milestone A host exercise
+## Context isolation and persistence
 
-### A01 — Scene lifecycle
+1. Open a second Fusion composition. If it has no Scene, pressing **Open
+   Scene** must fail safely.
+2. With the original Scene window still bound to the first composition,
+   switch the active composition and attempt Add Country: the action must
+   refuse and must not touch either graph.
+3. Open Scene for the second composition; create a Scene there and add a
+   Country. Confirm the first scene was not modified.
+4. Rename the Scene and the Brazil display name, without changing UUIDs
+   or physical node selection.
+5. Save, close and reopen Resolve. With the Scene window closed, verify
+   the nodes, geometry, styles, camera, links and render are intact.
+6. Reopen Scene and confirm the structural list from persistent node data.
 
-1. Click **Create Scene** five times.
-2. Expect five independent Fusion Composition timeline clips.
-3. Each composition must contain real `CR_WorldMap_Main`, `CR_Camera_Main` and `CR_Scene_Main` nodes connected automatically to that composition's existing MediaOut.
-4. No manual Fusion clip creation or MediaOut wiring is permitted.
+## Known pending Milestone A issues
 
-### A02/A16 — offline geography
+- The Camera Inspector currently has Center Lat/Lon, Zoom, Bearing and
+  Reset Pose. Full static Focus Target, Fit to Location/Objects and
+  pose reference workflows still need implementation/host approval.
+- Correct handling of clipped polygon antimeridian boundaries and holes
+  remains unproven in the licensed host.
+- The active-comp handle contract and Region native palette expressions
+  require actual host evidence, including Save/Reopen.
+- Any problem above is a **blocking A gate**, not an optional feature.
 
-In Scene search and add:
+## Failure reports
 
-- **Brazil** / alias **Brasil** as Country;
-- **Argentina** as Country;
-- **Mato Grosso** as State/Province.
-
-Search also:
-
-- **São Paulo** and **Sao Paulo**;
-- **Rio de Janeiro**;
-- **Georgia**.
-
-Results must remain typed/hierarchical and work with internet disabled. Country polygons come from Natural Earth Admin 0 1:50m. Required Brazil State polygons use Natural Earth Admin 1 1:10m and must report that real scale; CartoRig must never relabel them as 1:50m.
-
-### A03 — Scene is structural only
-
-1. In the Scene window select the Brazil object in **Structural object**.
-2. Rename its display name, for example to **Brazil Highlight**.
-3. The Scene action must not select a Fusion node, change the active Inspector or alter Brazil's physical node name/UUID.
-4. The physical node remains `CR_Country_Brazil_001`; only the display metadata changes.
-
-### Existing Scene recovery — palette links
-
-A Scene created with the earlier 0.7.0 build can contain Regions whose
-`Inherit WorldMap Land/Border Color` controls used an unsupported
-render-time composition lookup. After installing this build, close/reopen the
-project to reload the updated Fuse and:
-
-1. Open **Workspace → Scripts → cartorig-dev**.
-2. Select that **existing Scene** as the structural target.
-3. Click **Repair WorldMap Color Links (Existing Regions)**.
-4. Confirm the report says the expected palette channels were linked. This
-   action does not create or delete Region nodes and does not alter UUIDs,
-   geometry, image connections, or local Fill/Stroke overrides.
-5. Close Scene, render the original composition again, and verify the
-   `REGION_INHERIT_FAILED` error is absent. Change the WorldMap Land/Border
-   colors: linked Regions with inheritance enabled should track the new values.
-6. Repeat Repair on the same Scene: the report should show **0** additional
-   expressions changed. Save/reopen and render again.
-
-Palette repair is explicit and transactional. A foreign or conflicting custom
-expression is preserved; repair stops with an error instead of overwriting it.
-Do not manually delete existing nodes as a workaround.
-
-### A04/A05 — native Inspector and independent rendering
-
-1. Close Scene.
-2. Open the corresponding Fusion Composition.
-3. Click `CR_Country_Brazil_001` directly in the Node Editor.
-4. Its Inspector must expose **Control** and **Motion** pages. In Control, change Fill Color/Opacity and Stroke settings.
-5. Verify only Brazil changes.
-6. Select Mato Grosso directly and change its Fill/Stroke.
-7. Verify Mato Grosso changes independently while Brazil, Argentina and WorldMap retain their values.
-8. Select Camera and change Center Latitude/Longitude, Zoom and Bearing. All geographic layers must move together without changing their source identity.
-
-Scene Control must show read-only scene UUID/title/schema, the managed WorldMap → Regions → Camera → Scene → MediaOut chain and installed Natural Earth diagnostics.
-
-### Persistence
-
-1. Save the project.
-2. Close Resolve.
-3. Reopen the project with the Scene window closed.
-4. Verify Scene/WorldMap/Camera/Country/State nodes, UUIDs, source metadata, Fill/Stroke values, camera settings and render are preserved.
-5. Reopen cartorig-dev and verify the structural list reconstructs from the existing composition.
-
-## Data expected in 0.7.0
-
-The installer contains an offline runtime generated from Natural Earth commit:
-
-`f1890d9f152c896d250a77557a5751a93d494776`
-
-It includes:
-
-- Natural Earth 1:50m Land v4.1.0;
-- Admin 0 boundary lines 1:50m v5.1.0;
-- Admin 0 countries 1:50m v5.1.1;
-- Admin 1 States/Provinces 1:10m v5.1.1;
-- Populated Places 1:50m v5.1.2;
-- per-feature Region geometry files;
-- catalog and source/hash manifest.
-
-No end-user geodata preparation or download is required.
-
-## Failure evidence
-
-Use **Save Report** after the exercise even if it succeeds. The report identifies the installed version and exact build commit.
-
-If the script/menu/runtime appears incomplete, run the read-only `verificar-cartorig-dev.cmd` included with the artifact and provide its report. Do not manually repair the Fusion graph as a workaround.
-
-## Acceptance limit
-
-Local automated tests prove only source/data/domain/transaction contracts. The manual installer build proves only packaging. Neither proves Viewer, Inspector, render, menu enumeration or save/reopen in licensed Resolve Studio 20.
-
-A01–A20/B01–B20 stay `NOT RUN` until actual host evidence is reviewed.
+Use the Scene **Save Report** action after each failure, including exact
+build commit and the first Fusion Console error. Attach report and
+screenshot. Do not manually rearrange or delete managed nodes as a
+workaround. Failure in any required A flow means the Marco A is **NOT DONE**.
