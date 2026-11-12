@@ -148,7 +148,7 @@ local country2=assert(factory.add_region(comp,brazilFeature,{localappdata=ROOT})
 local state1=assert(factory.add_region(comp,matoFeature,{localappdata=ROOT}))
 assert(country1.node_name=="CR_Country_Brazil_001")
 assert(country2.node_name=="CR_Country_Brazil_002")
-assert(state1.node_name=="CR_State_MatoGrosso_001")
+assert(state1.node_name=="CR_State_Brazil_MatoGrosso_001")
 assert(country1.object_id~=country2.object_id and country2.object_id~=state1.object_id)
 assert(country1.source.scale=="1:50m" and state1.source.scale=="1:10m")
 
