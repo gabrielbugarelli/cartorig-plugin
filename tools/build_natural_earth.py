@@ -245,9 +245,17 @@ def _write_geometry(
     version: str,
     scale: str,
     shape: Any,
+    reserved_paths: dict[str, str],
 ) -> str:
     rings = _rings(shape)
     relative = Path("regions") / dataset_id / f"{_safe_id(source_id)}.lua"
+    relative_key = relative.as_posix().casefold()
+    prior = reserved_paths.get(relative_key)
+    if prior is not None and prior != source_id:
+        raise ValueError(
+            f"generated geometry path collision: {prior!r} and {source_id!r} -> {relative.as_posix()}"
+        )
+    reserved_paths[relative_key] = source_id
     destination = output_root / relative
     destination.parent.mkdir(parents=True, exist_ok=True)
     bbox = [float(value) for value in shape.bbox]
@@ -413,6 +421,7 @@ def _write_border_runtime(source_root: Path, output_root: Path) -> dict[str, Any
 def build(source_root: Path, output_root: Path, source_commit: str) -> dict[str, Any]:
     output_root.mkdir(parents=True, exist_ok=True)
     catalog_rows: list[list[str]] = []
+    generated_geometry_paths: dict[str, str] = {}
     manifest_datasets: list[dict[str, Any]] = [
         _write_land_runtime(source_root, output_root),
         _write_border_runtime(source_root, output_root),
@@ -455,6 +464,7 @@ def build(source_root: Path, output_root: Path, source_commit: str) -> dict[str,
                     version,
                     spec["scale"],
                     shape_record.shape,
+                    generated_geometry_paths,
                 )
 
             catalog_rows.append(
