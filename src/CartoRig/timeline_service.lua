@@ -723,11 +723,11 @@ local function find_scene_context(resolve,scene_id)
   return match
 end
 
-function M.add_region(resolve,scene_id,source_id,opts)
+function M.add_region(resolve,scene_id,dataset_id,source_id,opts)
   opts=opts or {}
   local index,indexErr=catalog_index(opts)
   if not index then return nil,indexErr end
-  local feature,featureErr=catalog.find(index,source_id)
+  local feature,featureErr=catalog.find(index,dataset_id,source_id)
   if not feature then return nil,featureErr end
   if feature.geo_type~="Country" and feature.geo_type~="State" then
     return nil,"REGION_TYPE_UNSUPPORTED: choose a Country or State/Province"
