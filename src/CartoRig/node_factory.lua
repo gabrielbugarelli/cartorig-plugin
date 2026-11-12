@@ -101,6 +101,35 @@ function factory.inspect(comp)
         type=kind,name=attr.TOOLS_Name or "",id=objectId,
         scene_id=sceneId,display_name=displayName
       }
+      if kind=="Continent" or kind=="Country" or kind=="State" then
+        local datasetId,datasetErr=read_data(tool,DATASET_ID,"tool "..index.." DatasetId")
+        if datasetErr then return nil,datasetErr end
+        local sourceId,sourceErr=read_data(tool,SOURCE_ID,"tool "..index.." SourceId")
+        if sourceErr then return nil,sourceErr end
+        local sourceVersion,versionErr=read_data(tool,SOURCE_VERSION,"tool "..index.." SourceVersion")
+        if versionErr then return nil,versionErr end
+        local scale,scaleErr=read_data(tool,SOURCE_SCALE,"tool "..index.." SourceScale")
+        if scaleErr then return nil,scaleErr end
+        local geometryFile,geometryErr=read_data(tool,GEOMETRY_FILE,"tool "..index.." GeometryFile")
+        if geometryErr then return nil,geometryErr end
+        local parentName,parentErr=read_data(tool,PARENT_NAME,"tool "..index.." ParentName")
+        if parentErr then return nil,parentErr end
+        local drawOrder,drawErr=read_data(tool,DRAW_ORDER,"tool "..index.." DrawOrder")
+        if drawErr then return nil,drawErr end
+        if type(datasetId)~="string" or datasetId=="" or
+           type(sourceId)~="string" or sourceId=="" or
+           type(sourceVersion)~="string" or sourceVersion=="" or
+           type(scale)~="string" or scale=="" or
+           type(geometryFile)~="string" or geometryFile=="" or
+           type(drawOrder)~="number" then
+          return nil,"STATE_INVALID: Region provenance is incomplete"
+        end
+        obj.source={
+          dataset_id=datasetId,source_id=sourceId,source_version=sourceVersion,
+          scale=scale,geometry_file=geometryFile,parent_name=parentName
+        }
+        obj.draw_order=drawOrder
+      end
       if not domain.is_uuid(obj.id) or not domain.is_uuid(obj.scene_id) then
         return nil,"STATE_INVALID: invalid node identity"
       end
