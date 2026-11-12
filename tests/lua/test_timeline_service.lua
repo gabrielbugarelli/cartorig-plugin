@@ -354,7 +354,7 @@ assert(#brazilResults==1 and brazilResults[1].source_id=="br-source")
 local targetScene=createdScenes[1]
 local beforeCounts={}
 for n,result in ipairs(createdScenes) do beforeCounts[n]=#result.composition.objects end
-local added,addErr=svc.add_region(resolve,targetScene.scene_id,"br-source",{localappdata=ROOT})
+local added,addErr=svc.add_region(resolve,targetScene.scene_id,"ne-admin0","br-source",{localappdata=ROOT})
 assert(added,addErr)
 assert(added.scene_id==targetScene.scene_id and added.object_type=="Country")
 assert(#targetScene.composition.objects==beforeCounts[1]+1)
