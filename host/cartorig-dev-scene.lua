@@ -292,7 +292,7 @@ local function add_selected(expectedType)
     record("Add "..expectedType,false,"Selected result is "..tostring(result.geo_type))
     return
   end
-  local ok2,value,err=pcall(service.add_region,resolve,scene.scene_id,result.source_id)
+  local ok2,value,err=pcall(service.add_region,resolve,scene.scene_id,result.dataset_id,result.source_id)
   if not ok2 then
     record("Add "..expectedType,false,"Resolve/Fusion API failure: "..tostring(value))
     return
