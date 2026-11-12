@@ -135,6 +135,15 @@ class FuseContractTests(unittest.TestCase):
         self.assertIn('INP_DoNotifyChanged=(base=="Fill" or base=="Stroke")', region)
         self.assertIn("INP_InitialNotify=false", region)
 
+    def test_node_factory_has_lexical_blackmagic_api_import(self):
+        source=(ROOT/"src/CartoRig/node_factory.lua").read_text(encoding="utf-8")
+        declaration='local api=require("CartoRig.blackmagic_api")'
+        self.assertIn(declaration, source)
+        self.assertLess(source.index(declaration), source.index('api.call('),
+            "Region creation must never depend on an accidental global api")
+        self.assertIn('link_region_palette(region,chain.world)', source)
+        self.assertIn('function factory.repair_region_palette(comp)', source)
+
     def test_factory_hard_fail_on_unregistered_fuses(self):
         source=(ROOT/"src/CartoRig/node_factory.lua").read_text(encoding="utf-8")
         for regid,_ in TOOLS.values():
