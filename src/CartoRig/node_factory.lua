@@ -786,13 +786,16 @@ end
 local function link_region_palette(region,world)
   local attrs,attrsErr=fusion.attrs(world,"palette parent WorldMap")
   if not attrs then error("REGION_PALETTE_BIND_FAILED: "..tostring(attrsErr)) end
-  if attrs.TOOLS_Name~=NAMES.WorldMap then
-    error("REGION_PALETTE_BIND_FAILED: WorldMap was renamed; cannot bind palette safely")
+  -- Resolve the link target from the UUID-owned WorldMap Tool. The default
+  -- visible name is never a CartoRig domain identity or lookup key.
+  local worldName=attrs.TOOLS_Name
+  if type(worldName)~="string" or not worldName:match("^[%a_][%w_]*$") then
+    error("REGION_PALETTE_BIND_FAILED: WorldMap has a name unsupported by Fusion expressions")
   end
   for _,prefix in ipairs({"Land","Border"}) do
     for _,suffix in ipairs({"R","G","B"}) do
       local target="World"..prefix..suffix
-      local expression=NAMES.WorldMap.."."..prefix..suffix
+      local expression=worldName.."."..prefix..suffix
       local input,inputErr=fusion.find_input(region,target)
       if not input then
         error("REGION_PALETTE_BIND_FAILED: "..target..": "..tostring(inputErr))
@@ -824,14 +827,15 @@ function factory.repair_region_palette(comp)
   local candidates={}
   local worldAttrs,worldErr=fusion.attrs(chain.world,"palette parent WorldMap")
   if not worldAttrs then return nil,"REGION_PALETTE_REPAIR_FAILED: "..tostring(worldErr) end
-  if worldAttrs.TOOLS_Name~=NAMES.WorldMap then
-    return nil,"REGION_PALETTE_REPAIR_FAILED: WorldMap name differs from managed identity"
+  local worldName=worldAttrs.TOOLS_Name
+  if type(worldName)~="string" or not worldName:match("^[%a_][%w_]*$") then
+    return nil,"REGION_PALETTE_REPAIR_FAILED: invalid Fusion WorldMap expression symbol"
   end
   for _,obj in ipairs(chain.regions) do
     for _,prefix in ipairs({"Land","Border"}) do
       for _,suffix in ipairs({"R","G","B"}) do
         local target="World"..prefix..suffix
-        local expected=NAMES.WorldMap.."."..prefix..suffix
+        local expected=worldName.."."..prefix..suffix
         local input,inputErr=fusion.find_input(obj._tool,target)
         if not input then
           return nil,"REGION_PALETTE_REPAIR_FAILED: "..obj.name.."."..target..": "..tostring(inputErr)
