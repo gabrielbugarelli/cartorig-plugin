@@ -25,6 +25,8 @@ local function geometry()
   return sharedGeometry
 end
 local geometryCache={}
+local cacheOrder={}
+local MAX_GEOMETRY_CACHE=8
 
 local function readnum(input,req,label)
   local p=input:GetValue(req)
@@ -144,19 +146,29 @@ local function get_geometry()
      type(scale)~="string" or scale=="" or data.scale~=scale then
     error("DATA_INCOMPATIBLE: Region source identity/version/scale mismatch")
   end
-  for ringIndex,ring in ipairs(data.rings) do
-    if type(ring)~="table" or #ring<6 or #ring%2~=0 then
-      error("DATA_INCOMPATIBLE: invalid Region ring "..tostring(ringIndex))
-    end
-    for i=1,#ring,2 do
-      local lon,lat=ring[i],ring[i+1]
-      if type(lon)~="number" or type(lat)~="number" or
-         lon~=lon or lat~=lat or lon<-180 or lon>180 or lat<-90 or lat>90 then
-        error("DATA_INCOMPATIBLE: invalid Region coordinate")
+  if not cached then
+    for ringIndex,ring in ipairs(data.rings) do
+      if type(ring)~="table" or #ring<6 or #ring%2~=0 then
+        error("DATA_INCOMPATIBLE: invalid Region ring "..tostring(ringIndex))
+      end
+      for i=1,#ring,2 do
+        local lon,lat=ring[i],ring[i+1]
+        if type(lon)~="number" or type(lat)~="number" or
+           lon~=lon or lat~=lat or lon<-180 or lon>180 or lat<-90 or lat>90 then
+          error("DATA_INCOMPATIBLE: invalid Region coordinate")
+        end
       end
     end
-  end
-  geometryCache[path]=data
+    -- Cache only fully validated source data; cap memory across distinct Regions.
+    if not cached then
+      geometryCache[path]=data
+      cacheOrder[#cacheOrder+1]=path
+      if #cacheOrder>MAX_GEOMETRY_CACHE then
+        local oldest=table.remove(cacheOrder,1)
+        geometryCache[oldest]=nil
+      end
+    end
+    end
   return data
 end
 
