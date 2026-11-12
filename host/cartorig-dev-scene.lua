@@ -108,9 +108,24 @@ local window=disp:AddWindow({
     ui:LineEdit{ID="SceneTitle",Text="Map Scene",Weight=1},
     ui:Button{ID="CreateScene",Text="Create Scene"}
   },
-  ui:Label{Text="Scenes in the active timeline (structural list only)",WordWrap=true},
+  ui:HGroup{
+    ui:Label{Text="Structural target"},
+    ui:ComboBox{ID="SceneContext",Weight=1},
+  },
+  ui:Label{Text="Search installed offline geography",WordWrap=true},
+  ui:HGroup{
+    ui:LineEdit{ID="SearchLocation",PlaceholderText="Brazil, Mato Grosso, São Paulo...",Weight=1},
+    ui:ComboBox{ID="GeoType"},
+    ui:Button{ID="Search",Text="Search"}
+  },
+  ui:ComboBox{ID="SearchResults",Weight=1},
+  ui:HGroup{
+    ui:Button{ID="AddCountry",Text="Add Country",Enabled=false},
+    ui:Button{ID="AddState",Text="Add State/Province",Enabled=false},
+  },
+  ui:Label{Text="Objects in selected Scene (structural list only)",WordWrap=true},
   ui:TextEdit{ID="SceneList",ReadOnly=true,Weight=1},
-  ui:Label{ID="Status",Text="No scene has been created in this session.",WordWrap=true},
+  ui:Label{ID="Status",Text="No structural operation has run in this session.",WordWrap=true},
   ui:HGroup{
     ui:Button{ID="SaveReport",Text="Save Report"},
     ui:Button{ID="Close",Text="Close"}
