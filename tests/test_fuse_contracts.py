@@ -86,6 +86,8 @@ class FuseContractTests(unittest.TestCase):
         self.assertIn("result.ring_roles", world)
         self.assertIn("local seam=previousLon>=0 and 180 or -180", world)
         self.assertIn('IMG_Channel="Alpha"', world)
+        self.assertIn('"Reset WorldMap Style"', world)
+        self.assertIn("InMapOpacity:SetSource(Number(1),time)", world)
         self.assertIn("data.topology_schema~=2", region)
         self.assertIn("data.ring_roles", region)
         self.assertIn('"InheritWorldMapFill"', region)
