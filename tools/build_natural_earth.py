@@ -223,6 +223,35 @@ def _rings(shape: Any) -> list[list[tuple[float, float]]]:
     return rings
 
 
+def _topology_rings(shape: Any) -> tuple[list[list[tuple[float, float]]], list[str], int]:
+    """Keep polygon exterior/hole hierarchy and normalize winding for Fusion.
+
+    Shapefile rings lack explicit multi-polygon grouping. PyShp groups the
+    counterclockwise holes with their containing clockwise exteriors.
+    """
+    raw = _rings(shape)
+    closed = [ring + [ring[0]] for ring in raw]
+    errors: dict[str, int] = {}
+    polygons = shapefile.organize_polygon_rings(closed, return_errors=errors)
+    if errors.get("polygon_orphaned_holes"):
+        raise ValueError("Natural Earth contains an orphan polygon hole")
+    if not polygons:
+        raise ValueError("polygon has no exterior rings")
+    rings: list[list[tuple[float, float]]] = []
+    roles: list[str] = []
+    for polygon in polygons:
+        for index, closed_ring in enumerate(polygon):
+            ring = list(closed_ring[:-1] if closed_ring[0] == closed_ring[-1] else closed_ring)
+            if len(ring) < 3 or abs(shapefile.signed_area(ring + [ring[0]])) == 0:
+                raise ValueError("Natural Earth contains a degenerate polygon ring")
+            outer = index == 0
+            if outer != shapefile.is_cw(ring + [ring[0]]):
+                ring.reverse()
+            rings.append(ring)
+            roles.append("outer" if outer else "hole")
+    return rings, roles, len(polygons)
+
+
 def _lines(shape: Any) -> list[list[tuple[float, float]]]:
     points = shape.points
     if not points:
@@ -247,7 +276,7 @@ def _write_geometry(
     shape: Any,
     reserved_paths: dict[str, str],
 ) -> str:
-    rings = _rings(shape)
+    rings, roles, polygon_count = _topology_rings(shape)
     relative = Path("regions") / dataset_id / f"{_safe_id(source_id)}.lua"
     relative_key = relative.as_posix().casefold()
     prior = reserved_paths.get(relative_key)
@@ -278,7 +307,8 @@ def _write_geometry(
                 flattened.extend((_format_number(lon), _format_number(lat)))
             stream.write(",".join(flattened))
             stream.write("},")
-        stream.write("}}\n")
+        stream.write("},ring_roles={" + ",".join(json.dumps(role) for role in roles) + "},")
+        stream.write(f"topology_schema=2,polygon_count={polygon_count}}}\n")
     return relative.as_posix()
 
 
@@ -322,9 +352,14 @@ def _write_land_runtime(source_root: Path, output_root: Path) -> dict[str, Any]:
     version = _version_from_source(source_root, stem, spec["version"])
     reader = _reader(source_root, stem)
     rings: list[list[tuple[float, float]]] = []
+    roles: list[str] = []
+    polygon_count = 0
     feature_count = 0
     for shape in reader.iterShapes():
-        rings.extend(_rings(shape))
+        feature_rings, feature_roles, feature_polygons = _topology_rings(shape)
+        rings.extend(feature_rings)
+        roles.extend(feature_roles)
+        polygon_count += feature_polygons
         feature_count += 1
     if not rings:
         raise ValueError("Natural Earth Land contains no polygon rings")
@@ -342,7 +377,7 @@ def _write_land_runtime(source_root: Path, output_root: Path) -> dict[str, Any]:
                 flattened.extend((_format_number(lon), _format_number(lat)))
             stream.write(",".join(flattened))
             stream.write("},")
-        stream.write("}\n")
+        stream.write("ring_roles={" + ",".join(json.dumps(role) for role in roles) + "},topology_schema=2}\n")
 
     return {
         "dataset_id": spec["dataset_id"],
@@ -359,6 +394,9 @@ def _write_land_runtime(source_root: Path, output_root: Path) -> dict[str, Any]:
         "attribution": "Made with Natural Earth",
         "feature_count": feature_count,
         "ring_count": len(rings),
+        "polygon_count": polygon_count,
+        "hole_ring_count": roles.count("hole"),
+        "topology_schema": 2,
         "source_files_sha256": _dataset_source_hashes(source_root, stem),
         "generated_runtime": {
             "path": "ne_50m_land.lua",
