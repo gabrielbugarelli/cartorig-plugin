@@ -130,6 +130,11 @@ local stateGeometryPath=ROOT.."\\CartoRig\\App\\data\\"..stateGeometryRel:gsub("
 local stateGeometry=assert(io.open(stateGeometryPath,"wb"))
 stateGeometry:write('return {source_id="ne-id-state-mt",version="fixture-v1",scale="1:10m",rings={{-61,-18,-50,-18,-50,-7,-61,-7}}}\n')
 stateGeometry:close()
+local argentinaGeometryRel="regions/ne_admin0/ne-id-country-ar.lua"
+local argentinaGeometryPath=ROOT.."\\CartoRig\\App\\data\\"..argentinaGeometryRel:gsub("/","\\")
+local argentinaGeometry=assert(io.open(argentinaGeometryPath,"wb"))
+argentinaGeometry:write('return {source_id="ne-id-country-ar",version="fixture-v1",scale="1:50m",rings={{-73,-55,-53,-55,-53,-21,-73,-21}}}\n')
+argentinaGeometry:close()
 
 local brazilFeature={
  geo_type="Country",source_type="Country",canonical_name="Brazil",
@@ -142,6 +147,12 @@ local matoFeature={
  parent_name="Brazil",geometry_available=true,geometry="Polygon",
  source_id="ne-id-state-mt",dataset_id="ne_admin1",source_version="fixture-v1",
  scale="1:10m",geometry_file=stateGeometryRel
+}
+local argentinaFeature={
+ geo_type="Country",source_type="Country",canonical_name="Argentina",
+ parent_name="South America",geometry_available=true,geometry="Polygon",
+ source_id="ne-id-country-ar",dataset_id="ne_admin0",source_version="fixture-v1",
+ scale="1:50m",geometry_file=argentinaGeometryRel
 }
 local country1=assert(factory.add_region(comp,brazilFeature,{localappdata=ROOT}))
 local brazilTool
@@ -157,6 +168,7 @@ brazilTool:SetInput("StrokeWidth",3.5)
 brazilTool:SetInput("StrokeOpacity",0.62)
 
 local country2=assert(factory.add_region(comp,brazilFeature,{localappdata=ROOT}))
+local argentina=assert(factory.add_region(comp,argentinaFeature,{localappdata=ROOT}))
 local state1=assert(factory.add_region(comp,matoFeature,{localappdata=ROOT}))
 assert(brazilTool:GetInput("FillR")==0.12 and brazilTool:GetInput("FillG")==0.34 and
        brazilTool:GetInput("FillB")==0.56 and brazilTool:GetInput("FillOpacity")==0.73,
@@ -165,20 +177,22 @@ assert(brazilTool:GetInput("StrokeWidth")==3.5 and brazilTool:GetInput("StrokeOp
   "structural Region operations must not overwrite Brazil Stroke channels")
 assert(country1.node_name=="CR_Country_Brazil_001")
 assert(country2.node_name=="CR_Country_Brazil_002")
+assert(argentina.node_name=="CR_Country_Argentina_001")
 assert(state1.node_name=="CR_State_Brazil_MatoGrosso_001")
-assert(country1.object_id~=country2.object_id and country2.object_id~=state1.object_id)
+assert(country1.object_id~=country2.object_id and country2.object_id~=argentina.object_id and
+       argentina.object_id~=state1.object_id)
 assert(country1.source.scale=="1:50m" and state1.source.scale=="1:10m")
 
 local expanded=assert(factory.inspect(comp))
-assert(expanded.has_scene and #expanded.objects==6,
- "Country/Country/State must coexist with the three structural nodes")
+assert(expanded.has_scene and #expanded.objects==7,
+ "Brazil/Argentina/second Brazil/Mato Grosso must coexist with the three structural nodes")
 local countryNodes={}
 local stateNode=nil
 for _,tool in ipairs(comp.tools) do
  if tool:GetData("CartoRig.V1.ObjectType")=="Country" then countryNodes[#countryNodes+1]=tool end
  if tool:GetData("CartoRig.V1.ObjectType")=="State" then stateNode=tool end
 end
-assert(#countryNodes==2 and stateNode)
+assert(#countryNodes==3 and stateNode)
 local currentCameraSource=camera.links.Input
 assert(currentCameraSource==stateNode,"newest Region must feed Camera")
 assert(stateNode.links.Background~=nil and stateNode.links.Background:GetData("CartoRig.V1.ObjectType")=="Country")
@@ -198,7 +212,7 @@ countryNodes[2]:SetAttrs({TOOLS_Name=countryNodes[1].name})
 local duplicateName,duplicateNameErr=factory.inspect(comp)
 assert(duplicateName==nil and duplicateNameErr:match("duplicated CartoRig node name"))
 countryNodes[2]:SetAttrs({TOOLS_Name=originalCountry2Name})
-assert(#assert(factory.inspect(comp)).objects==6)
+assert(#assert(factory.inspect(comp)).objects==7)
 
 -- Catalog/geometry mismatch must fail before graph mutation.
 local mismatched={}
@@ -271,7 +285,7 @@ assert(#rolledBackState.objects==3,"failed Region transaction must not leave an 
 local sid=made.scene_id
 assert(sid==comp:GetData("CartoRig.V1.SceneId"))
 assert(factory.create_scene(comp,"Do not duplicate",{localappdata=ROOT})==nil)
-assert(#comp.tools==8)
+assert(#comp.tools==9)
 local rejected,rm=fake()
 rejected.fail_link="Input"
 local result2,reason2=factory.create_scene(rejected,"Connection failure",{localappdata=ROOT})
