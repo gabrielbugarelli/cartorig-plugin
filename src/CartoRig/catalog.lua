@@ -17,7 +17,7 @@ local accent = {
 }
 local TYPES = {Continent=true, Country=true, State=true, City=true}
 local GEOMETRIES = {Polygon=true,Point=true,Unavailable=true}
-local HEAD = "geo_type\tcanonical_name\tparent_name\tsource_id\tdataset_id\tsource_version\tgeometry\taliases\tlatitude\tlongitude"
+local HEAD = "geo_type\tcanonical_name\tparent_name\tsource_id\tdataset_id\tsource_version\tscale\tgeometry\tgeometry_file\taliases\tlatitude\tlongitude"
 
 local function fold(s)
   if type(s) ~= "string" then return "" end
@@ -34,25 +34,28 @@ local function split_tsv(line)
   return fields
 end
 local function validate_record(f, line_number)
-  if #f ~= 10 or not TYPES[f[1]] or not GEOMETRIES[f[7]] or
-     f[2] == "" or f[4] == "" or f[5] == "" or f[6] == "" then
+  if #f ~= 12 or not TYPES[f[1]] or not GEOMETRIES[f[8]] or
+     f[2] == "" or f[4] == "" or f[5] == "" or f[6] == "" or f[7] == "" then
     return nil, "invalid Natural Earth index row " .. tostring(line_number)
   end
-  if f[7] == "Point" then
-    local lat, lon = tonumber(f[9]), tonumber(f[10])
+  if f[8] == "Polygon" and f[9] == "" then
+    return nil, "polygon row has no geometry file at " .. tostring(line_number)
+  end
+  if f[8] == "Point" then
+    local lat, lon = tonumber(f[11]), tonumber(f[12])
     if not lat or not lon or lat < -90 or lat > 90 or lon < -180 or lon > 180 then
       return nil, "invalid point in index row " .. tostring(line_number)
     end
   end
-  if f[1] == "City" and f[7] == "Polygon" then
+  if f[1] == "City" and f[8] == "Polygon" then
     return nil, "City cannot be implicitly promoted to polygon"
   end
   return {
     geo_type = f[1], canonical_name = f[2], parent_name = f[3],
     source_id = f[4], dataset_id = f[5], source_version = f[6],
-    geometry = f[7], aliases = f[8],
-    latitude = tonumber(f[9]), longitude = tonumber(f[10]),
-    geometry_available = f[7] == "Polygon",
+    scale = f[7], geometry = f[8], geometry_file = f[9], aliases = f[10],
+    latitude = tonumber(f[11]), longitude = tonumber(f[12]),
+    geometry_available = f[8] == "Polygon",
     source_type = f[1]
   }
 end
