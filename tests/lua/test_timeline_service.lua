@@ -5,7 +5,7 @@ local seq=0
 local mockFactory={}
 function mockFactory.inspect(comp)
   if comp.corrupt then return nil,"FAKE_CORRUPT_EXTERNAL_COMP" end
-  return {scene_id=comp.sid,objects=comp.objects or {},has_scene=comp.sid~=nil}
+  return {scene_id=comp.sid,title=comp.title,objects=comp.objects or {},has_scene=comp.sid~=nil}
 end
 function mockFactory.create_scene(comp,title,opts)
   assert(opts and opts.disallow_new_mediaout==true,
@@ -14,8 +14,26 @@ function mockFactory.create_scene(comp,title,opts)
   if comp.fail then return nil,"FAKE_FUSE_FAILURE" end
   seq=seq+1
   comp.sid=string.format("scene-%d",seq)
+  comp.title=title
   comp.objects={{name="CR_Scene_Main"},{name="CR_WorldMap_Main"},{name="CR_Camera_Main"}}
-  return {scene_id=comp.sid,objects=comp.objects}
+  return {scene_id=comp.sid,title=title,objects=comp.objects}
+end
+function mockFactory.add_region(comp,feature,opts)
+  if not comp.sid then return nil,"NO_SCENE" end
+  comp.region_seq=(comp.region_seq or 0)+1
+  local id=comp.sid.."-region-"..comp.region_seq
+  local node_name="CR_"..feature.geo_type.."_"..feature.canonical_name:gsub("[^A-Za-z0-9]","")..
+    "_"..string.format("%03d",comp.region_seq)
+  local obj={
+    id=id,type=feature.geo_type,name=node_name,scene_id=comp.sid,
+    display_name=feature.canonical_name,
+    source={source_id=feature.source_id,scale=feature.scale,geometry_file=feature.geometry_file}
+  }
+  comp.objects[#comp.objects+1]=obj
+  return {
+    object_id=id,scene_id=comp.sid,object_type=feature.geo_type,
+    display_name=feature.canonical_name,node_name=node_name,source=obj.source
+  }
 end
 package.loaded["CartoRig.node_factory"]=mockFactory
 package.loaded["CartoRig.timeline_service"]=nil
@@ -299,10 +317,11 @@ assert(svc.timecode_add("00:00:00;00",1,25)==nil)
 
 -- Five clicks from a project with no current timeline.
 local resolve,project,timeline=fake(false)
-local ids,comps,items={},{},{}
+local ids,comps,items,createdScenes={},{},{},{}
 for n=1,5 do
   local result,err=svc.create(resolve,"CartoRig Map "..n)
   assert(result,err)
+  createdScenes[n]=result
   assert(result.start_frame==86400+(n-1)*120)
   assert(result.end_frame==86400+n*120)
   assert(result.track_index==1 and result.fusion_page_opened)
@@ -318,6 +337,34 @@ assert(timeline.created==5 and project.createdName=="CartoRig Scenes")
 assert(#assert(svc.list_scenes(resolve))==5)
 assert(resolve.page=="fusion")
 assert(svc.current_scene(resolve).scene_id==timeline.last.comp.sid)
+
+-- Offline search and structural add must target the requested scene_id, not the
+-- currently active/last Fusion clip.
+local ROOT="tests/fixtures/timeline-service-data"
+local catalogPath=ROOT.."\\CartoRig\\App\\data\\ne_catalog.tsv"
+local catalogFile=assert(io.open(catalogPath,"wb"))
+catalogFile:write(table.concat({
+ "geo_type\tcanonical_name\tparent_name\tsource_id\tdataset_id\tsource_version\tscale\tgeometry\tgeometry_file\taliases\tlatitude\tlongitude",
+ "Country\tBrazil\tSouth America\tbr-source\tne-admin0\t5.1.1\t1:50m\tPolygon\tregions/ne-admin0/br.lua\tBrasil\t\t",
+ "State\tMato Grosso\tBrazil\tmt-source\tne-admin1\t5.1.1\t1:10m\tPolygon\tregions/ne-admin1/mt.lua\t\t\t",
+},"\n").."\n")
+catalogFile:close()
+local brazilResults=assert(svc.search_locations("Brasil","Country",{localappdata=ROOT}))
+assert(#brazilResults==1 and brazilResults[1].source_id=="br-source")
+local targetScene=createdScenes[1]
+local beforeCounts={}
+for n,result in ipairs(createdScenes) do beforeCounts[n]=#result.composition.objects end
+local added,addErr=svc.add_region(resolve,targetScene.scene_id,"br-source",{localappdata=ROOT})
+assert(added,addErr)
+assert(added.scene_id==targetScene.scene_id and added.object_type=="Country")
+assert(#targetScene.composition.objects==beforeCounts[1]+1)
+for n=2,#createdScenes do
+  assert(#createdScenes[n].composition.objects==beforeCounts[n],
+    "Add Region must not mutate another Scene composition")
+end
+local stateResults=assert(svc.search_locations("Mato Grosso","State",{localappdata=ROOT}))
+assert(#stateResults==1 and stateResults[1].scale=="1:10m")
+os.remove(catalogPath)
 
 -- Append target must be the global end across video, audio and subtitle tracks.
 local r2,p2,t2=fake(true)
