@@ -180,7 +180,11 @@ function domain.add_region(state, typ, feature)
   if not name then return nil, "name index exhausted for this feature" end
   local id, ierr = unique_id(used)
   if not id then return nil, ierr end
-  local priorities = { Continent = 10, Country = 20, State = 30 }
+  local priorities = { Continent = 10000, Country = 20000, State = 30000 }
+  local sequence=1
+  for _,existing in ipairs(state.objects) do
+    if existing.object_type==typ then sequence=sequence+1 end
+  end
   local new = {
     object_id = id, scene_id = state.scene_id, object_type = typ,
     display_name = feature.canonical_name, node_name = name,
@@ -189,7 +193,7 @@ function domain.add_region(state, typ, feature)
       dataset_id = feature.dataset_id, scale = feature.scale,
       geometry_file = feature.geometry_file, parent_name = feature.parent_name
     },
-    draw_order = priorities[typ], visible = true, style_overrides = {},
+    draw_order = priorities[typ]+sequence, visible = true, style_overrides = {},
     motion = {}
   }
   state.objects[#state.objects+1] = new
