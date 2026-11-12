@@ -42,6 +42,10 @@ $files=@(
   (Status "BLACKMAGIC_API" (Join-Path $app 'lua\CartoRig\blackmagic_api.lua')),
   (Status "FUSION_CONTRACT" (Join-Path $app 'lua\CartoRig\fusion_contract.lua')),
   (Status "NODE_FACTORY" (Join-Path $app 'lua\CartoRig\node_factory.lua')),
+  (Status "OFFLINE_LAND" (Join-Path $app 'data\ne_50m_land.lua')),
+  (Status "OFFLINE_CATALOG" (Join-Path $app 'data\ne_catalog.tsv')),
+  (Status "DATA_MANIFEST" (Join-Path $app 'data\natural-earth-manifest.json')),
+  (Status "REGION_FUSE" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigRegion.fuse')),
   (Status "UNINSTALLER" (Join-Path $app 'Uninstall-CartoRig.exe')),
   (Status "INSTALL_RECORD" (Join-Path $app 'install-location.txt')),
   (Status "STARTUP_ERROR" (Join-Path $app 'last-error.txt')),
@@ -61,6 +65,15 @@ if(!$primary){
   $classification=if($other){"OTHER_DEFAULT_SCRIPTS_LOCATION"}else{"SCRIPT_MISSING_IN_DEFAULT_DIRECTORIES"}
 }elseif(!$ui){
   $classification="LAUNCHER_PRESENT_UI_MISSING"
+}
+$criticalNames=@("BLACKMAGIC_API","FUSION_CONTRACT","NODE_FACTORY","OFFLINE_LAND","OFFLINE_CATALOG","DATA_MANIFEST","REGION_FUSE")
+$criticalMissing=@($files | Where-Object { $criticalNames -contains $_.Name -and -not $_.Present })
+$regionRoot=Join-Path $app 'data\regions'
+$regionGeometryCount=if(Test-Path -LiteralPath $regionRoot){
+  @(Get-ChildItem -LiteralPath $regionRoot -Recurse -File -Filter *.lua -ErrorAction SilentlyContinue).Count
+}else{0}
+if($primary -and $ui -and ($criticalMissing.Count -gt 0 -or $regionGeometryCount -eq 0)){
+  $classification="MILESTONE_A_RUNTIME_INCOMPLETE"
 }
 $legacy=@($files | Where-Object { $_.Name -like 'LEGACY_*' -and $_.Present })
 $staged=@($files | Where-Object { $_.Name -like 'LAUNCHER_*' -and $_.Present })
@@ -104,7 +117,9 @@ $lines=@(
   "RESOLVE_PROCESS: $processStatus",
   "REGISTRY_CURRENT_USER: $registryStatus",
   "APPDATA: $($RoamingRoot.Replace($env:USERPROFILE,'%USERPROFILE%'))",
-  "LOCALAPPDATA: $($LocalRoot.Replace($env:USERPROFILE,'%USERPROFILE%'))"
+  "LOCALAPPDATA: $($LocalRoot.Replace($env:USERPROFILE,'%USERPROFILE%'))",
+  "REGION_GEOMETRY_FILES: $regionGeometryCount",
+  "MILESTONE_A_CRITICAL_MISSING: $((@($criticalMissing | ForEach-Object Name)) -join ',')"
 )
 foreach($f in $files){$lines+= $f.Description}
 $lines+="LIVE_RESOLVE_MENU: NOT_RUN"
