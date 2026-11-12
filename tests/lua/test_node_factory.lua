@@ -107,36 +107,80 @@ assert(legacyReadable.has_scene and legacyReadable.legacy_title_missing==true an
  "pre-0.6.3 Scene without persisted title must remain readable")
 comp:SetData("CartoRig.V1.Title","Brazil Map")
 assert(assert(factory.inspect(comp)).legacy_title_missing==false)
--- Additional authoring nodes must not invalidate the three singleton structural
--- nodes. Multiple Countries/States/Markers/etc. are expected by the product.
-local countries={}
-for n=1,2 do
- local country=comp:AddTool("Fuse.CartoRigCountry",10+n,4)
- country:SetAttrs({TOOLS_Name="CR_Country_Test_"..n})
- country:SetData("CartoRig.V1.Owned",true)
- country:SetData("CartoRig.V1.ObjectId",domain.uuid())
- country:SetData("CartoRig.V1.ObjectType","Country")
- country:SetData("CartoRig.V1.SceneId",made.scene_id)
- country:SetData("CartoRig.V1.SchemaVersion","1.0.0")
- countries[n]=country
-end
+-- Region creation must use the same real-provenance transaction as the product.
+local countryGeometryRel="regions/ne_admin0/ne-id-country-br.lua"
+local countryGeometryPath=ROOT.."\\CartoRig\\App\\data\\"..countryGeometryRel:gsub("/","\\")
+local countryGeometry=assert(io.open(countryGeometryPath,"wb"))
+countryGeometry:write('return {source_id="ne-id-country-br",version="fixture-v1",scale="1:50m",rings={{-74,-34,-34,-34,-34,5,-74,5}}}\n')
+countryGeometry:close()
+local stateGeometryRel="regions/ne_admin1/ne-id-state-mt.lua"
+local stateGeometryPath=ROOT.."\\CartoRig\\App\\data\\"..stateGeometryRel:gsub("/","\\")
+local stateGeometry=assert(io.open(stateGeometryPath,"wb"))
+stateGeometry:write('return {source_id="ne-id-state-mt",version="fixture-v1",scale="1:10m",rings={{-61,-18,-50,-18,-50,-7,-61,-7}}}\n')
+stateGeometry:close()
+
+local brazilFeature={
+ geo_type="Country",source_type="Country",canonical_name="Brazil",
+ parent_name="South America",geometry_available=true,geometry="Polygon",
+ source_id="ne-id-country-br",dataset_id="ne_admin0",source_version="fixture-v1",
+ scale="1:50m",geometry_file=countryGeometryRel
+}
+local matoFeature={
+ geo_type="State",source_type="State",canonical_name="Mato Grosso",
+ parent_name="Brazil",geometry_available=true,geometry="Polygon",
+ source_id="ne-id-state-mt",dataset_id="ne_admin1",source_version="fixture-v1",
+ scale="1:10m",geometry_file=stateGeometryRel
+}
+local country1=assert(factory.add_region(comp,brazilFeature,{localappdata=ROOT}))
+local country2=assert(factory.add_region(comp,brazilFeature,{localappdata=ROOT}))
+local state1=assert(factory.add_region(comp,matoFeature,{localappdata=ROOT}))
+assert(country1.node_name=="CR_Country_Brazil_001")
+assert(country2.node_name=="CR_Country_Brazil_002")
+assert(state1.node_name=="CR_State_MatoGrosso_001")
+assert(country1.object_id~=country2.object_id and country2.object_id~=state1.object_id)
+assert(country1.source.scale=="1:50m" and state1.source.scale=="1:10m")
+
 local expanded=assert(factory.inspect(comp))
-assert(expanded.has_scene and #expanded.objects==5,
- "Two extra Country nodes must coexist with the structural Scene/WorldMap/Camera")
-local originalCountry2Id=countries[2]:GetData("CartoRig.V1.ObjectId")
-countries[2]:SetData("CartoRig.V1.ObjectId",countries[1]:GetData("CartoRig.V1.ObjectId"))
+assert(expanded.has_scene and #expanded.objects==6,
+ "Country/Country/State must coexist with the three structural nodes")
+local countryNodes={}
+local stateNode=nil
+for _,tool in ipairs(comp.tools) do
+ if tool:GetData("CartoRig.V1.ObjectType")=="Country" then countryNodes[#countryNodes+1]=tool end
+ if tool:GetData("CartoRig.V1.ObjectType")=="State" then stateNode=tool end
+end
+assert(#countryNodes==2 and stateNode)
+local currentCameraSource=camera.links.Input
+assert(currentCameraSource==stateNode,"newest Region must feed Camera")
+assert(stateNode.links.Background~=nil and stateNode.links.Background:GetData("CartoRig.V1.ObjectType")=="Country")
+assert(stateNode:GetData("CartoRig.V1.GeometryFile")==stateGeometryRel)
+assert(stateNode:GetData("CartoRig.V1.SourceScale")=="1:10m")
+
+local originalCountry2Id=countryNodes[2]:GetData("CartoRig.V1.ObjectId")
+countryNodes[2]:SetData("CartoRig.V1.ObjectId",countryNodes[1]:GetData("CartoRig.V1.ObjectId"))
 local duplicateId,duplicateIdErr=factory.inspect(comp)
 assert(duplicateId==nil and duplicateIdErr:match("duplicated object UUID"))
-countries[2]:SetData("CartoRig.V1.ObjectId",originalCountry2Id)
-countries[2]:SetAttrs({TOOLS_Name="CR_Country_Test_1"})
+countryNodes[2]:SetData("CartoRig.V1.ObjectId",originalCountry2Id)
+local originalCountry2Name=countryNodes[2].name
+countryNodes[2]:SetAttrs({TOOLS_Name=countryNodes[1].name})
 local duplicateName,duplicateNameErr=factory.inspect(comp)
 assert(duplicateName==nil and duplicateNameErr:match("duplicated CartoRig node name"))
-countries[2]:SetAttrs({TOOLS_Name="CR_Country_Test_2"})
-assert(#assert(factory.inspect(comp)).objects==5)
+countryNodes[2]:SetAttrs({TOOLS_Name=originalCountry2Name})
+assert(#assert(factory.inspect(comp)).objects==6)
+
+-- Catalog/geometry mismatch must fail before graph mutation.
+local mismatched={}
+for k,v in pairs(brazilFeature) do mismatched[k]=v end
+mismatched.source_version="wrong-version"
+local beforeMismatch=#comp.tools
+local mismatchResult,mismatchErr=factory.add_region(comp,mismatched,{localappdata=ROOT})
+assert(mismatchResult==nil and mismatchErr:match("DATA_INCOMPATIBLE"))
+assert(#comp.tools==beforeMismatch)
+
 local sid=made.scene_id
 assert(sid==comp:GetData("CartoRig.V1.SceneId"))
 assert(factory.create_scene(comp,"Do not duplicate",{localappdata=ROOT})==nil)
-assert(#comp.tools==7)
+assert(#comp.tools==8)
 local rejected,rm=fake()
 rejected.fail_link="Input"
 local result2,reason2=factory.create_scene(rejected,"Connection failure",{localappdata=ROOT})
@@ -187,5 +231,7 @@ local noOutput,outputReason=factory.create_scene(no_new,"No managed output",
 assert(noOutput==nil and outputReason:match("MEDIAOUT_UNAVAILABLE"))
 assert(#no_new.tools==0,
  "disallow_new_mediaout must fail before creating any author node or replacement MediaOut")
+os.remove(countryGeometryPath)
+os.remove(stateGeometryPath)
 os.remove(dataPath)
 print("node_factory: PASS (mocked host only; creation, isolation, UUIDs, rollback, output links)")
