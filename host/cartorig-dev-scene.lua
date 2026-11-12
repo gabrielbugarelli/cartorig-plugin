@@ -123,6 +123,7 @@ local window=disp:AddWindow({
     ui:Button{ID="AddCountry",Text="Add Country",Enabled=false},
     ui:Button{ID="AddState",Text="Add State/Province",Enabled=false},
   },
+  ui:Button{ID="RepairPalette",Text="Repair WorldMap Color Links (Existing Regions)"},
   ui:Label{Text="Objects in selected Scene (structural list only)",WordWrap=true},
   ui:HGroup{
     ui:Label{Text="Structural object"},
@@ -363,6 +364,29 @@ function window.On.AddCountry.Clicked(ev)
 end
 function window.On.AddState.Clicked(ev)
   add_selected("State")
+end
+
+function window.On.RepairPalette.Clicked(ev)
+  local scene=selected_scene()
+  if not scene then
+    record("Repair WorldMap Color Links",false,"Choose an existing Scene")
+    return
+  end
+  local ok2,result,err=pcall(service.repair_palette,resolve,scene.scene_id)
+  if not ok2 then
+    record("Repair WorldMap Color Links",false,
+      "Resolve/Fusion API failure: "..tostring(result))
+    return
+  end
+  if not result then
+    record("Repair WorldMap Color Links",false,tostring(err))
+    refresh(scene.scene_id)
+    return
+  end
+  record("Repair WorldMap Color Links",true,
+    tostring(result.expressions_repaired).." linked color channels repaired across "..
+    tostring(result.regions).." Region nodes")
+  refresh(scene.scene_id)
 end
 
 function window.On.RenameObject.Clicked(ev)
