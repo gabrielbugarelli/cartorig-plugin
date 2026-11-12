@@ -144,8 +144,25 @@ local matoFeature={
  scale="1:10m",geometry_file=stateGeometryRel
 }
 local country1=assert(factory.add_region(comp,brazilFeature,{localappdata=ROOT}))
+local brazilTool
+for _,tool in ipairs(comp.tools) do
+ if tool:GetData("CartoRig.V1.ObjectId")==country1.object_id then brazilTool=tool;break end
+end
+assert(brazilTool,"created Brazil Tool must be discoverable by object UUID")
+brazilTool:SetInput("FillR",0.12)
+brazilTool:SetInput("FillG",0.34)
+brazilTool:SetInput("FillB",0.56)
+brazilTool:SetInput("FillOpacity",0.73)
+brazilTool:SetInput("StrokeWidth",3.5)
+brazilTool:SetInput("StrokeOpacity",0.62)
+
 local country2=assert(factory.add_region(comp,brazilFeature,{localappdata=ROOT}))
 local state1=assert(factory.add_region(comp,matoFeature,{localappdata=ROOT}))
+assert(brazilTool:GetInput("FillR")==0.12 and brazilTool:GetInput("FillG")==0.34 and
+       brazilTool:GetInput("FillB")==0.56 and brazilTool:GetInput("FillOpacity")==0.73,
+  "structural Region operations must not overwrite Brazil Fill channels")
+assert(brazilTool:GetInput("StrokeWidth")==3.5 and brazilTool:GetInput("StrokeOpacity")==0.62,
+  "structural Region operations must not overwrite Brazil Stroke channels")
 assert(country1.node_name=="CR_Country_Brazil_001")
 assert(country2.node_name=="CR_Country_Brazil_002")
 assert(state1.node_name=="CR_State_Brazil_MatoGrosso_001")
