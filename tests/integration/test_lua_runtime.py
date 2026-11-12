@@ -9,10 +9,10 @@ ROOT = Path(__file__).resolve().parents[2]
 LUA = os.getenv("CARTORIG_LUA_EXECUTABLE", "lua5.1")
 
 class LuaRuntimeIntegration(unittest.TestCase):
-    def invoke(self, script):
+    def invoke(self, script, *args):
         env = dict(os.environ)
         env["LUA_PATH"] = str(ROOT / "src/?.lua") + ";" + str(ROOT / "src/?/init.lua") + ";;"
-        result = subprocess.run([LUA, str(ROOT / script)], cwd=ROOT, env=env,
+        result = subprocess.run([LUA, str(ROOT / script), *map(str,args)], cwd=ROOT, env=env,
                                 capture_output=True, text=True, timeout=40, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + "\n" + result.stderr)
         self.assertIn("PASS", result.stdout)
@@ -25,7 +25,9 @@ class LuaRuntimeIntegration(unittest.TestCase):
         self.invoke("tests/lua/test_geo.lua")
 
     def test_offline_catalog_search_and_disambiguation(self):
-        self.invoke("tests/lua/test_catalog.lua")
+        data_dir=os.getenv("CARTORIG_DATA_DIR")
+        source=Path(data_dir)/"ne_catalog.tsv" if data_dir else ROOT/"tests/fixtures/natural_earth_synthetic.tsv"
+        self.invoke("tests/lua/test_catalog.lua",source)
 
     def test_defensive_fusion_bridge_mock_unit(self):
         self.invoke("tests/lua/test_native_probe.lua")
@@ -53,7 +55,9 @@ class LuaRuntimeIntegration(unittest.TestCase):
         self.invoke("tests/lua/test_timeline_service.lua")
 
     def test_pinned_natural_earth_real_world_data(self):
-        self.invoke("tests/lua/test_land_source.lua")
+        data_dir=os.getenv("CARTORIG_DATA_DIR")
+        source=Path(data_dir)/"ne_50m_land.lua" if data_dir else ROOT/"data/ne_50m_land.lua"
+        self.invoke("tests/lua/test_land_source.lua",source)
 
 if __name__ == "__main__":
     unittest.main()
