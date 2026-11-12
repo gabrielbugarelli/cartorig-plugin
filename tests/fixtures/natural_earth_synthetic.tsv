@@ -1,7 +1,7 @@
-geo_type	canonical_name	parent_name	source_id	dataset_id	source_version	geometry	aliases	latitude	longitude
-Country	Brazil	South America	ne-id-country-br	ne_admin0	fixture-v1	Polygon	Brasil		
-Country	Georgia	Asia	ne-id-country-ge	ne_admin0	fixture-v1	Polygon	Geórgia		
-State	Georgia	United States	ne-id-state-ga	ne_admin1	fixture-v1	Polygon	GA		
-State	Rio de Janeiro	Brazil	ne-id-state-rj	ne_admin1	fixture-v1	Polygon	Rio		
-City	Rio de Janeiro	Brazil / Rio de Janeiro	ne-id-city-rj	ne_places	fixture-v1	Point	Rio	-22.9	-43.2
-City	São Paulo	Brazil / São Paulo	ne-id-city-sp	ne_places	fixture-v1	Point	Sao Paulo	-23.5	-46.6
+geo_type	canonical_name	parent_name	source_id	dataset_id	source_version	scale	geometry	geometry_file	aliases	latitude	longitude
+Country	Brazil	South America	ne-id-country-br	ne_admin0	fixture-v1	1:50m	Polygon	regions/ne_admin0/ne-id-country-br.lua	Brasil		
+Country	Georgia	Asia	ne-id-country-ge	ne_admin0	fixture-v1	1:50m	Polygon	regions/ne_admin0/ne-id-country-ge.lua	Geórgia		
+State	Georgia	United States	ne-id-state-ga	ne_admin1	fixture-v1	1:10m	Polygon	regions/ne_admin1/ne-id-state-ga.lua	GA		
+State	Rio de Janeiro	Brazil	ne-id-state-rj	ne_admin1	fixture-v1	1:10m	Polygon	regions/ne_admin1/ne-id-state-rj.lua	Rio		
+City	Rio de Janeiro	Brazil / Rio de Janeiro	ne-id-city-rj	ne_places	fixture-v1	1:50m	Point		Rio	-22.9	-43.2
+City	São Paulo	Brazil / São Paulo	ne-id-city-sp	ne_places	fixture-v1	1:50m	Point		Sao Paulo	-23.5	-46.6
