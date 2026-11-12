@@ -21,6 +21,8 @@ jobs:
           persist-credentials: false
       - name: Install free Lua 5.1 interpreter for source tests (maintainer only)
         run: sudo apt-get -o Acquire::Retries=3 update -qq && sudo apt-get -o Acquire::Retries=3 install -y -qq lua5.1
+      - name: Install pinned free Natural Earth build dependency
+        run: python3 -m pip install --disable-pip-version-check --no-input pyshp==2.3.1
       - name: Parse every shipped Lua file, including host probe
         run: |
           for source in src/CartoRig/*.lua; do luac5.1 -p "$source"; done
