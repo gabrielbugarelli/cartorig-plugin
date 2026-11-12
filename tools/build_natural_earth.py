@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Build CartoRig's offline Natural Earth runtime assets.
 
-The end user never runs this script. GitHub Actions executes it from a pinned
-Natural Earth source checkout and packages only the generated offline runtime
-files.
+The end user never runs this script. CartoRig's build process executes it from
+a pinned Natural Earth source checkout and packages only the generated offline
+runtime files. Functional/data tests are executed locally before the installer
+build is dispatched; GitHub Actions is used only to compile/package the installer.
 
 Milestone A sources:
 - Admin 0 countries: Natural Earth 1:50m, v5.1.1.
