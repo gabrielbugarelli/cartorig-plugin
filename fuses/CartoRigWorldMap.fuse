@@ -21,7 +21,14 @@ local function getrings()
   if not ok or type(result)~="table" or #result==0 then
     error("DATA_INCOMPATIBLE: required Natural Earth 1:50m land is missing or empty: "..tostring(result))
   end
+  if result.topology_schema~=2 or type(result.ring_roles)~="table" or
+     #result.ring_roles~=#result then
+    error("DATA_INCOMPATIBLE: land polygon topology is missing")
+  end
   for ringIndex,ring in ipairs(result) do
+    if result.ring_roles[ringIndex]~="outer" and result.ring_roles[ringIndex]~="hole" then
+      error("DATA_INCOMPATIBLE: invalid land ring role "..tostring(ringIndex))
+    end
     if type(ring)~="table" or #ring<6 or #ring%2~=0 then
       error("DATA_INCOMPATIBLE: invalid land ring "..tostring(ringIndex))
     end
@@ -153,8 +160,21 @@ local function getBorderShape(w,h,xaspect,yaspect)
   local xscale=worldscale/w
   for _,line in ipairs(data) do
     s:MoveTo(0.5+line[1]*xscale,(h*0.5+line[2]*worldscale)/w)
+    local previousLon,previousLat=line[1],line[2]
     for k=3,#line,2 do
-      s:LineTo(0.5+line[k]*xscale,(h*0.5+line[k+1]*worldscale)/w)
+      local lon,lat=line[k],line[k+1]
+      local delta=lon-previousLon
+      if math.abs(delta)>180 then
+        -- Split at the antimeridian instead of drawing a trans-world border.
+        local seam=previousLon>=0 and 180 or -180
+        local unwrapped=lon+(delta>180 and -360 or 360)
+        local ratio=(seam-previousLon)/(unwrapped-previousLon)
+        local seamLat=previousLat+ratio*(lat-previousLat)
+        s:LineTo(0.5+seam*xscale,(h*0.5+seamLat*worldscale)/w)
+        s:MoveTo(0.5-seam*xscale,(h*0.5+seamLat*worldscale)/w)
+      end
+      s:LineTo(0.5+lon*xscale,(h*0.5+lat*worldscale)/w)
+      previousLon,previousLat=lon,lat
     end
   end
   cachedBorderShape=s;borderShapeKey=key
@@ -165,6 +185,8 @@ function Process(req)
   local scale=Scale and Scale>0 and Scale or 1
   local width,height=math.max(1,math.floor(realw/scale+0.5)),math.max(1,math.floor(realh/scale+0.5))
   local attrs={
+    {IMG_Channel="Red"},{IMG_Channel="Green"},
+    {IMG_Channel="Blue"},{IMG_Channel="Alpha"},
     IMG_Document=self.Comp,IMG_Width=width,IMG_Height=height,
     IMG_XScale=XAspect,IMG_YScale=YAspect,
     IMG_Quality=not req:IsQuick(),IMG_MotionBlurQuality=not req:IsNoMotionBlur(),
