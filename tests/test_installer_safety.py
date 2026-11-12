@@ -72,7 +72,7 @@ class InstallerSafetyTests(unittest.TestCase):
         s=self.nsi
         expected=(
             'domain.lua','geo.lua','catalog.lua','blackmagic_api.lua',
-            'fusion_contract.lua','node_factory.lua','timeline_service.lua',
+            'fusion_contract.lua','node_factory.lua','scene_service.lua',
             'ne_50m_land.lua','ne_50m_admin0_borders.lua','ne_catalog.tsv',
             'natural-earth-manifest.json','CartoRigScene.fuse','CartoRigWorldMap.fuse',
             'CartoRigCamera.fuse','CartoRigRegion.fuse'
@@ -141,21 +141,21 @@ class InstallerSafetyTests(unittest.TestCase):
 
     def test_scene_ui_stays_structural(self):
         s=self.scene
-        self.assertIn('service.create,resolve,title',s)
-        self.assertIn('service.list_scenes,resolve',s)
-        self.assertIn('service.search_locations,query,filter',s)
-        self.assertIn(
-            'service.add_region,resolve,scene.scene_id,result.dataset_id,result.source_id',s)
-        self.assertIn(
-            'service.rename_object,resolve,scene.scene_id,obj.id,newName',s)
+        self.assertIn('service.create_scene,resolve,title,current',s)
+        self.assertIn('service.open_scene,resolve',s)
+        self.assertIn('service.search_locations,items.SearchLocation.Text',s)
+        self.assertIn('service.add_region,resolve,current,row.dataset_id,row.source_id',s)
+        self.assertIn('service.rename_object,resolve,current,obj.id',s)
+        self.assertIn('service.rename_scene,resolve,current',s)
         self.assertIn('ID="ObjectContext"',s)
         self.assertIn('ID="RenameObject"',s)
         self.assertIn('ID="RepairPalette"',s)
-        self.assertIn('service.repair_palette,resolve,scene.scene_id',s)
+        self.assertIn('service.repair_palette,resolve,current',s)
         self.assertNotIn('SetActiveTool',s)
         self.assertNotIn('TOOLB_Selected',s)
-        self.assertNotIn('Open Scene',s)
-        self.assertNotIn('OpenScene',s)
+        self.assertIn('Open Scene',s)
+        self.assertIn('ID="OpenScene"',s)
+        self.assertNotIn('InsertFusionCompositionIntoTimeline',s)
 
     def test_support_diagnostic_knows_milestone_a_runtime(self):
         d=self.diagnostic
