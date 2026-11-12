@@ -5,6 +5,10 @@ local dataPath="tests/fixtures/local-data-test\\CartoRig\\App\\data\\ne_50m_land
 local f=assert(io.open(dataPath,"wb"))
 f:write("local t={}\nfor i=1,1422 do t[i]={0,0,1,0,1,1,0,1} end\nreturn t\n")
 f:close()
+local borderPath=ROOT.."\\CartoRig\\App\\data\\ne_50m_admin0_borders.lua"
+local borderFile=assert(io.open(borderPath,"wb"))
+borderFile:write("return {{0,0,1,1,2,1}}\n")
+borderFile:close()
 local function fake()
  local comp={tools={},data={},added={},deleted=0,undo=0,undo_keeps={}}
  function comp:GetToolList()
@@ -286,5 +290,6 @@ assert(#no_new.tools==0,
  "disallow_new_mediaout must fail before creating any author node or replacement MediaOut")
 os.remove(countryGeometryPath)
 os.remove(stateGeometryPath)
+os.remove(borderPath)
 os.remove(dataPath)
 print("node_factory: PASS (mocked host only; creation, isolation, UUIDs, rollback, output links)")
