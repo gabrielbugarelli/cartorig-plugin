@@ -8,6 +8,15 @@ Critério `DONE`: node real, UI na superfície contratada, render e persistênci
 
 **Histórico da fundação:** a 0.6.3 foi executada no Resolve Studio 20.3.1 e falhou antes da criação da Scene: o binding Lua incluiu `__flags` no retorno documentado como lista de `GetItemListInTrack()`, e a implementação antiga percorreu a tabela completa com `pairs()`. Esse resultado é evidência de regressão do candidato, não PASS de qualquer A/B.
 
+**Marco A / render geometry (PR #16, host NOT RUN):** WorldMap e Region
+compartilham projeção equiretangular WGS84 e pixel aspect; Camera usa o
+mesmo fator Fit World; geometrias poligonais e limites Admin 0 recebem
+clipping da antimeridiana, e o Stroke não desenha arestas artificiais de
+recorte. Testes locais de projeção e 800 geometrias sintéticas atravessando
+±180° passaram em texlua (Lua 5.3). A rasterização Fusion de Fill/Stroke,
+furos, alpha, Viewer/MediaOut e persistência permanece **NOT RUN** no
+Resolve Studio 20. Este resultado não transforma A01/A02/A04/A05/A15 em PASS.
+
 **Marco A 0.7.0 (candidato, host ainda NOT RUN):** sobre a fundação Blackmagic-contract da 0.6.4, a implementação inclui Scene/WorldMap/Camera físicos, Country/State físicos, busca offline Natural Earth, Admin 0 boundaries, criação por scene/source UUID, Rename estrutural sem seleção de node, Fill/Stroke independente, câmera compartilhada, persistência de fonte/versão/escala/geometria e diagnóstico read-only no Inspector. Testes automatizados locais cobrem domínio, catálogo, transações e UI estrutural; **não alteram nenhum A/B para PASS**.
 
 | Teste | Marco | Ação normativa | Resultado normativo | Implementação | Teste executável | Evidência Actions | Commit / PR | Status |

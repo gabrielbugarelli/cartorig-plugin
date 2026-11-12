@@ -6,6 +6,25 @@ FuRegisterClass("CartoRigWorldMap", CT_SourceTool, {
   REG_Source_GlobalCtrls=true, REG_Source_SizeCtrls=true,
   REG_NoMotionBlurCtrls=true, REG_NoBlendCtrls=true, REG_Version=1,
 })
+-- CartoRig's shared projection is deployed as a private runtime module.
+local sharedGeometry=nil
+local function geometry()
+  if sharedGeometry then return sharedGeometry end
+  local root=os.getenv("LOCALAPPDATA")
+  if type(root)~="string" or root=="" then
+    error("DATA_MISSING: CartoRig render geometry directory unavailable")
+  end
+  local file=root.."\\CartoRig\\App\\lua\\CartoRig\\render_geometry.lua"
+  local chunk,err=loadfile(file)
+  if not chunk then error("RENDER_GEOMETRY_MISSING: "..tostring(err)) end
+  local result=chunk()
+  if type(result)~="table" or type(result.frame)~="function" or
+     type(result.fill_shape)~="function" or type(result.line_shape)~="function" then
+    error("RENDER_GEOMETRY_INVALID: incompatible CartoRig geometry module")
+  end
+  sharedGeometry=result
+  return sharedGeometry
+end
 local rings=nil
 local borders=nil
 local cachedShape=nil
@@ -127,38 +146,20 @@ end
 local function getShape(w,h,xaspect,yaspect)
   local key=table.concat({w,h,xaspect,yaspect},":")
   if cachedShape and shapeKey==key then return cachedShape end
-  local data=getrings()
-  local s=Shape()
-  local worldscale=math.min(w/360,h/180)
-  local xscale=worldscale/w
-  local yscale=worldscale/w -- Shape uses width-normalized units on both axes
-  for _,ring in ipairs(data) do
-    if #ring>=6 then
-      s:MoveTo(0.5+ring[1]*xscale, (h*0.5+ring[2]*worldscale)/w)
-      for k=3,#ring,2 do
-        s:LineTo(0.5+ring[k]*xscale,(h*0.5+ring[k+1]*worldscale)/w)
-      end
-      s:Close()
-    end
-  end
-  cachedShape=s;shapeKey=key
-  return s
+  local geo=geometry()
+  local frame=geo.frame(w,h,xaspect,yaspect)
+  local shape=geo.fill_shape(getrings(),frame)
+  cachedShape=shape;shapeKey=key
+  return shape
 end
 local function getBorderShape(w,h,xaspect,yaspect)
   local key=table.concat({w,h,xaspect,yaspect},":")
   if cachedBorderShape and borderShapeKey==key then return cachedBorderShape end
-  local data=getborders()
-  local s=Shape()
-  local worldscale=math.min(w/360,h/180)
-  local xscale=worldscale/w
-  for _,line in ipairs(data) do
-    s:MoveTo(0.5+line[1]*xscale,(h*0.5+line[2]*worldscale)/w)
-    for k=3,#line,2 do
-      s:LineTo(0.5+line[k]*xscale,(h*0.5+line[k+1]*worldscale)/w)
-    end
-  end
-  cachedBorderShape=s;borderShapeKey=key
-  return s
+  local geo=geometry()
+  local frame=geo.frame(w,h,xaspect,yaspect)
+  local shape=geo.line_shape(getborders(),frame,false)
+  cachedBorderShape=shape;borderShapeKey=key
+  return shape
 end
 function Process(req)
   local realw,realh=Width,Height

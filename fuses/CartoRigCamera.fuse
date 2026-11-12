@@ -5,6 +5,25 @@ FuRegisterClass("CartoRigCamera", CT_Tool, {
   REGS_OpDescription="Shared 2D geographic camera",REG_NoMotionBlurCtrls=true,
   REG_NoBlendCtrls=true,REG_Version=1,
 })
+-- Load the exact same WGS84 render geometry contract used by WorldMap/Region.
+local sharedGeometry=nil
+local function geometry()
+  if sharedGeometry then return sharedGeometry end
+  local root=os.getenv("LOCALAPPDATA")
+  if type(root)~="string" or root=="" then
+    error("DATA_MISSING: CartoRig render geometry directory unavailable")
+  end
+  local chunk,err=loadfile(root.."\\CartoRig\\App\\lua\\CartoRig\\render_geometry.lua")
+  if not chunk then error("RENDER_GEOMETRY_MISSING: "..tostring(err)) end
+  local result=chunk()
+  if type(result)~="table" or type(result.frame)~="function" or
+     type(result.camera_offset)~="function" then
+    error("RENDER_GEOMETRY_INVALID: Camera projection contract is unavailable")
+  end
+  sharedGeometry=result
+  return sharedGeometry
+end
+
 function Create()
   self:AddControlPage("Control")
   InLatitude=self:AddInput("Center Latitude (deg)","CenterLatitude",{
@@ -52,13 +71,10 @@ function Process(req)
   if lat < -90 or lat>90 or zoom<0.25 or zoom>64 or bearing<-180 or bearing>180 then
     error("CAMERA_INVALID_POSE: control out of range")
   end
-  -- The WorldMap renders a Fit World equirectangular image before this effect.
-  -- Pixels of longitude/latitude are scaled by min(width/360,height/180).
-  local w,h=img.Width,img.Height
-  local fit=math.min(w/360,h/180)
-  lon=((lon+180)%360)-180
-  local x=0.5-lon*fit/w*zoom
-  local y=0.5-lat*fit/h*zoom
+  -- Use the same physical-pixel Fit World projection as WorldMap/Region.
+  local geo=geometry()
+  local frame=geo.frame(img.Width,img.Height,img.XAspect,img.YAspect)
+  local x,y=geo.camera_offset(frame,lon,lat,zoom)
   local out=img:Transform(nil,{
     XF_XOffset=x,XF_YOffset=y,XF_XAxis=0.5,XF_YAxis=0.5,
     XF_XSize=zoom,XF_YSize=zoom,XF_Angle=-bearing,

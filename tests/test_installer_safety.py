@@ -21,6 +21,19 @@ class InstallerSafetyTests(unittest.TestCase):
         cls.shared=(ROOT/"support/verify-managed-shared.ps1").read_text(encoding="utf-8")
         cls.diagnostic=(ROOT/"support/cartorig-dev-diagnose.ps1").read_text(encoding="utf-8")
 
+    def test_current_fuse_sources_are_recognized_by_strict_ownership(self):
+        # Installer must recognize its own current Fuse bytes without
+        # accepting arbitrary foreign or user-modified Resolve files.
+        for filename in (
+            "CartoRigWorldMap.fuse",
+            "CartoRigCamera.fuse",
+            "CartoRigRegion.fuse",
+        ):
+            source=ROOT/"fuses"/filename
+            digest=normalized_sha256(source)
+            self.assertIn(digest,self.shared,
+                f"installer ownership verifier does not recognize {filename}: {digest}")
+
     def test_github_actions_is_build_only_and_manual(self):
         workflows=sorted((ROOT/".github/workflows").glob("*.y*ml"))
         self.assertEqual(workflows,[self.workflow_path],
@@ -68,7 +81,7 @@ class InstallerSafetyTests(unittest.TestCase):
         s=self.nsi
         expected=(
             'domain.lua','geo.lua','catalog.lua','blackmagic_api.lua',
-            'fusion_contract.lua','node_factory.lua','timeline_service.lua',
+            'fusion_contract.lua','render_geometry.lua','node_factory.lua','timeline_service.lua',
             'ne_50m_land.lua','ne_50m_admin0_borders.lua','ne_catalog.tsv',
             'natural-earth-manifest.json','CartoRigScene.fuse','CartoRigWorldMap.fuse',
             'CartoRigCamera.fuse','CartoRigRegion.fuse'
@@ -137,7 +150,7 @@ class InstallerSafetyTests(unittest.TestCase):
     def test_support_diagnostic_knows_milestone_a_runtime(self):
         d=self.diagnostic
         for marker in (
-            "blackmagic_api.lua","fusion_contract.lua","ne_catalog.tsv",
+            "blackmagic_api.lua","fusion_contract.lua","render_geometry.lua","ne_catalog.tsv",
             "natural-earth-manifest.json","CartoRigRegion.fuse",
             "REGION_GEOMETRY_FILES","MILESTONE_A_RUNTIME_INCOMPLETE"
         ):
