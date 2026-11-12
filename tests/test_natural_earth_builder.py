@@ -34,6 +34,23 @@ def make_polygon(root: Path, stem: str, fields: list[tuple[str, str]], rows: lis
     path.with_suffix(".cpg").write_text("UTF-8\n", encoding="ascii")
 
 
+def make_lines(root: Path, stem: str, fields: list[tuple[str, str]], rows: list[tuple[dict, list]]):
+    path = root / stem
+    path.parent.mkdir(parents=True, exist_ok=True)
+    writer = shapefile.Writer(str(path), shapeType=shapefile.POLYLINE, encoding="utf-8")
+    for name, kind in fields:
+        writer.field(name, kind, size=120 if kind == "C" else 20)
+    for attrs, lines in rows:
+        writer.line(lines)
+        writer.record(*[attrs.get(name, "") for name, _ in fields])
+    writer.close()
+    path.with_suffix(".prj").write_text(
+        'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]]]',
+        encoding="utf-8",
+    )
+    path.with_suffix(".cpg").write_text("UTF-8\n", encoding="ascii")
+
+
 def make_points(root: Path, stem: str, fields: list[tuple[str, str]], rows: list[tuple[dict, tuple]]):
     path = root / stem
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -121,6 +138,18 @@ class NaturalEarthBuilderTests(unittest.TestCase):
             ],
         )
 
+        make_lines(
+            self.root,
+            builder.BORDER_DATASET["stem"],
+            [("FEATURECLA", "C")],
+            [
+                (
+                    {"FEATURECLA": "International boundary"},
+                    [[(-70, -30), (-60, -20), (-50, -10)]],
+                )
+            ],
+        )
+
         place_fields = [
             ("NE_ID", "C"), ("NAME", "C"), ("NAMEPAR", "C"), ("NAMEASCII", "C"),
             ("ADM0NAME", "C"), ("ADM1NAME", "C")
@@ -140,7 +169,7 @@ class NaturalEarthBuilderTests(unittest.TestCase):
             ],
         )
 
-        for spec in [builder.LAND_DATASET, *builder.DATASETS.values()]:
+        for spec in [builder.LAND_DATASET, builder.BORDER_DATASET, *builder.DATASETS.values()]:
             version_file = self.root / f'{spec["stem"]}.VERSION.txt'
             version_file.write_text(spec["version"] + "\n", encoding="utf-8")
 
@@ -180,6 +209,9 @@ class NaturalEarthBuilderTests(unittest.TestCase):
         self.assertEqual(datasets["natural-earth-land"]["source_version"], "4.1.0")
         self.assertEqual(datasets["natural-earth-land"]["ring_count"], 1)
         self.assertTrue((self.out / "ne_50m_land.lua").exists())
+        self.assertEqual(datasets["natural-earth-admin0-boundaries"]["source_version"], "5.1.0")
+        self.assertEqual(datasets["natural-earth-admin0-boundaries"]["line_count"], 1)
+        self.assertTrue((self.out / "ne_50m_admin0_borders.lua").exists())
         self.assertEqual(datasets["natural-earth-admin0-countries"]["feature_count"], 2)
         self.assertEqual(datasets["natural-earth-admin1-states-provinces"]["feature_count"], 2)
         self.assertEqual(datasets["natural-earth-populated-places"]["feature_count"], 1)
