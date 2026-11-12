@@ -24,6 +24,7 @@ All source/unit/integration tests are executed locally in the development enviro
 - [40-test traceability](docs/TRACEABILITY.md)
 - [CI, release and zero-cost policy](docs/CI_AND_RELEASE.md)
 - [Licensing and third-party notices](THIRD_PARTY_NOTICES)
+- [Milestone A source audit, fixes and pending host evidence](docs/MILESTONE_A_SOURCE_AUDIT_20261112.md)
 - [Pinned specification digest](docs/SPECIFICATION.sha256)
 
 ## Required end-user workflow (upon implementation)
