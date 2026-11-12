@@ -22,8 +22,9 @@ substitui a observação do Viewer/MediaOut no DaVinci Resolve Studio 20.
    Em pixels físicos: `scale = min(width*XAspect/360, height*YAspect/180)`;
    `x = width/2 + lon*scale/XAspect`;
    `y = height/2 + lat*scale/YAspect`.
-3. A Camera usa esse mesmo fator físico para converter Center Lat/Lon em
-   offsets normalizados. O zoom e bearing continuam em seu próprio node.
+3. A Camera chama `render_geometry.camera_offset()` e usa esse mesmo fator
+   físico para converter Center Lat/Lon em offsets normalizados.
+   O zoom e bearing continuam em seu próprio node.
 4. Polígonos são recortados na descontinuidade de longitude de ±180° antes
    da criação dos contornos preenchidos.
 5. Linhas de fronteira e Stroke das Regions são divididos na descontinuidade,
@@ -39,7 +40,8 @@ substitui a observação do Viewer/MediaOut no DaVinci Resolve Studio 20.
 
 ## Testes locais (sem GitHub Actions)
 
-Execução em infraestrutura de desenvolvimento:
+Execução em infraestrutura de desenvolvimento (`texlua`/Lua 5.3; não é
+ainda a execução completa da suíte Lua 5.1 do host):
 
 ```shell
 texlua tests/lua/test_render_geometry.lua
