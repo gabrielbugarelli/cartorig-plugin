@@ -33,7 +33,7 @@ class FuseContractTests(unittest.TestCase):
         self.assertNotIn("SetActiveTool",source)
         self.assertNotIn("TOOLB_Selected",source)
         self.assertIn('service.search_locations,query,filter',source)
-        self.assertIn('service.add_region,resolve,scene.scene_id,result.source_id',source)
+        self.assertIn('service.add_region,resolve,scene.scene_id,result.dataset_id,result.source_id',source)
         self.assertIn('ID="SceneContext"',source)
         self.assertIn('ID="SearchResults"',source)
     def test_land_source_is_offline_and_not_fake(self):
