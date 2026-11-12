@@ -45,7 +45,7 @@ local function fake()
      return {GetTool=function() return source end}
     end,
     SetExpression=function(_,expression)
-     if comp.fail_palette_port==port and parent.regid=="Fuse.CartoRigRegion" then
+     if comp.fail_palette_port==port and parent.regid=="Fuse.CartoRigRegion" and expression~=nil then
       error("synthetic palette expression binding failure")
      end
      parent.expressions[port]=expression
