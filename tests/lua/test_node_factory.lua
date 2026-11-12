@@ -207,6 +207,19 @@ assert(country1.object_id~=country2.object_id and country2.object_id~=argentina.
        argentina.object_id~=state1.object_id)
 assert(country1.source.scale=="1:50m" and state1.source.scale=="1:10m")
 
+-- Existing 0.7.0 projects can be repaired explicitly without deleting
+-- Regions, changing their UUIDs or overwriting Fill/Stroke overrides.
+local noRepair=assert(factory.repair_region_palette(comp))
+assert(noRepair.expressions_repaired==0,"already-linked regions must be idempotent")
+brazilTool.expressions.WorldLandR=nil
+local repaired=assert(factory.repair_region_palette(comp))
+assert(repaired.expressions_repaired==1 and
+       brazilTool.expressions.WorldLandR=="CR_WorldMap_Main.LandR")
+assert(brazilTool:GetInput("FillR")==0.12 and brazilTool:GetInput("StrokeWidth")==3.5,
+  "palette migration must never reset Region custom style")
+assert(factory.repair_region_palette(comp).expressions_repaired==0,
+  "a second repair must not re-edit stable expressions")
+
 local expanded=assert(factory.inspect(comp))
 assert(expanded.has_scene and #expanded.objects==7,
  "Brazil/Argentina/second Brazil/Mato Grosso must coexist with the three structural nodes")
@@ -315,6 +328,30 @@ assert(badPalette==nil and badPaletteErr:find("REGION_PALETTE_BIND_FAILED",1,tru
 assert(not badPaletteErr:find("ROLLBACK_INCOMPLETE",1,true),badPaletteErr)
 assert(paletteCamera.links.Input==paletteWorld)
 assert(#assert(factory.inspect(paletteFailComp)).objects==3)
+
+-- Explicit repair is transactional. A failed later channel must restore
+-- earlier unlinked channels without overwriting existing ones.
+local repairFailComp,repairFailMedia=fake()
+assert(factory.create_scene(repairFailComp,"Repair rollback",{localappdata=ROOT}))
+local repairAdded=assert(factory.add_region(repairFailComp,brazilFeature,{localappdata=ROOT}))
+local repairTool
+for _,tool in ipairs(repairFailComp.tools) do
+ if tool:GetData("CartoRig.V1.ObjectId")==repairAdded.object_id then
+  repairTool=tool
+ end
+end
+assert(repairTool)
+repairTool.expressions.WorldLandR=nil
+repairTool.expressions.WorldBorderG=nil
+repairFailComp.fail_palette_port="WorldBorderG"
+local repairFailed,repairFailureErr=factory.repair_region_palette(repairFailComp)
+assert(repairFailed==nil and repairFailureErr:find("REGION_PALETTE_REPAIR_FAILED",1,true))
+assert(not repairFailureErr:find("ROLLBACK_INCOMPLETE",1,true),repairFailureErr)
+assert(repairTool.expressions.WorldLandR==nil and
+       repairTool.expressions.WorldBorderG==nil)
+assert(repairTool.expressions.WorldLandG=="CR_WorldMap_Main.LandG")
+repairFailComp.fail_palette_port=nil
+assert(factory.repair_region_palette(repairFailComp).expressions_repaired==2)
 
 -- Class ordering is independent of click order: State added before Country must
 -- still render after Country and before the shared Camera.
