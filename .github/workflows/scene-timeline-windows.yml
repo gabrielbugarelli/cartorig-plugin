@@ -3,6 +3,8 @@ name: CartoRig Windows Installer
 on:
   workflow_dispatch:
   # Allow a build-only run when this packaging workflow itself changes.
+  # Only installer packaging is run here. This workflow revision packages the
+  # Scene In/Out preservation fix validated by internal Lua regression checks.
   # No tests run in GitHub Actions; other source pushes do not trigger builds.
   push:
     branches:
