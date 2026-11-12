@@ -33,6 +33,17 @@ function M.project(frame,lon,lat)
   return px/frame.width,py/frame.width
 end
 
+-- Offset accepted by Image:Transform. It uses normalized image height for Y,
+-- whereas Shape's vertex coordinates above normalize both axes by width.
+function M.camera_offset(frame,lon,lat,zoom)
+  require_number(zoom,"zoom",true)
+  require_number(lon,"longitude")
+  lon=((lon+180)%360)-180
+  assert_point(lon,lat)
+  return 0.5-lon*frame.scale/(frame.width*frame.xaspect)*zoom,
+         0.5-lat*frame.scale/(frame.height*frame.yaspect)*zoom
+end
+
 local function append_line(lines,points)
   if #points>=4 then lines[#lines+1]=points end
 end
