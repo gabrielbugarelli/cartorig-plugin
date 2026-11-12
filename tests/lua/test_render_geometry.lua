@@ -62,3 +62,26 @@ for _,call in ipairs({
   assert(not ok,"invalid geometry must fail closed")
 end
 print("render_geometry: PASS HD/QHD/4K, aspect, seam split/clip, invalid inputs")
+
+-- Preserve the opposite winding of polygon holes. The host must still verify
+-- Fusion's actual ShapeFill rasterization with nonzero winding and alpha.
+local function signed_area(flat)
+  local result=0
+  for i=1,#flat,2 do
+    local j=i+2
+    if j>#flat then j=1 end
+    result=result+flat[i]*flat[j+1]-flat[j]*flat[i+1]
+  end
+  return result/2
+end
+local outer=geo.clip_ring({-50,-10,-40,-10,-40,10,-50,10})
+local hole=geo.clip_ring({-49,-5,-49,5,-41,5,-41,-5})
+assert(#outer==1 and #hole==1)
+assert(signed_area(outer[1])*signed_area(hole[1])<0,
+  "polygon hole orientation must survive clipping")
+
+local beforeMoves,beforeCloses=moves,closes
+geo.fill_shape({{170,-10,-170,-10,-170,10,170,10}},f)
+assert(moves==beforeMoves+2 and closes==beforeCloses+2,
+  "dateline-crossing polygon must have two independent bounded fill contours")
+print("render_geometry: PASS polygon hole winding and dateline fill contours")
