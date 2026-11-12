@@ -1,5 +1,5 @@
 -- CartoRig WorldMap: physical Fusion generator with actual local Natural Earth 1:50m land.
--- V1 Work in progress: borders not yet enabled, host render unverified.
+-- Milestone A: local Land/Ocean/Admin 0 borders are implemented; Resolve host render remains unverified.
 FuRegisterClass("CartoRigWorldMap", CT_SourceTool, {
   REGS_Name="CartoRig WorldMap", REGS_Category="CartoRig",
   REGS_OpIconString="WM", REGS_OpDescription="Offline Natural Earth 1:50m WorldMap",
