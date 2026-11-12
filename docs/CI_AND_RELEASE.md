@@ -1,42 +1,72 @@
-# GitHub Actions, verification and zero-cost policy
+# Build, verification and zero-cost policy
 
-## Mandatory execution authority
+## Execution authority
 
-Only GitHub Actions jobs can approve tests and produce the installer accepted for release. All 40 A01–A20 and B01–B20 require results in **Windows + genuine DaVinci Resolve Studio 20**, linked to the **same** commit, version, dataset manifest and Windows installer SHA-256. Standard runner tests support but do not replace host approval. Any missing, NOT RUN, BLOCKED, SKIPPED or FAIL case prevents a stable release.
+CartoRig separates **development verification** from **installer packaging**.
 
-Workflows target `ubuntu-latest`/`windows-latest` standard GitHub-hosted runners. An optional private Windows machine with a licensed Studio 20 installation may run a locked-down self-hosted runner if provided. Never run code from external PRs on that machine. Host workflow is restricted to protected/manual or reusable trusted release paths. Never use a paid runner, private paid build storage, third-party paid CI, Codespaces, or GitHub larger runners.
+- Source, Lua, Python, data-builder, integration, regression, installer-policy and repository-structure tests are executed in the development environment before a build candidate is pushed.
+- GitHub Actions is used **only** to build/package the final Windows installer candidate from committed source and pinned Natural Earth data.
+- GitHub Actions must not run product tests, integration tests, mock host tests or acceptance tests.
+- Resolve Studio 20 acceptance is executed on a genuine licensed Windows host using the exact installer artifact and SHA-256 produced by the build-only workflow.
+- No mock, local automated test or installer build can turn A01–A20/B01–B20 into PASS.
 
-## Verified free-plan boundary
+A missing, NOT RUN, BLOCKED, SKIPPED or FAIL host case remains unapproved.
 
-At preparation date (2026-11-10), GitHub documents standard GitHub-hosted runners as free in public repositories, with a **500 MB included Actions artifact storage allowance on GitHub Free shared with GitHub Packages**. Cache storage and logs have independent rules that may change. Verify limits, existing account usage and billing settings on every change; repository workflows cannot know all account-wide consumption. Do **not** enable overage billing or expand budgets. Configure a billing stop limit in repository/account settings; if verification is impossible, suspend artifact-heavy flows.
+## GitHub Actions boundary
 
-Sources:
-- https://docs.github.com/en/actions/concepts/billing-and-usage
-- https://docs.github.com/en/billing/reference/product-usage-included
-- https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets
-- https://docs.github.com/en/actions/reference/security/secure-use
+The repository contains one manual workflow:
 
-## Workflow responsibilities
+`.github/workflows/scene-timeline-windows.yml`
 
-- `ci.yml`: source, specification SHA and traceability integrity, formatting/unit/static checks as real modules are built.
-- `integration.yml`: actual integration test harness; no passing placeholder test. Incomplete source fails explicitly.
-- `build-windows.yml`: real Windows installer + uninstaller from source, only in Actions; no uploaded local prebuilt installer.
-- `package-validation.yml`: installer contents, SHA-256, manifest, GUI installer/uninstaller smoke checks on Windows.
-- `fusion-host-tests.yml`: trusted real-host A/B tests with standardized, evidence-linked reports; never infer PASS.
-- `release.yml`: single candidate run combining the above and releasing the **unchanged** approved installer only after all gates pass.
+It is triggered only by `workflow_dispatch` and performs packaging duties:
 
-## Artifact retention / safety
+1. check out the committed CartoRig source;
+2. fetch the exact pinned Natural Earth commit;
+3. generate offline runtime data with the pinned free build dependency;
+4. compile the NSIS Windows installer;
+5. record installer SHA-256, source commit and Natural Earth commit;
+6. upload the installer artifact for a short retention period.
 
-1. Prefer no cache for this project until exact limits and dependencies are verified. Set `retention-days: 1` for temporary installers and `retention-days: 7` for compact host evidence only when required. Use built-in public Releases for approved long-lived installer files.
-2. Enforce size checks before artifact upload. Never assume a 500 MB free quota is available if other repos/packages use it.
-3. Pin third-party actions to reviewed full commit SHAs, use minimum `GITHUB_TOKEN` permissions, no write permissions on external PR jobs; never upload license files, Resolve binaries, credentials or personal projects.
-4. A self-hosted runner should be ephemeral or strictly isolated, protected from untrusted PR workflows, and limited to trusted branches/environment approvals. A self-hosted runner cannot be regarded as an approved Fusion host without machine/license/version evidence.
-5. Stable tags/releases require all required jobs PASS. Do not use `continue-on-error` for mandatory checks; do not treat missing checks as success.
+It does **not** execute Python/Lua/unit/integration/acceptance tests. Functional correctness must already have been reviewed and tested before dispatch.
+
+Only free/public GitHub resources are permitted: standard public-repository runners, built-in artifact storage within free limits, and pinned free/open-source build tools. Paid/larger runners, Codespaces, paid CI/SaaS, paid storage expansion and overage billing are prohibited.
+
+## Local pre-build gate
+
+Before dispatching the installer build, the developer must execute and review locally:
+
+- Python unit/static/policy tests;
+- Lua source/module regressions;
+- Blackmagic API contract regressions;
+- Scene/timeline transaction mocks clearly marked non-host;
+- Natural Earth generator tests using local fixtures;
+- generated-runtime checks when the exact pinned dataset is locally available;
+- specification SHA / traceability structure verification.
+
+Every failure is corrected before the build request. Tests and implementation are reviewed together after each increment.
+
+## Host gate
+
+The stable release requires all normative host cases with evidence tied to:
+
+- CartoRig commit;
+- installer SHA-256;
+- CartoRig version;
+- Resolve Studio version;
+- Natural Earth manifest/source commit;
+- observed result and evidence.
+
+Host tests are never run on a generic GitHub-hosted runner and are never inferred from build success.
+
+## Artifact and security policy
+
+- Keep the build workflow manual and read-only except for artifact upload.
+- Pin third-party Actions to reviewed full commit SHAs.
+- Use minimum `GITHUB_TOKEN` permissions.
+- Do not cache proprietary files or upload Resolve binaries, credentials, personal projects or licensed SDK material.
+- Keep installer artifacts short-lived while the product is under development.
+- Stable Releases, when eventually authorized, publish the unchanged host-approved installer.
 
 ## Current state
 
-This file describes executable workflow policy and release design, not a passing implementation. In the foundation branch there are no Windows installer sources and no Fusion host evidence. Therefore **no installer or release is authorized**.
-
-## Free branch protection
-
-For public GitHub Free, branch protection or rulesets can require reviews/status checks. On `main`, require a PR, disable force-push/deletion and require the real `ci` and `integration` checks before merging; add protected host/release status checks at the corresponding milestone. This must be configured in Settings if the installed GitHub integration cannot mutate repository rulesets.
+0.7.0 is a Milestone A development candidate. Local automated verification can establish source/data/transaction consistency, but Resolve Studio Viewer, Inspector, render and save/reopen evidence remains mandatory before Milestone A can be accepted.
