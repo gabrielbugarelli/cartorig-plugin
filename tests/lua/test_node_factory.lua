@@ -99,12 +99,19 @@ assert(made.created_author_nodes==3 and made.output_connected)
 assert(#comp.tools==5 and comp.undo==0)
 assert(comp.tools[1]==media and comp.tools[2]==foreign)
 assert(media.links.Input~=nil and media.links.Input:GetAttrs().TOOLS_Name=="CR_Scene_Main")
-local camera,world
+local camera,world,sceneTool
 for _,node in pairs(comp.tools) do
  if node.name=="CR_Camera_Main" then camera=node end
  if node.name=="CR_WorldMap_Main" then world=node end
+ if node.name=="CR_Scene_Main" then sceneTool=node end
 end
-assert(camera and world and camera.links.Input==world)
+assert(camera and world and sceneTool and camera.links.Input==world)
+assert(sceneTool:GetInput("SceneIdentity"):find("Title: Brazil Map",1,true))
+assert(sceneTool:GetInput("SceneIdentity"):find("Scene UUID: "..made.scene_id,1,true))
+assert(sceneTool:GetInput("SceneLinks"):find("WorldMap",1,true) and
+       sceneTool:GetInput("SceneLinks"):find("MediaOut",1,true))
+assert(sceneTool:GetInput("SceneData"):find("Natural Earth Land 4.1.0",1,true))
+assert(sceneTool:GetInput("SceneData"):find("Admin 0 boundaries 5.1.0",1,true))
 local persisted=assert(factory.inspect(comp))
 assert(persisted.has_scene and persisted.title=="Brazil Map")
 assert(#persisted.objects==3)
@@ -201,6 +208,30 @@ assert(stateNode:GetData("CartoRig.V1.SourceScale")=="1:10m")
 assert(stateNode:GetInput("IdentityInfo"):find("State — Mato Grosso",1,true))
 assert(stateNode:GetInput("GeographyInfo"):find("Natural Earth 1:10m",1,true))
 assert(stateNode:GetInput("GeographyInfo"):find("Source ID: ne-id-state-mt",1,true))
+
+-- A03 structural Rename changes display metadata only. UUID, physical node name,
+-- style channels, source identity and graph position remain unchanged.
+local beforeRenameCameraSource=camera.links.Input
+local beforeRenameGeo=brazilTool:GetInput("GeographyInfo")
+local renamed=assert(factory.rename_object(comp,country1.object_id,"Brazil Highlight"))
+assert(renamed.object_id==country1.object_id)
+assert(renamed.node_name=="CR_Country_Brazil_001")
+assert(renamed.display_name=="Brazil Highlight")
+assert(brazilTool.name=="CR_Country_Brazil_001")
+assert(brazilTool:GetData("CartoRig.V1.ObjectId")==country1.object_id)
+assert(brazilTool:GetData("CartoRig.V1.SourceId")=="ne-id-country-br")
+assert(brazilTool:GetInput("IdentityInfo"):find("Country — Brazil Highlight",1,true))
+assert(brazilTool:GetInput("GeographyInfo")==beforeRenameGeo)
+assert(brazilTool:GetInput("FillR")==0.12 and brazilTool:GetInput("FillOpacity")==0.73)
+assert(brazilTool:GetInput("StrokeWidth")==3.5 and brazilTool:GetInput("StrokeOpacity")==0.62)
+assert(camera.links.Input==beforeRenameCameraSource)
+local renamedState=assert(factory.inspect(comp))
+local renamedObject=nil
+for _,obj in ipairs(renamedState.objects) do
+ if obj.id==country1.object_id then renamedObject=obj;break end
+end
+assert(renamedObject and renamedObject.display_name=="Brazil Highlight" and
+       renamedObject.name=="CR_Country_Brazil_001")
 
 local originalCountry2Id=countryNodes[2]:GetData("CartoRig.V1.ObjectId")
 countryNodes[2]:SetData("CartoRig.V1.ObjectId",countryNodes[1]:GetData("CartoRig.V1.ObjectId"))
@@ -340,4 +371,4 @@ os.remove(countryGeometryPath)
 os.remove(stateGeometryPath)
 os.remove(borderPath)
 os.remove(dataPath)
-print("node_factory: PASS (mocked host only; creation, isolation, UUIDs, rollback, output links)")
+print("node_factory: PASS (mocked host only; Scene diagnostics, Region create/rename, isolation, UUIDs, rollback, output links)")
