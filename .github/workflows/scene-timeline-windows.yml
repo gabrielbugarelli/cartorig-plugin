@@ -81,6 +81,24 @@ jobs:
             purpose='build-only; tests executed outside GitHub Actions'
           } | ConvertTo-Json | Set-Content -Encoding utf8 dist/manifest.json
 
+      # The archive is an installer-build input snapshot for local validation.
+      # It contains source and generated data; no test is executed in Actions.
+      - name: Archive build inputs for local test reproduction
+        shell: pwsh
+        run: |
+          $snapshot='build/validation-snapshot'
+          New-Item -ItemType Directory -Force $snapshot | Out-Null
+          foreach ($path in @('src','fuses','host','tests','scripts','tools','docs',
+                              'support','packaging','.github','README.md',
+                              'LICENSE','THIRD_PARTY_NOTICES')) {
+            if (Test-Path -LiteralPath $path) {
+              Copy-Item -LiteralPath $path -Destination $snapshot -Recurse -Force
+            }
+          }
+          New-Item -ItemType Directory -Force "$snapshot/build" | Out-Null
+          Copy-Item -LiteralPath 'build/cartorig-data' -Destination "$snapshot/build" -Recurse -Force
+          Compress-Archive -Path "$snapshot/*" -DestinationPath 'dist/cartorig-validation-source.zip' -CompressionLevel Optimal
+
       - name: Upload installer artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
