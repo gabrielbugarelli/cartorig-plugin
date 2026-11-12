@@ -755,4 +755,107 @@ function factory.add_region(comp,feature,opts)
   }
 end
 
+
+local function region_identity_text(info)
+  return table.concat({
+    info.object_type.." — "..info.display_name,
+    "Object UUID: "..info.object_id,
+    "Scene UUID: "..info.scene_id
+  },"\n")
+end
+
+function factory.rename_object(comp,object_id,new_name)
+  if type(object_id)~="string" or object_id=="" then
+    return nil,"OBJECT_ID_REQUIRED: choose a structural object"
+  end
+  local existing,inspectErr=factory.inspect(comp)
+  if not existing then return nil,inspectErr end
+  if not existing.has_scene then return nil,"NO_SCENE: create a CartoRig Scene first" end
+
+  local target=nil
+  for _,obj in ipairs(existing.objects) do
+    if obj.id==object_id then target=obj;break end
+  end
+  if not target then return nil,"OBJECT_NOT_FOUND: object UUID is absent from Scene" end
+  if target.type~="Country" and target.type~="State" then
+    return nil,"RENAME_UNSUPPORTED: Milestone A renames Country/State objects only"
+  end
+
+  local state=state_from_inspection(existing)
+  local proposed,renameErr=domain.rename(state,object_id,new_name)
+  if not proposed then return nil,renameErr end
+
+  local toolMap,mapErr=managed_tool_map(existing)
+  if not toolMap then return nil,mapErr end
+  local tool=toolMap[object_id]
+  if not tool then return nil,"STATE_INVALID: target Tool is missing" end
+
+  local oldDisplay=target.display_name
+  local oldIdentity,identityReadErr=fusion.get_input(tool,"IdentityInfo")
+  if identityReadErr then return nil,identityReadErr end
+
+  local started,startErr=fusion.start_undo(comp,"CartoRig - Rename "..target.type)
+  if not started then return nil,"FUSION_API_ERROR: StartUndo: "..tostring(startErr) end
+
+  local succeeded,why=pcall(function()
+    local written,writeErr=fusion.set_data(tool,DISPLAY,proposed.display_name,
+      target.type.." / "..DISPLAY)
+    if not written then error(writeErr) end
+    local identityWritten,identityErr=fusion.set_input(tool,"IdentityInfo",
+      region_identity_text(proposed),"Region Identity")
+    if not identityWritten then error(identityErr) end
+
+    local observed,observedErr=factory.inspect(comp)
+    if not observed then error(observedErr) end
+    local renamed=nil
+    for _,obj in ipairs(observed.objects) do
+      if obj.id==object_id then renamed=obj;break end
+    end
+    if not renamed or renamed.display_name~=proposed.display_name or
+       renamed.name~=target.name or renamed.id~=target.id then
+      error("RENAME_STATE_FAILED: identity or physical node name changed")
+    end
+  end)
+
+  local function rollback()
+    local cleanup={}
+    local restored,restoreErr=fusion.set_data(tool,DISPLAY,oldDisplay,"rollback DisplayName")
+    if not restored then cleanup[#cleanup+1]=tostring(restoreErr) end
+    local identityRestored,identityErr=fusion.set_input(tool,"IdentityInfo",oldIdentity,
+      "rollback IdentityInfo")
+    if not identityRestored then cleanup[#cleanup+1]=tostring(identityErr) end
+    local ended,endErr=fusion.end_undo(comp,false)
+    if not ended then cleanup[#cleanup+1]=tostring(endErr) end
+    local observed,postErr=factory.inspect(comp)
+    if not observed then
+      cleanup[#cleanup+1]=tostring(postErr)
+    else
+      for _,obj in ipairs(observed.objects) do
+        if obj.id==object_id and
+           (obj.display_name~=oldDisplay or obj.name~=target.name or obj.id~=target.id) then
+          cleanup[#cleanup+1]="target identity/display not restored"
+        end
+      end
+    end
+    return #cleanup==0,table.concat(cleanup,"; ")
+  end
+
+  if not succeeded then
+    local clean,cleanupErr=rollback()
+    return nil,"RENAME_FAILED: "..tostring(why)..
+      (clean and "; transaction rolled back" or "; ROLLBACK_INCOMPLETE: "..cleanupErr)
+  end
+
+  local ended,endErr=fusion.end_undo(comp,true)
+  if not ended then
+    local clean,cleanupErr=rollback()
+    return nil,"UNDO_ERROR: "..tostring(endErr)..
+      (clean and "; transaction rolled back" or "; ROLLBACK_INCOMPLETE: "..cleanupErr)
+  end
+  return {
+    object_id=object_id,object_type=target.type,node_name=target.name,
+    display_name=proposed.display_name,scene_id=existing.scene_id
+  }
+end
+
 return factory
