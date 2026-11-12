@@ -79,6 +79,29 @@ class FuseContractTests(unittest.TestCase):
         self.assertIn('self:GetData("CartoRig.V1.SourceId")',source)
         self.assertNotIn("http",source)
 
+    def test_topology_and_palette_binding_are_not_just_inspector_labels(self):
+        world = (ROOT/"fuses"/"CartoRigWorldMap.fuse").read_text(encoding="utf-8")
+        region = (ROOT/"fuses"/"CartoRigRegion.fuse").read_text(encoding="utf-8")
+        self.assertIn("result.topology_schema~=2", world)
+        self.assertIn("result.ring_roles", world)
+        self.assertIn("local seam=previousLon>=0 and 180 or -180", world)
+        self.assertIn('IMG_Channel="Alpha"', world)
+        self.assertIn("data.topology_schema~=2", region)
+        self.assertIn("data.ring_roles", region)
+        self.assertIn('"InheritWorldMapFill"', region)
+        self.assertIn("function NotifyChanged(inp,param,time)", region)
+        self.assertIn('tool:GetData("CartoRig.V1.SceneId")', region)
+        self.assertIn('world:GetInput("Land"..suffix,req.Time)', region)
+        self.assertIn("readnum(InInheritLand,req", region)
+
+    def test_camera_reset_is_a_native_state_change_not_a_placeholder(self):
+        camera = (ROOT/"fuses"/"CartoRigCamera.fuse").read_text(encoding="utf-8")
+        self.assertIn('"ResetPose"', camera)
+        self.assertIn("INPID_InputControl=\"ButtonControl\"", camera)
+        self.assertIn("function NotifyChanged(inp,param,time)", camera)
+        self.assertIn("InLatitude:SetSource(Number(0),time)", camera)
+        self.assertIn("InZoom:SetSource(Number(1),time)", camera)
+
     def test_factory_hard_fail_on_unregistered_fuses(self):
         source=(ROOT/"src/CartoRig/node_factory.lua").read_text(encoding="utf-8")
         for regid,_ in TOOLS.values():
