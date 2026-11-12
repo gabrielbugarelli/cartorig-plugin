@@ -527,6 +527,86 @@ local function create_region_node(comp,info,x,y,created)
   return tool
 end
 
+local function managed_tool_map(existing)
+  local map={}
+  for index,tool in ipairs(existing.existing_tools) do
+    local owned,ownedErr=read_data(tool,OWNER,"tool "..index.." Owned")
+    if ownedErr then return nil,ownedErr end
+    if owned==true then
+      local objectId,idErr=read_data(tool,OBJECT,"tool "..index.." ObjectId")
+      if idErr then return nil,idErr end
+      if type(objectId)~="string" or objectId=="" then
+        return nil,"STATE_INVALID: managed Tool has no object UUID"
+      end
+      if map[objectId] then return nil,"STATE_INVALID: multiple Tools share object UUID "..objectId end
+      map[objectId]=tool
+    end
+  end
+  return map
+end
+
+local function connected_source_tool(tool,port,label)
+  local input,inputErr=input_of(tool,port)
+  if not input then return nil,tostring(label)..": "..tostring(inputErr) end
+  local output,outputErr=fusion.connected_output(input,tostring(label))
+  if outputErr then return nil,tostring(label)..": "..tostring(outputErr) end
+  if not output then return nil,tostring(label)..": no connected output" end
+  local source,sourceErr=fusion.output_tool(output,tostring(label).." source")
+  if not source then return nil,tostring(label)..": "..tostring(sourceErr) end
+  return source
+end
+
+local function managed_region_chain(existing)
+  local toolMap,mapErr=managed_tool_map(existing)
+  if not toolMap then return nil,mapErr end
+  local worldObj,cameraObj=nil,nil
+  local regions={}
+  local drawOrders={}
+  for _,obj in ipairs(existing.objects) do
+    if obj.type=="WorldMap" then worldObj=obj
+    elseif obj.type=="Camera" then cameraObj=obj
+    elseif obj.type=="Country" or obj.type=="State" or obj.type=="Continent" then
+      if type(obj.draw_order)~="number" then
+        return nil,"STATE_INVALID: Region has no numeric draw order"
+      end
+      if drawOrders[obj.draw_order] then
+        return nil,"STATE_INVALID: duplicated Region draw order "..tostring(obj.draw_order)
+      end
+      drawOrders[obj.draw_order]=true
+      regions[#regions+1]=obj
+    end
+  end
+  if not worldObj or not cameraObj then return nil,"STATE_INVALID: WorldMap/Camera missing" end
+  local world=toolMap[worldObj.id]
+  local camera=toolMap[cameraObj.id]
+  if not world or not camera then return nil,"STATE_INVALID: WorldMap/Camera Tool missing" end
+
+  table.sort(regions,function(a,b)
+    if a.draw_order~=b.draw_order then return a.draw_order<b.draw_order end
+    return a.id<b.id
+  end)
+
+  local previous=world
+  for _,obj in ipairs(regions) do
+    local tool=toolMap[obj.id]
+    if not tool then return nil,"STATE_INVALID: Region Tool missing for "..tostring(obj.id) end
+    local source,sourceErr=connected_source_tool(tool,"Background",obj.name..".Background")
+    if not source then return nil,"UNSAFE_GRAPH: "..tostring(sourceErr) end
+    if source~=previous then
+      return nil,"UNSAFE_GRAPH: Region chain does not match persisted draw order at "..tostring(obj.name)
+    end
+    obj._tool=tool
+    previous=tool
+  end
+
+  local cameraSource,cameraErr=connected_source_tool(camera,"Input","Camera.Input")
+  if not cameraSource then return nil,"UNSAFE_GRAPH: "..tostring(cameraErr) end
+  if cameraSource~=previous then
+    return nil,"UNSAFE_GRAPH: Camera input does not match persisted Region draw order"
+  end
+  return {world=world,camera=camera,regions=regions}
+end
+
 function factory.add_region(comp,feature,opts)
   opts=opts or {}
   if type(feature)~="table" or (feature.geo_type~="Country" and feature.geo_type~="State") then
@@ -544,26 +624,21 @@ function factory.add_region(comp,feature,opts)
   local proposal,proposalErr=domain.add_region(state,feature.geo_type,feature)
   if not proposal then return nil,proposalErr end
 
-  local camera,cameraErr=find_owned_tool(existing.existing_tools,"Camera")
-  if not camera then return nil,cameraErr end
-  local cameraInput,inputErr=input_of(camera,"Input")
-  if not cameraInput then return nil,"CAMERA_INPUT_UNAVAILABLE: "..tostring(inputErr) end
-  local previousOutput,outputErr=fusion.connected_output(cameraInput,"Camera.Input")
-  if outputErr then return nil,"CAMERA_INPUT_UNREADABLE: "..tostring(outputErr) end
-  if not previousOutput then return nil,"CAMERA_INPUT_MISSING: managed map chain is disconnected" end
-  local previousTool,sourceErr=fusion.output_tool(previousOutput,"Camera input source")
-  if not previousTool then return nil,"CAMERA_INPUT_UNREADABLE: "..tostring(sourceErr) end
+  local chain,chainErr=managed_region_chain(existing)
+  if not chain then return nil,chainErr end
 
-  local previousOwned,ownedErr=read_data(previousTool,OWNER,"Camera input source Owned")
-  if ownedErr then return nil,ownedErr end
-  local previousScene,sceneErr=read_data(previousTool,SCENE_KEY,"Camera input source SceneId")
-  if sceneErr then return nil,sceneErr end
-  local previousType,typeErr=read_data(previousTool,TYPE,"Camera input source ObjectType")
-  if typeErr then return nil,typeErr end
-  if previousOwned~=true or previousScene~=existing.scene_id or
-     (previousType~="WorldMap" and previousType~="Country" and
-      previousType~="State" and previousType~="Continent") then
-    return nil,"UNSAFE_GRAPH: Camera input is not a managed WorldMap/Region chain"
+  local predecessor=chain.world
+  local successor=chain.camera
+  local successorPort="Input"
+  local regionCount=#chain.regions
+  for _,obj in ipairs(chain.regions) do
+    if obj.draw_order<proposal.draw_order then
+      predecessor=obj._tool
+    elseif successor==chain.camera then
+      successor=obj._tool
+      successorPort="Background"
+      break
+    end
   end
 
   local started,startErr=fusion.start_undo(comp,"CartoRig - Add "..feature.geo_type)
@@ -572,15 +647,9 @@ function factory.add_region(comp,feature,opts)
   local created={}
   local region=nil
   local succeeded,why=pcall(function()
-    local regionCount=0
-    for _,obj in ipairs(existing.objects) do
-      if obj.type=="Country" or obj.type=="State" or obj.type=="Continent" then
-        regionCount=regionCount+1
-      end
-    end
     region=create_region_node(comp,proposal,-2+regionCount*2,4,created)
-    connect(region,"Background",previousTool)
-    connect(camera,"Input",region)
+    connect(region,"Background",predecessor)
+    connect(successor,successorPort,region)
 
     local observed,observedErr=factory.inspect(comp)
     if not observed then error(observedErr) end
@@ -594,18 +663,23 @@ function factory.add_region(comp,feature,opts)
        found.draw_order~=proposal.draw_order then
       error("REGION_STATE_FAILED: post-create reconstruction differs from proposal")
     end
+    local validated,validationErr=managed_region_chain(observed)
+    if not validated then error("REGION_CHAIN_FAILED: "..tostring(validationErr)) end
   end)
 
   local function rollback_region()
     local cleanup={}
-    local restored,restoreErr=fusion.connect(camera,"Input",previousTool)
-    if not restored then cleanup[#cleanup+1]="Camera restore: "..tostring(restoreErr) end
+    local restored,restoreErr=fusion.connect(successor,successorPort,predecessor)
+    if not restored then
+      cleanup[#cleanup+1]="managed successor restore: "..tostring(restoreErr)
+    end
     for i=#created,1,-1 do
       local deleted,deleteErr=fusion.delete_tool(created[i])
       if not deleted then cleanup[#cleanup+1]="Region delete: "..tostring(deleteErr) end
     end
     local ended,endErr=fusion.end_undo(comp,false)
     if not ended then cleanup[#cleanup+1]="EndUndo(false): "..tostring(endErr) end
+
     local observed,postErr=factory.inspect(comp)
     if not observed then
       cleanup[#cleanup+1]="post-rollback inspect: "..tostring(postErr)
@@ -615,6 +689,10 @@ function factory.add_region(comp,feature,opts)
           cleanup[#cleanup+1]="Region object remained after rollback"
           break
         end
+      end
+      local restoredChain,chainRestoreErr=managed_region_chain(observed)
+      if not restoredChain then
+        cleanup[#cleanup+1]="post-rollback chain: "..tostring(chainRestoreErr)
       end
     end
     return #cleanup==0,table.concat(cleanup,"; ")
