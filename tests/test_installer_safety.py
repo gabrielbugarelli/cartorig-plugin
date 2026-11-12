@@ -67,14 +67,25 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('Blackmagic API contract boundary missing',s)
         self.assertIn('Fusion contract boundary missing',s)
         self.assertIn('TimelineService missing',s)
+        self.assertIn('Offline geography catalog missing',s)
+        self.assertIn('Natural Earth manifest missing',s)
         self.assertIn('Scene Fuse missing',s)
         self.assertIn('WorldMap Fuse missing',s)
         self.assertIn('Camera Fuse missing',s)
+        self.assertIn('Region Fuse missing',s)
+        self.assertIn('build\\cartorig-data\\ne_50m_land.lua',s)
+        self.assertIn('build\\cartorig-data\\ne_catalog.tsv',s)
+        self.assertIn('build\\cartorig-data\\natural-earth-manifest.json',s)
+        self.assertIn('File /r "..\\build\\cartorig-data\\regions\\*"',s)
+        self.assertIn('File "/oname=CartoRigRegion.fuse" "..\\fuses\\CartoRigRegion.fuse"',s)
         self.assertIn('Delete "$INSTDIR\\Utility\\cartorig-dev.lua"',s)
         self.assertNotIn('Delete "$INSTDIR\\Comp\\cartorig-dev.lua.migrated-060"',s)
         self.assertIn('Delete "$LOCALAPPDATA\\CartoRig\\App\\lua\\CartoRig\\blackmagic_api.lua"',s)
         self.assertIn('Delete "$LOCALAPPDATA\\CartoRig\\App\\lua\\CartoRig\\fusion_contract.lua"',s)
         self.assertIn('Delete "$LOCALAPPDATA\\CartoRig\\App\\lua\\CartoRig\\timeline_service.lua"',s)
+        self.assertIn('Delete "$LOCALAPPDATA\\CartoRig\\App\\data\\ne_catalog.tsv"',s)
+        self.assertIn('Delete "$LOCALAPPDATA\\CartoRig\\App\\data\\natural-earth-manifest.json"',s)
+        self.assertIn('RMDir /r "$LOCALAPPDATA\\CartoRig\\App\\data\\regions"',s)
         self.assertNotIn('RMDir /r "$APPDATA\\Blackmagic Design',s)
 
     def test_recovery_retains_old_comp_until_new_is_active(self):
@@ -174,10 +185,13 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('-Kind scene-fuse',s)
         self.assertIn('-Kind worldmap-fuse',s)
         self.assertIn('-Kind camera-fuse',s)
+        self.assertIn('-Kind region-fuse',s)
         self.assertIn('c088214364f1226508348ebe662ed310a253fd5606253ab211307d7c17a3672f',verifier)
         self.assertIn('17c28628c767353a7a558674f202371d325655bba5613e195b02fe603ab93759',verifier)
         self.assertIn('e01a3e4c6823495612ccf11149a73f8f988e35ce1fa539028c8de1d06f6c9960',verifier)
+        self.assertIn('bebdbb180e72781773c345c8d3a278cb64e48fbbb3ab3482e9fb161aa5ae4bdd',verifier)
         self.assertIn('617eaf8578fce3ac21f150eff6124c71070149995e3753cad082b2bde04f4cb3',verifier)
+        self.assertIn('4fd67310e2dce94b36e47ad710b7bc8e82865b73dcc90ebb732f04c3d40951ed',verifier)
         self.assertIn('Existing Utility cartorig-dev.lua was modified',s)
         self.assertIn('CartoRig Scene Fuse was modified',s)
         self.assertIn('Uninstaller deleted or changed modified Utility/cartorig-dev.lua',self.win)
@@ -223,6 +237,18 @@ class InstallerSafetyTests(unittest.TestCase):
         self.assertIn('service063',self.win)
         self.assertIn('factory063',self.win)
         self.assertIn('ui063',self.win)
+
+    def test_windows_builds_and_validates_pinned_natural_earth_runtime(self):
+        s=self.win
+        self.assertIn("f1890d9f152c896d250a77557a5751a93d494776",s)
+        self.assertIn("pyshp==2.3.1",s)
+        self.assertIn("tools\\build_natural_earth.py",s)
+        self.assertIn("build\\cartorig-data",s)
+        self.assertIn("Offline catalog mismatch",s)
+        self.assertIn("Natural Earth manifest mismatch",s)
+        self.assertIn("Region Fuse mismatch",s)
+        self.assertIn("Installed Region geometry set mismatch",s)
+        self.assertIn("'feat/milestone-a-regions'",s)
 
     def test_windows_package_tests_real_upgrade_layout(self):
         s=self.win
