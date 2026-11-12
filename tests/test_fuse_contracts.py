@@ -109,6 +109,15 @@ class FuseContractTests(unittest.TestCase):
         self.assertIn("InLatitude:SetSource(Number(0),time)", camera)
         self.assertIn("InZoom:SetSource(Number(1),time)", camera)
 
+    def test_native_buttons_do_not_fire_on_node_initialization(self):
+        for name in ("CartoRigWorldMap", "CartoRigRegion", "CartoRigCamera"):
+            source = (ROOT/"fuses"/f"{name}.fuse").read_text(encoding="utf-8")
+            self.assertIn("INP_InitialNotify=false", source,
+                          f"{name} could reset saved Inspector values during project reopen")
+        region = (ROOT/"fuses"/"CartoRigRegion.fuse").read_text(encoding="utf-8")
+        self.assertIn('INP_DoNotifyChanged=(base=="Fill" or base=="Stroke")', region)
+        self.assertIn("INP_InitialNotify=false", region)
+
     def test_factory_hard_fail_on_unregistered_fuses(self):
         source=(ROOT/"src/CartoRig/node_factory.lua").read_text(encoding="utf-8")
         for regid,_ in TOOLS.values():
