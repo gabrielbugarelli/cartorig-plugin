@@ -43,8 +43,12 @@ $files=@(
   (Status "FUSION_CONTRACT" (Join-Path $app 'lua\CartoRig\fusion_contract.lua')),
   (Status "NODE_FACTORY" (Join-Path $app 'lua\CartoRig\node_factory.lua')),
   (Status "OFFLINE_LAND" (Join-Path $app 'data\ne_50m_land.lua')),
+  (Status "OFFLINE_BORDERS" (Join-Path $app 'data\ne_50m_admin0_borders.lua')),
   (Status "OFFLINE_CATALOG" (Join-Path $app 'data\ne_catalog.tsv')),
   (Status "DATA_MANIFEST" (Join-Path $app 'data\natural-earth-manifest.json')),
+  (Status "SCENE_FUSE" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigScene.fuse')),
+  (Status "WORLDMAP_FUSE" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigWorldMap.fuse')),
+  (Status "CAMERA_FUSE" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigCamera.fuse')),
   (Status "REGION_FUSE" (Join-Path $RoamingRoot 'Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigRegion.fuse')),
   (Status "UNINSTALLER" (Join-Path $app 'Uninstall-CartoRig.exe')),
   (Status "INSTALL_RECORD" (Join-Path $app 'install-location.txt')),
@@ -66,7 +70,7 @@ if(!$primary){
 }elseif(!$ui){
   $classification="LAUNCHER_PRESENT_UI_MISSING"
 }
-$criticalNames=@("BLACKMAGIC_API","FUSION_CONTRACT","NODE_FACTORY","OFFLINE_LAND","OFFLINE_CATALOG","DATA_MANIFEST","REGION_FUSE")
+$criticalNames=@("BLACKMAGIC_API","FUSION_CONTRACT","NODE_FACTORY","OFFLINE_LAND","OFFLINE_BORDERS","OFFLINE_CATALOG","DATA_MANIFEST","SCENE_FUSE","WORLDMAP_FUSE","CAMERA_FUSE","REGION_FUSE")
 $criticalMissing=@($files | Where-Object { $criticalNames -contains $_.Name -and -not $_.Present })
 $regionRoot=Join-Path $app 'data\regions'
 $regionGeometryCount=if(Test-Path -LiteralPath $regionRoot){
