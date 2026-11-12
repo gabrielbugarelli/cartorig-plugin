@@ -137,6 +137,14 @@ if not window then
 end
 local items=window:GetItems()
 local report=""
+local sceneContexts={}
+local searchResults={}
+
+items.GeoType:AddItem("All")
+items.GeoType:AddItem("Country")
+items.GeoType:AddItem("State/Province")
+items.GeoType.CurrentIndex=0
+
 local function read_build_info()
   local info={version="unknown",commit="unknown"}
   local stream=io.open(localapp.."\\CartoRig\\App\\build-info.txt","rb")
@@ -148,6 +156,7 @@ local function read_build_info()
   stream:close()
   return info
 end
+
 local function record(action,success,details)
   local text=tostring(details or "")
   local build=read_build_info()
@@ -162,29 +171,158 @@ local function record(action,success,details)
     "Fusion host Viewer/Inspector and Save/Reopen: requires editor confirmation",
     "V1 acceptance A01-B20: 40 NOT RUN"
   },"\n").."\n"
-  items.Status.Text=(success and "Scene created. " or "Scene not created. ")..text
+  items.Status.Text=(success and "Completed. " or "Blocked/failed. ")..text
 end
-local function refresh()
+
+local function selected_scene()
+  local index=tonumber(items.SceneContext.CurrentIndex)
+  if not index or index<0 then return nil end
+  return sceneContexts[index+1]
+end
+
+local function selected_result()
+  local index=tonumber(items.SearchResults.CurrentIndex)
+  if not index or index<0 then return nil end
+  return searchResults[index+1]
+end
+
+local function update_add_buttons()
+  local result=selected_result()
+  items.AddCountry.Enabled=result~=nil and result.geo_type=="Country"
+  items.AddState.Enabled=result~=nil and result.geo_type=="State"
+end
+
+local function render_selected_scene()
+  local scene=selected_scene()
+  if not scene then
+    items.SceneList.PlainText="No CartoRig Scene selected."
+    return
+  end
+  local lines={
+    tostring(scene.name),
+    "Scene UUID: "..tostring(scene.scene_id),
+    "Track V"..tostring(scene.track).." | Frame "..tostring(scene.start_frame),
+  }
+  table.sort(scene.objects,function(a,b)
+    local ao=a.draw_order or -1
+    local bo=b.draw_order or -1
+    if ao~=bo then return ao<bo end
+    return tostring(a.name)<tostring(b.name)
+  end)
+  for _,obj in ipairs(scene.objects) do
+    local detail="• "..tostring(obj.type).." | "..tostring(obj.name)..
+      " | "..tostring(obj.id)
+    if obj.source then
+      detail=detail.." | "..tostring(obj.source.scale).." | "..tostring(obj.source.source_id)
+    end
+    lines[#lines+1]=detail
+  end
+  items.SceneList.PlainText=table.concat(lines,"\n")
+end
+
+local function refresh(preferredSceneId)
+  local previous=preferredSceneId
+  if not previous then
+    local selected=selected_scene()
+    previous=selected and selected.scene_id or nil
+  end
   local ok2,scenes,err=pcall(service.list_scenes,resolve)
+  items.SceneContext:Clear()
+  sceneContexts={}
   if not ok2 or not scenes then
     items.SceneList.PlainText="Timeline scene listing unavailable: "..tostring(err or scenes)
+    items.Status.Text="Scene context unavailable."
     return
+  end
+  sceneContexts=scenes
+  local selectedIndex=1
+  for n,scene in ipairs(scenes) do
+    items.SceneContext:AddItem(string.format("%s | V%d @ %s",
+      tostring(scene.name),scene.track,tostring(scene.start_frame)))
+    if previous and scene.scene_id==previous then selectedIndex=n end
   end
   if #scenes==0 then
     items.SceneList.PlainText=(err and ("No readable CartoRig scenes. Warning: "..tostring(err))
       or "No CartoRig scenes in the active timeline.")
     return
   end
-  local lines={}
-  if err then lines[#lines+1]="Warning: "..tostring(err) end
-  for n,scene in ipairs(scenes) do
-    lines[#lines+1]=string.format("%d. %s  |  Track V%d  |  Frame %s",
-      n,tostring(scene.name),scene.track,tostring(scene.start_frame))
-    lines[#lines+1]="   Scene UUID: "..tostring(scene.scene_id)
-    lines[#lines+1]="   Objects: "..tostring(#scene.objects)
-  end
-  items.SceneList.PlainText=table.concat(lines,"\n")
+  items.SceneContext.CurrentIndex=selectedIndex-1
+  render_selected_scene()
+  if err then items.Status.Text="Scene list warning: "..tostring(err) end
 end
+
+local function perform_search()
+  local filterByIndex={"All","Country","State"}
+  local filter=filterByIndex[(tonumber(items.GeoType.CurrentIndex) or 0)+1] or "All"
+  local query=items.SearchLocation.Text or ""
+  local ok2,results,err=pcall(service.search_locations,query,filter)
+  items.SearchResults:Clear()
+  searchResults={}
+  if not ok2 or not results then
+    items.Status.Text="Search failed: "..tostring(err or results)
+    update_add_buttons()
+    return
+  end
+  searchResults=results
+  for _,result in ipairs(results) do
+    local parent=result.parent_name~="" and (" — "..result.parent_name) or ""
+    items.SearchResults:AddItem(
+      tostring(result.canonical_name).." — "..tostring(result.geo_type)..parent..
+      " | "..tostring(result.geometry).." | "..tostring(result.scale)
+    )
+  end
+  if #results==0 then
+    items.Status.Text="Location not found in installed offline data"
+  else
+    items.SearchResults.CurrentIndex=0
+    items.Status.Text=tostring(#results).." offline result(s). Search does not modify the Scene."
+  end
+  update_add_buttons()
+end
+
+local function add_selected(expectedType)
+  local scene=selected_scene()
+  if not scene then record("Add "..expectedType,false,"Choose a structural Scene target");return end
+  local result=selected_result()
+  if not result then record("Add "..expectedType,false,"Choose a search result");return end
+  if result.geo_type~=expectedType then
+    record("Add "..expectedType,false,"Selected result is "..tostring(result.geo_type))
+    return
+  end
+  local ok2,value,err=pcall(service.add_region,resolve,scene.scene_id,result.source_id)
+  if not ok2 then
+    record("Add "..expectedType,false,"Resolve/Fusion API failure: "..tostring(value))
+    return
+  end
+  if not value then
+    record("Add "..expectedType,false,tostring(err))
+    refresh(scene.scene_id)
+    return
+  end
+  record("Add "..expectedType,true,"Node created: "..tostring(value.node_name)..
+    " | source "..tostring(value.source.source_id).." | "..tostring(value.source.scale))
+  refresh(scene.scene_id)
+end
+
+function window.On.SceneContext.CurrentIndexChanged(ev)
+  render_selected_scene()
+end
+function window.On.SearchResults.CurrentIndexChanged(ev)
+  update_add_buttons()
+end
+function window.On.Search.Clicked(ev)
+  perform_search()
+end
+function window.On.SearchLocation.ReturnPressed(ev)
+  perform_search()
+end
+function window.On.AddCountry.Clicked(ev)
+  add_selected("Country")
+end
+function window.On.AddState.Clicked(ev)
+  add_selected("State")
+end
+
 function window.On.CreateScene.Clicked(ev)
   local title=items.SceneTitle.Text
   if type(title)~="string" or title:match("^%s*$") then
@@ -210,8 +348,9 @@ function window.On.CreateScene.Clicked(ev)
     detail=detail.."; warnings: "..table.concat(value.warnings," | ")
   end
   record("Create Scene",true,detail)
-  refresh()
+  refresh(value.scene_id)
 end
+
 function window.On.SaveReport.Clicked(ev)
   local temp=os.getenv("TEMP") or os.getenv("TMP")
   if not temp then items.Status.Text="Cannot locate Windows TEMP";return end
