@@ -150,6 +150,8 @@ class InstallerSafetyTests(unittest.TestCase):
             'service.rename_object,resolve,scene.scene_id,obj.id,newName',s)
         self.assertIn('ID="ObjectContext"',s)
         self.assertIn('ID="RenameObject"',s)
+        self.assertIn('ID="RepairPalette"',s)
+        self.assertIn('service.repair_palette,resolve,scene.scene_id',s)
         self.assertNotIn('SetActiveTool',s)
         self.assertNotIn('TOOLB_Selected',s)
         self.assertNotIn('Open Scene',s)
