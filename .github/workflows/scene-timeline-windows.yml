@@ -34,7 +34,8 @@ jobs:
           git -C build\natural-earth sparse-checkout init --no-cone
           @(
             '/50m_physical/ne_50m_land.*',
-            '/50m_cultural/ne_50m_admin_0_countries.*',
+            '/50m_cultural/ne_50m_admin_0_countries.*
+          /50m_cultural/ne_50m_admin_0_boundary_lines_land.*',
             '/10m_cultural/ne_10m_admin_1_states_provinces.*',
             '/50m_cultural/ne_50m_populated_places.*'
           ) | Set-Content -Encoding ascii build\natural-earth\.git\info\sparse-checkout
