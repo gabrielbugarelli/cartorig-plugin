@@ -6,11 +6,18 @@ function comp:GetToolList()
 end
 function comp:AddTool(regid,x,y)
   assert(type(regid)=="string" and type(x)=="number" and type(y)=="number")
-  local tool={regid=regid,name=regid,data={},links={}}
+  local tool={regid=regid,name=regid,data={},links={},inputs={}}
   function tool:GetAttrs() return {TOOLS_RegID=self.regid,TOOLS_Name=self.name,__flags=1} end
   function tool:SetAttrs(values) if values.TOOLS_Name then self.name=values.TOOLS_Name end end
   function tool:GetData(key) return self.data[key] end
   function tool:SetData(key,value) self.data[key]=value end
+  function tool:SetInput(key,value,time)
+    self.inputs[key..":"..tostring(time or "undefined")]=value
+    return nil
+  end
+  function tool:GetInput(key,time)
+    return self.inputs[key..":"..tostring(time or "undefined")]
+  end
   function tool:FindInput(name)
     local owner=self
     return {GetConnectedOutput=function()
@@ -39,6 +46,8 @@ assert(fusion.set_attrs(background,{TOOLS_Name="BG"},"Background"))
 assert(assert(fusion.attrs(background,"Background")).TOOLS_Name=="BG")
 assert(fusion.set_data(background,"CartoRig.Test","value","test metadata"))
 assert(fusion.get_data(background,"CartoRig.Test")=="value")
+assert(fusion.set_input(background,"IdentityInfo","Country — Brazil","Identity"))
+assert(fusion.get_input(background,"IdentityInfo")=="Country — Brazil")
 
 assert(fusion.connect(media,"Input",background))
 local input=assert(fusion.find_input(media,"Input"))
