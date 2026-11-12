@@ -8,6 +8,7 @@ TOOLS={
     "WorldMap":("CartoRigWorldMap","CT_SourceTool"),
     "Camera":("CartoRigCamera","CT_Tool"),
     "Scene":("CartoRigScene","CT_Tool"),
+    "Region":("CartoRigRegion","CT_Tool"),
 }
 
 class FuseContractTests(unittest.TestCase):
@@ -31,13 +32,36 @@ class FuseContractTests(unittest.TestCase):
         self.assertNotIn("Open Scene",source)
         self.assertNotIn("SetActiveTool",source)
         self.assertNotIn("TOOLB_Selected",source)
+        self.assertIn('service.search_locations,query,filter',source)
+        self.assertIn('service.add_region,resolve,scene.scene_id,result.source_id',source)
+        self.assertIn('ID="SceneContext"',source)
+        self.assertIn('ID="SearchResults"',source)
     def test_land_source_is_offline_and_not_fake(self):
         source=(ROOT/"fuses"/"CartoRigWorldMap.fuse").read_text(encoding="utf-8")
         self.assertIn("ne_50m_land.lua",source)
         self.assertNotIn("http",source)
         self.assertIn("Shape()",source)
         self.assertIn("ImageChannel(img,",source)
-        self.assertGreater((ROOT/"data/ne_50m_land.lua").stat().st_size,500_000)
+        self.assertNotIn("#result~=1422",source)
+        builder=(ROOT/"tools/build_natural_earth.py").read_text(encoding="utf-8")
+        self.assertIn('"50m_physical/ne_50m_land"',builder)
+        self.assertIn('"10m_cultural/ne_10m_admin_1_states_provinces"',builder)
+        self.assertIn('"source_commit": source_commit',builder)
+    def test_region_is_physical_independent_render_with_native_control(self):
+        source=(ROOT/"fuses"/"CartoRigRegion.fuse").read_text(encoding="utf-8")
+        self.assertIn('INPID_InputControl="TextEditControl"',source)
+        self.assertIn("TEC_ReadOnly=true",source)
+        self.assertIn('"Fill Color"',source)
+        self.assertIn('"Stroke Width (px)"',source)
+        self.assertIn('"Opacity"',source)
+        self.assertIn('"Visibility"',source)
+        self.assertIn("input:CopyOf()",source)
+        self.assertIn("Shape()",source)
+        self.assertIn("OutlineOfShape",source)
+        self.assertIn('self:GetData("CartoRig.V1.GeometryFile")',source)
+        self.assertIn('self:GetData("CartoRig.V1.SourceId")',source)
+        self.assertNotIn("http",source)
+
     def test_factory_hard_fail_on_unregistered_fuses(self):
         source=(ROOT/"src/CartoRig/node_factory.lua").read_text(encoding="utf-8")
         for regid,_ in TOOLS.values():
