@@ -92,14 +92,31 @@ class FuseContractTests(unittest.TestCase):
         self.assertIn("data.ring_roles", region)
         self.assertIn('"InheritWorldMapFill"', region)
         self.assertIn("function NotifyChanged(inp,param,time)", region)
-        self.assertIn('tool:GetData("CartoRig.V1.SceneId")', region)
-        self.assertIn("world:GetInput(prefix..suffix,req.Time)", region)
+        self.assertIn('WorldLandControls=inherited_color_inputs', region)
+        self.assertIn('WorldBorderControls=inherited_color_inputs', region)
+        self.assertIn('IC_Visible=false,INP_External=true,INP_Active=true', region)
+        self.assertNotIn("self.Comp:GetToolList", region)
+        self.assertNotIn("world:GetInput", region)
         self.assertIn('"InheritWorldMapBorder"', region)
-        self.assertIn('inherited_world_color(req,"Border")', region)
+        self.assertIn('inherited_world_color(req,WorldLandControls,"Land")', region)
+        self.assertIn('inherited_world_color(req,WorldBorderControls,"Border")', region)
+        factory=(ROOT/"src"/"CartoRig"/"node_factory.lua").read_text(encoding="utf-8")
+        self.assertIn('link_region_palette(region,chain.world)', factory)
+        self.assertIn('api.call(input,"SetExpression",expression)', factory)
+        self.assertIn('api.call(input,"GetExpression")', factory)
+        self.assertIn('NAMES.WorldMap.."."..prefix..suffix', factory)
         self.assertIn("InInheritBorder:SetSource(Number(1),time)", region)
         self.assertIn("readnum(InInheritLand,req", region)
         self.assertIn('"ResetStyle"', region)
         self.assertIn("InInheritLand:SetSource(Number(1),time)", region)
+
+    def test_region_process_does_not_query_fusion_graph_during_render(self):
+        source=(ROOT/"fuses"/"CartoRigRegion.fuse").read_text(encoding="utf-8")
+        render=source[source.index("function Process(req)"):]
+        for forbidden in ("GetToolList(", "GetInput(", "FindInput(", "self.Comp:"):
+            self.assertNotIn(forbidden,render,
+                "Region render cannot perform host graph lookups: "+forbidden)
+        self.assertIn("readnum(inputs[index],req",source)
 
     def test_camera_reset_is_a_native_state_change_not_a_placeholder(self):
         camera = (ROOT/"fuses"/"CartoRigCamera.fuse").read_text(encoding="utf-8")
