@@ -39,7 +39,8 @@ local function fake()
    end}
   end
   function tool:ConnectInput(port,other)
-   if comp.fail_link==port and self.regid=="MediaOut" then return false end
+   if comp.fail_link==port and comp.fail_link_regid==self.regid then return false end
+   if comp.fail_link==port and not comp.fail_link_regid and self.regid=="MediaOut" then return false end
    self.links[port]=other
    return true
   end
@@ -181,6 +182,48 @@ local beforeMismatch=#comp.tools
 local mismatchResult,mismatchErr=factory.add_region(comp,mismatched,{localappdata=ROOT})
 assert(mismatchResult==nil and mismatchErr:match("DATA_INCOMPATIBLE"))
 assert(#comp.tools==beforeMismatch)
+
+-- Class ordering is independent of click order: State added before Country must
+-- still render after Country and before the shared Camera.
+local orderedComp,orderedMedia=fake()
+local orderedScene=assert(factory.create_scene(orderedComp,"Order test",{localappdata=ROOT}))
+local orderedState=assert(factory.add_region(orderedComp,matoFeature,{localappdata=ROOT}))
+local orderedCountry=assert(factory.add_region(orderedComp,brazilFeature,{localappdata=ROOT}))
+local orderedCamera,orderedWorld,orderedStateTool,orderedCountryTool
+for _,tool in ipairs(orderedComp.tools) do
+ local typ=tool:GetData("CartoRig.V1.ObjectType")
+ if typ=="Camera" then orderedCamera=tool
+ elseif typ=="WorldMap" then orderedWorld=tool
+ elseif typ=="State" then orderedStateTool=tool
+ elseif typ=="Country" then orderedCountryTool=tool end
+end
+assert(orderedCamera and orderedWorld and orderedStateTool and orderedCountryTool)
+assert(orderedCountryTool.links.Background==orderedWorld)
+assert(orderedStateTool.links.Background==orderedCountryTool)
+assert(orderedCamera.links.Input==orderedStateTool,
+ "managed render chain must remain WorldMap -> Country -> State -> Camera")
+
+-- Failure while wiring the new Region to its successor must restore the old
+-- managed chain and remove the new node.
+local rollbackComp,rollbackMedia=fake()
+assert(factory.create_scene(rollbackComp,"Region rollback",{localappdata=ROOT}))
+local rollbackCamera
+local rollbackWorld
+for _,tool in ipairs(rollbackComp.tools) do
+ local typ=tool:GetData("CartoRig.V1.ObjectType")
+ if typ=="Camera" then rollbackCamera=tool end
+ if typ=="WorldMap" then rollbackWorld=tool end
+end
+rollbackComp.fail_link="Input"
+rollbackComp.fail_link_regid="Fuse.CartoRigCamera"
+local regionFailure,regionFailureErr=factory.add_region(rollbackComp,brazilFeature,{localappdata=ROOT})
+assert(regionFailure==nil and regionFailureErr:match("REGION_CREATE_FAILED"))
+rollbackComp.fail_link=nil
+rollbackComp.fail_link_regid=nil
+assert(rollbackCamera.links.Input==rollbackWorld,
+ "failed Region transaction must restore Camera -> WorldMap")
+local rolledBackState=assert(factory.inspect(rollbackComp))
+assert(#rolledBackState.objects==3,"failed Region transaction must not leave an author node")
 
 local sid=made.scene_id
 assert(sid==comp:GetData("CartoRig.V1.SceneId"))
