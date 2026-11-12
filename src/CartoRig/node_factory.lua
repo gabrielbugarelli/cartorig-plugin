@@ -2,6 +2,7 @@
 -- Real Fusion tools only; never selects tools in the Node Editor.
 local domain=require("CartoRig.domain")
 local fusion=require("CartoRig.fusion_contract")
+local api=require("CartoRig.blackmagic_api")
 local factory={}
 
 local P="CartoRig.V1."
