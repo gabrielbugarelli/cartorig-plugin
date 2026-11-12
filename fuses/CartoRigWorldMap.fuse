@@ -7,8 +7,11 @@ FuRegisterClass("CartoRigWorldMap", CT_SourceTool, {
   REG_NoMotionBlurCtrls=true, REG_NoBlendCtrls=true, REG_Version=1,
 })
 local rings=nil
+local borders=nil
 local cachedShape=nil
 local shapeKey=nil
+local cachedBorderShape=nil
+local borderShapeKey=nil
 local function getrings()
   if rings then return rings end
   local localapp=os.getenv("LOCALAPPDATA")
@@ -33,6 +36,30 @@ local function getrings()
   rings=result
   return rings
 end
+local function getborders()
+  if borders then return borders end
+  local localapp=os.getenv("LOCALAPPDATA")
+  if not localapp or localapp=="" then error("DATA_MISSING: LOCALAPPDATA is unavailable") end
+  local filename=localapp.."\\CartoRig\\App\\data\\ne_50m_admin0_borders.lua"
+  local ok,result=pcall(dofile,filename)
+  if not ok or type(result)~="table" or #result==0 then
+    error("DATA_INCOMPATIBLE: Natural Earth Admin 0 boundary lines missing or empty: "..tostring(result))
+  end
+  for lineIndex,line in ipairs(result) do
+    if type(line)~="table" or #line<4 or #line%2~=0 then
+      error("DATA_INCOMPATIBLE: invalid border line "..tostring(lineIndex))
+    end
+    for i=1,#line,2 do
+      local lon,lat=line[i],line[i+1]
+      if type(lon)~="number" or type(lat)~="number" or lon~=lon or lat~=lat or
+         lon<-180 or lon>180 or lat<-90 or lat>90 then
+        error("DATA_INCOMPATIBLE: invalid coordinate in border line "..tostring(lineIndex))
+      end
+    end
+  end
+  borders=result
+  return borders
+end
 local function read(input,req)
   local p=input:GetValue(req)
   if not p or type(p.Value)~="number" then error("Control value unavailable") end
@@ -55,10 +82,22 @@ function Create()
   self:AddControlPage("Control")
   LandControls=colorInput("Land Fill Color","Land",10,214/255,215/255,210/255)
   OceanControls=colorInput("Ocean Fill Color","Ocean",11,21/255,43/255,60/255)
+  BorderControls=colorInput("Border Color","Border",12,117/255,129/255,139/255)
+  InBorderWidth=self:AddInput("Border Width (px)","BorderWidth",{
+    LINKID_DataType="Number",INPID_InputControl="SliderControl",
+    INP_Default=1,INP_MinScale=0,INP_MaxScale=40,INP_MinAllowed=0,INP_MaxAllowed=40,
+  })
+  InBorderOpacity=self:AddInput("Border Opacity","BorderOpacity",{
+    LINKID_DataType="Number",INPID_InputControl="SliderControl",
+    INP_Default=1,INP_MinScale=0,INP_MaxScale=1,INP_MinAllowed=0,INP_MaxAllowed=1,
+  })
   InLandVisible=self:AddInput("Land Visible","LandVisible",{
     LINKID_DataType="Number",INPID_InputControl="CheckboxControl",INP_Integer=true,INP_Default=1,
   })
   InOceanVisible=self:AddInput("Ocean Visible","OceanVisible",{
+    LINKID_DataType="Number",INPID_InputControl="CheckboxControl",INP_Integer=true,INP_Default=1,
+  })
+  InBordersVisible=self:AddInput("Borders Visible","BordersVisible",{
     LINKID_DataType="Number",INPID_InputControl="CheckboxControl",INP_Integer=true,INP_Default=1,
   })
   InLandOpacity=self:AddInput("Land Opacity","LandOpacity",{
@@ -76,7 +115,7 @@ function Create()
   InTransparent=self:AddInput("Background Transparent","BackgroundTransparent",{
     LINKID_DataType="Number",INPID_InputControl="CheckboxControl",INP_Integer=true,INP_Default=0,
   })
-  self:AddInput("Source: Natural Earth 1:50m land (local)", "SourceInfo",{
+  self:AddInput("Source: Natural Earth 1:50m land + Admin 0 boundaries (local)", "SourceInfo",{
     LINKID_DataType="Text", INPID_InputControl="LabelControl",INP_Passive=true,INP_External=false,
   })
   self:AddControlPage("Motion")
@@ -105,6 +144,22 @@ local function getShape(w,h,xaspect,yaspect)
   cachedShape=s;shapeKey=key
   return s
 end
+local function getBorderShape(w,h,xaspect,yaspect)
+  local key=table.concat({w,h,xaspect,yaspect},":")
+  if cachedBorderShape and borderShapeKey==key then return cachedBorderShape end
+  local data=getborders()
+  local s=Shape()
+  local worldscale=math.min(w/360,h/180)
+  local xscale=worldscale/w
+  for _,line in ipairs(data) do
+    s:MoveTo(0.5+line[1]*xscale,(h*0.5+line[2]*worldscale)/w)
+    for k=3,#line,2 do
+      s:LineTo(0.5+line[k]*xscale,(h*0.5+line[k+1]*worldscale)/w)
+    end
+  end
+  cachedBorderShape=s;borderShapeKey=key
+  return s
+end
 function Process(req)
   local realw,realh=Width,Height
   local scale=Scale and Scale>0 and Scale or 1
@@ -131,6 +186,23 @@ function Process(req)
     ic:SetStyleFill(FillStyle())
     ic:ShapeFill(shape)
     ic:PutToImage("CM_Merge",cs)
+  end
+  local borderWidth=read(InBorderWidth,req)
+  local borderAlpha=read(InBorderOpacity,req)*mapOpacity
+  if read(InBordersVisible,req)>=0.5 and borderWidth>0 and borderAlpha>0 then
+    local borderShape=getBorderShape(width,height,XAspect,YAspect)
+    local outline=borderShape:OutlineOfShape(
+      borderWidth/width,"OLT_Solid","OJT_Bevel",8,"SWM_Normal",8)
+    if not outline then error("RENDER_FAILED: WorldMap border outline unavailable") end
+    local borderChannel=ImageChannel(img,req:IsQuick() and 1 or 4)
+    local borderStyle=ChannelStyle()
+    borderStyle.Color=Pixel({
+      R=read(BorderControls[1],req),G=read(BorderControls[2],req),
+      B=read(BorderControls[3],req),A=borderAlpha
+    })
+    borderChannel:SetStyleFill(FillStyle())
+    borderChannel:ShapeFill(outline)
+    borderChannel:PutToImage("CM_Merge",borderStyle)
   end
   OutImage:Set(req,img)
 end
