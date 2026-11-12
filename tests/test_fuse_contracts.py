@@ -70,6 +70,8 @@ class FuseContractTests(unittest.TestCase):
         self.assertIn('"Stroke Width (px)"',source)
         self.assertIn('"Opacity"',source)
         self.assertIn('"Visibility"',source)
+        self.assertIn('"Fit Bounds"',source)
+        self.assertIn('"BoundsInfo"',source)
         self.assertIn("input:CopyOf()",source)
         self.assertIn("Shape()",source)
         self.assertIn("OutlineOfShape",source)
@@ -121,5 +123,7 @@ class FuseContractTests(unittest.TestCase):
         self.assertIn('TRACK_TYPES={"video","audio","subtitle"}',service)
         self.assertNotIn('expected exactly three structural nodes',source)
         self.assertIn('structural={Scene=0,WorldMap=0,Camera=0}',source)
+        self.assertIn('local BOUND_WEST=P.."BoundWest"',source)
+        self.assertIn('fusion.set_input(tool,"BoundsInfo"',source)
 if __name__=="__main__":
     unittest.main()
