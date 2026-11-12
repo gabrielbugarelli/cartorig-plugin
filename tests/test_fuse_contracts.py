@@ -36,6 +36,21 @@ class FuseContractTests(unittest.TestCase):
         self.assertIn('service.add_region,resolve,scene.scene_id,result.dataset_id,result.source_id',source)
         self.assertIn('ID="SceneContext"',source)
         self.assertIn('ID="SearchResults"',source)
+        self.assertIn('ID="ObjectContext"',source)
+        self.assertIn('ID="RenameObject"',source)
+        self.assertIn('service.rename_object,resolve,scene.scene_id,obj.id,newName',source)
+    def test_scene_control_is_read_only_identity_and_diagnostics(self):
+        source=(ROOT/"fuses"/"CartoRigScene.fuse").read_text(encoding="utf-8")
+        self.assertIn('"SceneIdentity"',source)
+        self.assertIn('"SceneLinks"',source)
+        self.assertIn('"SceneData"',source)
+        self.assertIn('INPID_InputControl="TextEditControl"',source)
+        self.assertIn("TEC_ReadOnly=true",source)
+        factory=(ROOT/"src/CartoRig/node_factory.lua").read_text(encoding="utf-8")
+        self.assertIn('fusion.set_input(nodes.Scene,"SceneIdentity"',factory)
+        self.assertIn('fusion.set_input(nodes.Scene,"SceneLinks"',factory)
+        self.assertIn('fusion.set_input(nodes.Scene,"SceneData"',factory)
+
     def test_land_source_is_offline_and_not_fake(self):
         source=(ROOT/"fuses"/"CartoRigWorldMap.fuse").read_text(encoding="utf-8")
         self.assertIn("ne_50m_land.lua",source)
