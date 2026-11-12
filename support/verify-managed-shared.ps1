@@ -22,7 +22,10 @@ $known=@{
     '4b0890527de45bc25d629ace405d3d50ecab1b72539827825daf1a6f340bcedf'
   )
   'camera-fuse'=@('617eaf8578fce3ac21f150eff6124c71070149995e3753cad082b2bde04f4cb3')
-  'region-fuse'=@('4fd67310e2dce94b36e47ad710b7bc8e82865b73dcc90ebb732f04c3d40951ed')
+  'region-fuse'=@(
+    '4fd67310e2dce94b36e47ad710b7bc8e82865b73dcc90ebb732f04c3d40951ed',
+    'c726ddf7b6047e2ab4dda7b0914d2fce7b82f7723f035dbb613655b3fb4d913b'
+  )
 }
 try {
   if(-not [IO.File]::Exists($Path)){ exit 3 }
