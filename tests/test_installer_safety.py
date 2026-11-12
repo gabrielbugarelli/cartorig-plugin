@@ -68,7 +68,7 @@ class InstallerSafetyTests(unittest.TestCase):
         s=self.nsi
         expected=(
             'domain.lua','geo.lua','catalog.lua','blackmagic_api.lua',
-            'fusion_contract.lua','node_factory.lua','timeline_service.lua',
+            'fusion_contract.lua','render_geometry.lua','node_factory.lua','timeline_service.lua',
             'ne_50m_land.lua','ne_50m_admin0_borders.lua','ne_catalog.tsv',
             'natural-earth-manifest.json','CartoRigScene.fuse','CartoRigWorldMap.fuse',
             'CartoRigCamera.fuse','CartoRigRegion.fuse'
@@ -137,7 +137,7 @@ class InstallerSafetyTests(unittest.TestCase):
     def test_support_diagnostic_knows_milestone_a_runtime(self):
         d=self.diagnostic
         for marker in (
-            "blackmagic_api.lua","fusion_contract.lua","ne_catalog.tsv",
+            "blackmagic_api.lua","fusion_contract.lua","render_geometry.lua","ne_catalog.tsv",
             "natural-earth-manifest.json","CartoRigRegion.fuse",
             "REGION_GEOMETRY_FILES","MILESTONE_A_RUNTIME_INCOMPLETE"
         ):
