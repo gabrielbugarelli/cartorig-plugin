@@ -122,6 +122,10 @@ function Create()
   InTransparent=self:AddInput("Background Transparent","BackgroundTransparent",{
     LINKID_DataType="Number",INPID_InputControl="CheckboxControl",INP_Integer=true,INP_Default=0,
   })
+  InResetStyle=self:AddInput("Reset WorldMap Style","ResetStyle",{
+    LINKID_DataType="Number",INPID_InputControl="ButtonControl",
+    INP_DoNotifyChanged=true,INP_External=false,
+  })
   self:AddInput("Source: Natural Earth 1:50m land + Admin 0 boundaries (local)", "SourceInfo",{
     LINKID_DataType="Text", INPID_InputControl="LabelControl",INP_Passive=true,INP_External=false,
   })
@@ -131,6 +135,28 @@ function Create()
   })
   OutImage=self:AddOutput("Output","Output",{LINKID_DataType="Image",LINK_Main=1})
 end
+function NotifyChanged(inp,param,time)
+  if inp~=InResetStyle then return end
+  for i,value in ipairs({214/255,215/255,210/255}) do
+    LandControls[i]:SetSource(Number(value),time)
+  end
+  for i,value in ipairs({21/255,43/255,60/255}) do
+    OceanControls[i]:SetSource(Number(value),time)
+  end
+  for i,value in ipairs({117/255,129/255,139/255}) do
+    BorderControls[i]:SetSource(Number(value),time)
+  end
+  InBorderWidth:SetSource(Number(1),time)
+  InBorderOpacity:SetSource(Number(1),time)
+  InLandVisible:SetSource(Number(1),time)
+  InOceanVisible:SetSource(Number(1),time)
+  InBordersVisible:SetSource(Number(1),time)
+  InLandOpacity:SetSource(Number(1),time)
+  InOceanOpacity:SetSource(Number(1),time)
+  InMapOpacity:SetSource(Number(1),time)
+  InTransparent:SetSource(Number(0),time)
+end
+
 local function getShape(w,h,xaspect,yaspect)
   local key=table.concat({w,h,xaspect,yaspect},":")
   if cachedShape and shapeKey==key then return cachedShape end
