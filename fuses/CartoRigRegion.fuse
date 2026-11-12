@@ -24,6 +24,7 @@ local function colorInput(title,base,group,r,g,b)
       LINKID_DataType="Number", INPID_InputControl="ColorControl",
       IC_ControlGroup=group, IC_ControlID=i-1,
       INP_Default=defaults[i], INP_MinScale=0, INP_MaxScale=1,
+      INP_DoNotifyChanged=(base=="Fill"),
       INP_MinAllowed=0, INP_MaxAllowed=1,
     })
   end
@@ -48,6 +49,10 @@ function Create()
     TEC_Wrap=true, TEC_ReadOnly=true, INP_Passive=true, INP_External=false,
   })
 
+  InInheritLand=self:AddInput("Inherit WorldMap Land Color","InheritWorldMapFill",{
+    LINKID_DataType="Number", INPID_InputControl="CheckboxControl",
+    INP_Integer=true, INP_Default=1,
+  })
   FillControls=colorInput("Fill Color","Fill",10,214/255,215/255,210/255)
   InFillOpacity=self:AddInput("Fill Opacity","FillOpacity",{
     LINKID_DataType="Number", INPID_InputControl="SliderControl",
@@ -87,6 +92,53 @@ function Create()
   OutImage=self:AddOutput("Output","Output",{LINKID_DataType="Image",LINK_Main=1})
 end
 
+-- Editing a Color Picker immediately makes this node independent from the
+-- WorldMap palette. Re-check Inherit to restore the live scene default.
+function NotifyChanged(inp,param,time)
+  if FillControls then
+    for _,control in ipairs(FillControls) do
+      if inp==control and InInheritLand then
+        InInheritLand:SetSource(Number(0),time)
+        return
+      end
+    end
+  end
+end
+
+local function inherited_land_color(req)
+  local scene_id=self:GetData("CartoRig.V1.SceneId")
+  if type(scene_id)~="string" or scene_id=="" then
+    error("REGION_INHERIT_FAILED: scene UUID missing")
+  end
+  if not self.Comp then error("REGION_INHERIT_FAILED: composition unavailable") end
+  local ok,list=pcall(function() return self.Comp:GetToolList(false) end)
+  if not ok or type(list)~="table" then
+    error("REGION_INHERIT_FAILED: unable to inspect managed WorldMap")
+  end
+  local world=nil
+  for _,tool in pairs(list) do
+    local valid,owned,kind,sid=pcall(function()
+      return tool:GetData("CartoRig.V1.Owned"),
+             tool:GetData("CartoRig.V1.ObjectType"),
+             tool:GetData("CartoRig.V1.SceneId")
+    end)
+    if valid and owned==true and kind=="WorldMap" and sid==scene_id then
+      if world then error("REGION_INHERIT_FAILED: ambiguous WorldMap") end
+      world=tool
+    end
+  end
+  if not world then error("REGION_INHERIT_FAILED: WorldMap not found") end
+  local color={}
+  for index,suffix in ipairs({"R","G","B"}) do
+    local readOk,value=pcall(function() return world:GetInput("Land"..suffix,req.Time) end)
+    if not readOk or type(value)~="number" or value<0 or value>1 then
+      error("REGION_INHERIT_FAILED: WorldMap Land Color unavailable")
+    end
+    color[index]=value
+  end
+  return color
+end
+
 local function geometry_path()
   local localapp=os.getenv("LOCALAPPDATA")
   if not localapp or localapp=="" then
@@ -113,7 +165,18 @@ local function get_geometry()
   if type(expected)~="string" or expected=="" or data.source_id~=expected then
     error("DATA_INCOMPATIBLE: Region source identity mismatch")
   end
+  if data.version~=self:GetData("CartoRig.V1.SourceVersion") or
+     data.scale~=self:GetData("CartoRig.V1.SourceScale") then
+    error("DATA_INCOMPATIBLE: Region source version/scale mismatch")
+  end
+  if data.topology_schema~=2 or type(data.ring_roles)~="table" or
+     #data.ring_roles~=#data.rings then
+    error("DATA_INCOMPATIBLE: Region polygon topology unavailable")
+  end
   for ringIndex,ring in ipairs(data.rings) do
+    if data.ring_roles[ringIndex]~="outer" and data.ring_roles[ringIndex]~="hole" then
+      error("DATA_INCOMPATIBLE: invalid Region ring role")
+    end
     if type(ring)~="table" or #ring<6 or #ring%2~=0 then
       error("DATA_INCOMPATIBLE: invalid Region ring "..tostring(ringIndex))
     end
@@ -172,11 +235,17 @@ function Process(req)
   local data=get_geometry()
   local shape=make_shape(data,out.Width,out.Height)
 
-  paint(out,shape,{
-    readnum(FillControls[1],req,"Fill R"),
-    readnum(FillControls[2],req,"Fill G"),
-    readnum(FillControls[3],req,"Fill B"),
-  },readnum(InFillOpacity,req,"Fill Opacity")*opacity)
+  local fill
+  if readnum(InInheritLand,req,"Inherit WorldMap Land Color")>=0.5 then
+    fill=inherited_land_color(req)
+  else
+    fill={
+      readnum(FillControls[1],req,"Fill R"),
+      readnum(FillControls[2],req,"Fill G"),
+      readnum(FillControls[3],req,"Fill B"),
+    }
+  end
+  paint(out,shape,fill,readnum(InFillOpacity,req,"Fill Opacity")*opacity)
 
   local width=readnum(InStrokeWidth,req,"Stroke Width")
   local strokeAlpha=readnum(InStrokeOpacity,req,"Stroke Opacity")*opacity
