@@ -5,7 +5,7 @@ CartoRig builds its installed geography from one pinned checkout of
 
 `f1890d9f152c896d250a77557a5751a93d494776`
 
-The build runs in GitHub Actions with `tools/build_natural_earth.py`. End users
+The build runs in the CartoRig installer build with `tools/build_natural_earth.py`. End users
 never install Python, GIS tools or source shapefiles.
 
 ## Bundled Milestone A datasets
