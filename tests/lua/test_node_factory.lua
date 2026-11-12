@@ -1,4 +1,7 @@
 -- Isolated unit fakes: verifies safety and domain logic, NOT Fusion host acceptance.
+-- Deliberately provide no global API. Palette binding must use the
+-- module's own lexical require("CartoRig.blackmagic_api"), never _G.api.
+_G.api=nil
 local factory=require("CartoRig.node_factory")
 local domain=require("CartoRig.domain")
 local ROOT="tests/fixtures/local-data-test"
