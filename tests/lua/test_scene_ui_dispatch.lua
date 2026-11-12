@@ -44,6 +44,9 @@ local items={
   SearchResults=ui:ComboBox{ID="SearchResults"},
   AddCountry={Enabled=false},
   AddState={Enabled=false},
+  ObjectContext=ui:ComboBox{ID="ObjectContext"},
+  RenameObjectName={Text=""},
+  RenameObject={Enabled=false},
   SceneList={PlainText=""},
   Status={Text=""}
 }
@@ -104,6 +107,19 @@ function service.add_region(received,scene_id,dataset_id,source_id)
     node_name=object.name,display_name="Brazil",source=object.source
   }
 end
+function service.rename_object(received,scene_id,object_id,new_name)
+  assert(received==realResolve)
+  assert(scene_id=="test-scene-1")
+  assert(object_id=="country-br-1")
+  assert(new_name=="Brazil Highlight")
+  local object=created[1].objects[4]
+  assert(object.id=="country-br-1" and object.name=="CR_Country_Brazil_001")
+  object.display_name=new_name
+  return {
+    scene_id=scene_id,object_id=object.id,object_type=object.type,
+    node_name=object.name,display_name=new_name
+  }
+end
 package.loaded["CartoRig.timeline_service"]=service
 
 local dispatcher={window=nil}
@@ -111,8 +127,8 @@ function dispatcher:AddWindow(options,layout)
   assert(options.ID=="CartoRigDevSceneWindow")
   assert(layout~=nil)
   local window={On={
-    CreateScene={},SceneContext={},SearchResults={},Search={},SearchLocation={},
-    AddCountry={},AddState={},SaveReport={},Close={},CartoRigDevSceneWindow={}
+    CreateScene={},SceneContext={},ObjectContext={},SearchResults={},Search={},SearchLocation={},
+    AddCountry={},AddState={},RenameObject={},SaveReport={},Close={},CartoRigDevSceneWindow={}
   }}
   function window:GetItems() return items end
   function window:Show() self.visible=true end
@@ -137,6 +153,19 @@ function dispatcher:RunLoop()
   assert(items.SearchResults._items[1]:find("natural-earth-admin0-countries v5.1.1",1,true),
     "Search result must expose dataset/version provenance")
   self.window.On.AddCountry.Clicked({})
+
+  -- A03: choose Brazil only in the structural object selector, then Rename.
+  local countryIndex=nil
+  for index,label in ipairs(items.ObjectContext._items) do
+    if label:find("Country — Brazil",1,true) then countryIndex=index-1;break end
+  end
+  assert(countryIndex~=nil,"Country must be present in structural object selector")
+  items.ObjectContext.CurrentIndex=countryIndex
+  self.window.On.ObjectContext.CurrentIndexChanged({})
+  assert(items.RenameObject.Enabled==true)
+  assert(items.RenameObjectName.Text=="Brazil")
+  items.RenameObjectName.Text="Brazil Highlight"
+  self.window.On.RenameObject.Clicked({})
 end
 function dispatcher:ExitLoop() end
 
@@ -165,19 +194,23 @@ assert(ok,"Scene UI must not crash when raw Resolve global is numeric: "..tostri
 assert(status==true,"Scene UI should finish normally: "..tostring(reason))
 assert(calls==1,"Scene UI failed to recover the Resolve object exactly once")
 assert(#created==5,"Five Create Scene clicks should invoke the timeline service five times")
-assert(#history>=7 and history[1]==0,
-  "Scene list must refresh initially, after Create Scene and after Add Country")
+assert(#history>=8 and history[1]==0,
+  "Scene list must refresh initially, after Create Scene, Add Country and Rename")
 assert(#created[1].objects==4 and created[1].objects[4].name=="CR_Country_Brazil_001",
   "Country must be added to selected structural Scene")
+assert(created[1].objects[4].id=="country-br-1" and
+       created[1].objects[4].display_name=="Brazil Highlight",
+  "Rename must preserve UUID/node name and update display name only")
 for n=2,5 do
   assert(#created[n].objects==3,"search/add must not mutate a different Scene")
 end
 assert(items.SceneList.PlainText:find("CR_Country_Brazil_001",1,true),
   "Selected Scene object list must display created Country")
-assert(items.Status.Text:find("Node created: CR_Country_Brazil_001",1,true))
+assert(items.Status.Text:find("Display name changed to Brazil Highlight",1,true))
+assert(items.Status.Text:find("CR_Country_Brazil_001",1,true))
 assert(selectedToolCalls==0,"Scene structural UI must never select a Fusion node")
 assert(dispatcher.window.visible==false)
-assert(#buttons==6,"Expected Create/Search/Add Country/Add State/Save Report/Close")
+assert(#buttons==7,"Expected Create/Search/Add Country/Add State/Rename/Save Report/Close")
 for _,button in ipairs(buttons) do assert(button~="Open Scene") end
 
 _G.resolve=prior.resolve
@@ -187,4 +220,4 @@ _G.fu=prior.fu
 os.getenv=prior.getenv
 package.path=prior.packagepath
 package.loaded["CartoRig.timeline_service"]=prior.service
-print("scene_ui_dispatch: PASS (5 Scenes + offline search + structural Country add; host NOT RUN)")
+print("scene_ui_dispatch: PASS (5 Scenes + offline search + structural Country add/rename; host NOT RUN)")
