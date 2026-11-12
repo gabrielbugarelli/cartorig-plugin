@@ -57,6 +57,7 @@ end
 function mock.create_scene(received,title,binding)
   assert(received==realResolve and binding==a)
   assert(active==compA and title=="Map Scene")
+  if a.has_scene then return nil,"SCENE_EXISTS: use Open Scene" end
   created=created+1
   a.has_scene=true
   a.scene_id="scene-A"
@@ -126,7 +127,7 @@ function dispatcher:RunLoop()
   w.On.CreateScene.Clicked({})
   assert(created==1 and a.has_scene)
   w.On.CreateScene.Clicked({})
-  assert(created==1 and items.Status.Text:find("SCENE_EXISTS",1,true)==nil,
+  assert(created==1 and items.Status.Text:find("SCENE_EXISTS",1,true)~=nil,
     "second Create Scene must be blocked by the service")
   w.On.OpenScene.Clicked({})
   assert(a.scene_id=="scene-A")
