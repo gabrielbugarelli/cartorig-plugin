@@ -1,60 +1,74 @@
-# CartoRig 1.0 — technical execution plan
+# CartoRig 1.0 — implementation plan (FINAL normative contract)
 
-## Normative input and invariants
+Normative source: [CartoRig V1 FINAL](CartoRig_Especificacao_de_Produto_e_Implementacao_V1.md).
+Pinned SHA-256: `af25a7816b0d4cb616f81d30f1c2c77b4c663f783c9f8dc41d96e0b2936427c9`.
+All product acceptance refers to this exact file, not a prior timeline-insertion variant.
 
-Source of truth: `CartoRig_Especificacao_de_Produto_e_Implementacao_V1.md`, exact SHA-256 recorded in `SPECIFICATION.sha256`. The specification alone defines V1 product behavior. Do not infer City polygons, silent route anchors, selectable Scene rows, unofficial camera controls, or unimplemented presets.
+## Fundamental product invariants
 
-- Scene UI Manager owns CRUD and search; clicking its object rows never selects the Fusion node or changes Inspector.
-- Fusion Node Editor is the only normal node selection surface.
-- Control and Motion belong to the selected real physical node's native Inspector.
-- Shared real Camera provides all geographic transform; no geoanchor drift.
-- Natural Earth 1:50m is locally installed and versioned; there are no fabricated geodata.
-- Every authored object has immutable UUID, separate node and independent animation.
-- The 12 Motion presets use actual Fusion-editable channels and preserved temporal state.
-- Untrusted or foreign Fusion nodes are never silently mutated.
-- Installation GUI, offline render, save/reopen, alpha and 40 host acceptance cases are mandatory.
+- Scene is a UI Manager structural window; it never edits style or selects a Fusion node.
+- **Create Scene** operates once on the currently active Fusion composition. It must
+  never create a new timeline clip or target a different composition.
+- **Open Scene** reconstructs that composition's managed scene without any mutation.
+- The source graph contains real Scene, WorldMap and Camera nodes, and each Country
+  and State added becomes a real independent Region tool.
+- Persist UUIDs in Fusion node/comp data, never treat visible names as identity.
+- Offline Natural Earth source/version/scale must be checked and persisted.
+- Inspector Control and Motion use native Fusion UI; rendering works with Scene closed.
+- Existing third-party nodes and image paths cannot be overwritten silently.
+- GitHub Actions is used exclusively to package a Windows installer using free
+  GitHub resources. All automated tests run outside Actions.
 
-## Milestones (complete vertical slices)
+## A — Core (current implementation gate)
 
-### A — Core
+1. Bind Scene to the live Fusion composition using the documented
+   `Resolve.Fusion().CurrentComp` API. Verify a stable host handle and fail closed
+   if the composition changes while the Scene window is open.
+2. Implement `Create Scene` / `Open Scene` and static Scene identity/rename on
+   that composition. No timeline insertion, no duplicate structural nodes.
+3. Validate one WorldMap, one Camera and one Scene, with connected MediaOut and
+   safe handling of occupied/foreign outputs. Report rollback failures.
+4. Search the offline catalog and insert Brazil, Argentina and Mato Grosso as
+   physical Country/State Region nodes, keyed by persistent UUIDs. Geometries
+   must be independent, topo-valid, correctly ordered and render without a
+   Scene window.
+5. Make WorldMap and Region Fill/Stroke/Opacity/Visibility live in the native
+   Inspector. Verify per-object overrides, live inheritance, alpha and Reset.
+6. Implement the required static Camera controls (Center/Zoom/Bearing,
+   Focus Target, Fit to Location/Objects, Reset Pose) without implicit keyframes.
+7. Preserve all node/source/UUID state and render after Save/Reopen. Add tests
+   for adversarial host API return values, cloned UUIDs and missing files.
+8. Execute the full source/Lua/geodata gate outside Actions; publish exact
+   command, results, hashes and any `SKIPPED` cases.
+9. Build installer by GitHub Actions only after the source gate. Resolve host
+   acceptance must then demonstrate A01–A05, A15, A16, A19 and applicable
+   B01–B03, B06, B18, B19 on that exact installer hash.
 
-1. Validate Resolve Timeline InsertFusionCompositionIntoTimeline/GetFusionCompByIndex and Fusion scripting/SDK interfaces on a legitimately licensed Windows host; document real exposed APIs and limitations.
-2. Implement local Natural Earth datasets, versioned indexes and search with aliases, hierarchy, geometry availability, canonical identifiers and checksums.
-3. Implement exactly one independent Fusion Composition timeline clip per Create Scene, no Open Scene button, native scene identity/state persistence, Scene UI Manager lifecycle/CRUD transactions, and real physical `Scene`, `WorldMap`, `Camera`, `Country` and `State` nodes.
-4. Connect via managed compositing graph; show correct node Inspector `Control`/`Motion` grouping after direct Node Editor selection; render reproducibly with Scene closed.
-5. Tests: A01–A05, A15, A16, A19 and B01–B03, B06, B18 plus shared contracts. Gate requires real host evidence.
+**Status: NOT COMPLETE.** Source/UI integration is changing to the FINAL
+active-composition model; no licensed host acceptance has been demonstrated
+for this new architecture. Never mark A complete on an installer-only success.
 
-### B — Geography and references
+## B — Geography and references
 
-1. Add physical Continent and Route nodes with WGS84 geodesic and pre-camera quadratic Curved algorithms, adaptive sampling, antimeridian clipping, length-based Trim/Reveal and true polygons.
-2. Create Route from existing objects with mandatory explicit anchors and UUID links; implement Marker linkage, dependency inspection, freeze/cancel and camera-target freezing.
-3. Implement transaction-safe reorder, duplicate/rename/delete, copy-of-composition UUID remap, Undo/rollback and protection of external nodes.
-4. Tests: A06, A13, A14, A18; B05, B07–B11, B16, B19, B20.
+Implement Continent, Route, explicit WGS84 anchors, geodesic and curved paths,
+dependency inspection, Freeze/Cancel, duplication, safe reorder/delete, and
+UUID remapping for cloned compositions.
 
-### C — Appearance and objects
+## C — Appearance and objects
 
-1. Add physical Marker and Label nodes, Unicode text/font fallback and screen-space offsets; independent per-node Control parameters.
-2. Complete WorldMap/Region/Route/Marker/Label styles, Shadow/Glow, override/reset semantics, per-frame cache invalidation and RGBA compositing across HD/QHD/4K.
-3. Tests: A07, A11, A17, B04, B17 and cross-type render/persistence assertions.
+Add physical Marker and Label, shadow/glow, Unicode font fallback, complete
+per-type style controls, consistent alpha and HD/QHD/4K render verification.
 
-### D — Motion and distribution
+## D — Motion and distribution
 
-1. Implement exactly 12 presets by their normative MO- IDs with actual Fusion channels, FPS/frame treatment, native spline compatibility and random-frame evaluation.
-2. Enforce conflicts, idempotent Update, manual `Customized`, protective Remove and independent static styles; Fly To must preserve geoanchors.
-3. Produce reproducible GUI installer/uninstaller through GitHub Actions only, bundling checked Natural Earth assets, version/manifest, docs and complete licenses.
-4. Execute full A01–A20/B01–B20 host matrix including snapshots, render comparisons and load tests (25 Regions / 10 Routes / 20 Markers / 10 Labels).
-5. Release only after CI + integration + Windows package validation + host matrix all PASS on the exact installer SHA-256.
+Implement exactly the twelve MO presets as native editable Fusion channels,
+with non-destructive update/removal, Customized state, spline support, and
+per-frame deterministic evaluation. Re-run A01–A20/B01–B20 on the exact final
+installer and source commit. Publish versioned license notices and docs.
 
-## Vertical completion rule
+## Acceptance and rollback discipline
 
-A slice is not DONE until Scene (if applicable) → node → Inspector → actual renderer → state persistence → error path → automated/host tests is supported and its evidence is tied to a commit/build. A UI-only, fake-data, or isolated renderer exercise cannot mark a V1 requirement complete.
-
-## Critical blockers at foundation stage
-
-- No CartoRig implementation source exists in the original repository.
-- No proven Windows + licensed Resolve Studio 20 self-hosted runner is registered/authorized for protected host testing.
-- No Natural Earth datasets have been legally inventoried, downloaded, verified, or bundled.
-- No installer has been generated, and no A/B host test has been run.
-- GitHub `main` is unprotected; protection/rulesets must be configured using the free repository settings, with required CI checks once their names exist.
-
-Do not silently alter these product contracts to resolve a blocker. The existing MIT LICENSE remains intact.
+A stage is DONE only with source tests, fixture/full-data tests, host Viewer and
+Inspector evidence, render and Save/Reopen on the same candidate. Regressions
+block the stage. The Resolve Studio host cannot be replaced with mocks, static
+checks, GitHub Actions packaging, or claims based on code inspection.
