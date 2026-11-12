@@ -88,9 +88,10 @@ function service.search_locations(query,filter)
     source_version="5.1.1",geometry="Polygon",scale="1:50m"
   }}
 end
-function service.add_region(received,scene_id,source_id)
+function service.add_region(received,scene_id,dataset_id,source_id)
   assert(received==realResolve)
   assert(scene_id=="test-scene-1","structural target must come from SceneContext")
+  assert(dataset_id=="natural-earth-admin0-countries")
   assert(source_id=="br-source")
   local object={
     id="country-br-1",type="Country",name="CR_Country_Brazil_001",
