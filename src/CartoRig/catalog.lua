@@ -70,12 +70,16 @@ function catalog.open(path)
     return nil, "DATA_MISSING: " .. tostring(err)
   end
   local header = stream:read("*l")
+  -- Windows-authored TSV fixtures may use CRLF even when opened in binary mode.
+  -- Remove only a trailing CR; never change the canonical field schema.
+  if header then header=header:gsub("\r$","") end
   if header ~= HEAD then
     stream:close()
     return nil, "DATA_INCOMPATIBLE: unsupported or incomplete index schema"
   end
   local objects, seen, lineno = {}, {}, 1
   for line in stream:lines() do
+    line=line:gsub("\r$","")
     lineno = lineno + 1
     local record, e = validate_record(split_tsv(line), lineno)
     if not record then stream:close(); return nil, e end
