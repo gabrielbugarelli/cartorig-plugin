@@ -43,6 +43,14 @@ CATALOG_HEADER = [
 ]
 
 SOURCE_REPOSITORY = "https://github.com/nvkelso/natural-earth-vector"
+LAND_DATASET = {
+    "stem": "50m_physical/ne_50m_land",
+    "dataset_id": "natural-earth-land",
+    "version": "4.1.0",
+    "scale": "1:50m",
+    "feature_type": "Land",
+}
+
 DATASETS = {
     "countries": {
         "stem": "50m_cultural/ne_50m_admin_0_countries",
@@ -260,10 +268,54 @@ def _reader(root: Path, stem: str) -> shapefile.Reader:
     return shapefile.Reader(str(root / f"{stem}.shp"), encoding="utf-8")
 
 
+def _write_land_runtime(source_root: Path, output_root: Path) -> dict[str, Any]:
+    spec = LAND_DATASET
+    stem = spec["stem"]
+    version = _version_from_source(source_root, stem, spec["version"])
+    reader = _reader(source_root, stem)
+    rings: list[list[tuple[float, float]]] = []
+    feature_count = 0
+    for shape in reader.iterShapes():
+        rings.extend(_rings(shape))
+        feature_count += 1
+    if not rings:
+        raise ValueError("Natural Earth Land contains no polygon rings")
+
+    destination = output_root / "ne_50m_land.lua"
+    with destination.open("w", encoding="utf-8", newline="\n") as stream:
+        stream.write("-- Generated from pinned Natural Earth 1:50m Land. Do not edit.\n")
+        stream.write("return {")
+        for ring in rings:
+            stream.write("{")
+            flattened: list[str] = []
+            for lon, lat in ring:
+                if not (-180 <= lon <= 180 and -90 <= lat <= 90):
+                    raise ValueError("Natural Earth Land contains coordinate outside WGS84 degrees")
+                flattened.extend((_format_number(lon), _format_number(lat)))
+            stream.write(",".join(flattened))
+            stream.write("},")
+        stream.write("}\n")
+
+    return {
+        "dataset_id": spec["dataset_id"],
+        "natural_earth_theme": Path(stem).name,
+        "source_version": version,
+        "scale": spec["scale"],
+        "feature_type": spec["feature_type"],
+        "feature_count": feature_count,
+        "ring_count": len(rings),
+        "source_files_sha256": _dataset_source_hashes(source_root, stem),
+        "generated_runtime": {
+            "path": "ne_50m_land.lua",
+            "sha256": _sha256(destination),
+        },
+    }
+
+
 def build(source_root: Path, output_root: Path, source_commit: str) -> dict[str, Any]:
     output_root.mkdir(parents=True, exist_ok=True)
     catalog_rows: list[list[str]] = []
-    manifest_datasets: list[dict[str, Any]] = []
+    manifest_datasets: list[dict[str, Any]] = [_write_land_runtime(source_root, output_root)]
 
     for key, spec in DATASETS.items():
         stem = spec["stem"]
