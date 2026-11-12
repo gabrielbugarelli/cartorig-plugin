@@ -646,6 +646,77 @@ local function managed_tool_map(existing)
   return map
 end
 
+-- Rename the Scene without renaming its physical structural Tool or UUID.
+-- All writes are verified; failures restore metadata and Inspector text.
+function factory.rename_scene(comp,new_title)
+  if type(new_title)~="string" or new_title:match("^%s*$") then
+    return nil,"INVALID_TITLE: Scene title is required"
+  end
+  local existing,inspectErr=factory.inspect(comp)
+  if not existing then return nil,inspectErr end
+  if not existing.has_scene then return nil,"NO_SCENE: Create Scene first" end
+  local tools,toolErr=managed_tool_map(existing)
+  if not tools then return nil,toolErr end
+  local node=nil
+  for _,obj in ipairs(existing.objects) do
+    if obj.type=="Scene" then
+      node=tools[obj.id]
+      break
+    end
+  end
+  if not node then return nil,"STATE_INVALID: Scene node missing" end
+  local old_title=existing.title
+  local old_display,oldDisplayErr=fusion.get_data(node,DISPLAY,"Scene DisplayName")
+  if oldDisplayErr then return nil,oldDisplayErr end
+  local old_identity,oldIdentityErr=fusion.get_input(node,"SceneIdentity")
+  if oldIdentityErr then return nil,oldIdentityErr end
+  if old_title==new_title then
+    return {scene_id=existing.scene_id,title=new_title,unchanged=true}
+  end
+  local started,startErr=fusion.start_undo(comp,"CartoRig - Rename Scene")
+  if not started then return nil,"SCENE_RENAME_FAILED: "..tostring(startErr) end
+  local ok,why=pcall(function()
+    local written,err=fusion.set_data(comp,TITLE,new_title,"Scene Title")
+    if not written then error(err) end
+    written,err=fusion.set_data(node,DISPLAY,new_title,"Scene DisplayName")
+    if not written then error(err) end
+    local identity=table.concat({
+      "Title: "..new_title,
+      "Scene UUID: "..existing.scene_id,
+      "Schema: "..tostring(existing.schema_version or "1.0.0")
+    },"\\n")
+    written,err=fusion.set_input(node,"SceneIdentity",identity,"Scene Identity")
+    if not written then error(err) end
+    local observed,inspectFailure=factory.inspect(comp)
+    if not observed or observed.title~=new_title or
+       observed.scene_id~=existing.scene_id then
+      error("SCENE_RENAME_STATE_INVALID: "..tostring(inspectFailure))
+    end
+  end)
+  if not ok then
+    local errors={}
+    for _,item in ipairs({
+      {comp,TITLE,old_title,"Scene Title"},
+      {node,DISPLAY,old_display,"Scene DisplayName"}
+    }) do
+      local restored,err=fusion.set_data(item[1],item[2],item[3],item[4])
+      if not restored then errors[#errors+1]=tostring(err) end
+    end
+    local restored,restoreErr=fusion.set_input(node,"SceneIdentity",old_identity,"Scene Identity")
+    if not restored then errors[#errors+1]=tostring(restoreErr) end
+    local ended,endErr=fusion.end_undo(comp,false)
+    if not ended then errors[#errors+1]=tostring(endErr) end
+    return nil,"SCENE_RENAME_FAILED: "..tostring(why)..
+      (#errors==0 and "; transaction rolled back" or
+       "; ROLLBACK_INCOMPLETE: "..table.concat(errors,"; "))
+  end
+  local ended,endErr=fusion.end_undo(comp,true)
+  if not ended then
+    return nil,"SCENE_RENAME_UNVERIFIED: EndUndo(true): "..tostring(endErr)
+  end
+  return {scene_id=existing.scene_id,title=new_title}
+end
+
 local function connected_source_tool(tool,port,label)
   local input,inputErr=input_of(tool,port)
   if not input then return nil,tostring(label)..": "..tostring(inputErr) end
