@@ -125,6 +125,18 @@ Section "Install cartorig-dev"
       Abort
     ${EndIf}
   ${EndIf}
+  ${If} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigRegion.fuse"
+    ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
+      MessageBox MB_OK|MB_ICONSTOP "External CartoRig Region Fuse exists without CartoRig ownership. No files changed." /SD IDOK
+      Abort
+    ${EndIf}
+    ClearErrors
+    ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\verify-managed-shared.ps1" -Path "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigRegion.fuse" -Kind region-fuse' $0
+    ${If} $0 != 0
+      MessageBox MB_OK|MB_ICONSTOP "External CartoRig Region Fuse was modified or is not a recognized CartoRig file. It was preserved and upgrade stopped." /SD IDOK
+      Abort
+    ${EndIf}
+  ${EndIf}
   ; Legacy Comp recovery is allowed only for an older managed installation.
   ; Verify active/backup/pending source bytes BEFORE any delete or rename.
   ${If} ${FileExists} "$LOCALAPPDATA\CartoRig\App\Uninstall-CartoRig.exe"
@@ -198,11 +210,16 @@ Section "Install cartorig-dev"
   File "/oname=node_factory.lua" "..\src\CartoRig\node_factory.lua"
   File "/oname=timeline_service.lua" "..\src\CartoRig\timeline_service.lua"
   SetOutPath "$LOCALAPPDATA\CartoRig\App\data"
-  File "/oname=ne_50m_land.lua" "..\data\ne_50m_land.lua"
+  File "/oname=ne_50m_land.lua" "..\build\cartorig-data\ne_50m_land.lua"
+  File "/oname=ne_catalog.tsv" "..\build\cartorig-data\ne_catalog.tsv"
+  File "/oname=natural-earth-manifest.json" "..\build\cartorig-data\natural-earth-manifest.json"
+  SetOutPath "$LOCALAPPDATA\CartoRig\App\data\regions"
+  File /r "..\build\cartorig-data\regions\*"
   SetOutPath "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses"
   File "/oname=CartoRigScene.fuse" "..\fuses\CartoRigScene.fuse"
   File "/oname=CartoRigWorldMap.fuse" "..\fuses\CartoRigWorldMap.fuse"
   File "/oname=CartoRigCamera.fuse" "..\fuses\CartoRigCamera.fuse"
+  File "/oname=CartoRigRegion.fuse" "..\fuses\CartoRigRegion.fuse"
   SetOutPath "$LOCALAPPDATA\CartoRig\App"
   File "/oname=README.txt" "..\docs\CARTORIG_PREVIEW_TEST.md"
   File "/oname=LICENSE.txt" "..\LICENSE"
@@ -228,6 +245,14 @@ Section "Install cartorig-dev"
     MessageBox MB_OK|MB_ICONSTOP "Offline map data missing; the existing menu script was preserved." /SD IDOK
     Abort
   ${EndIf}
+  ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\data\ne_catalog.tsv"
+    MessageBox MB_OK|MB_ICONSTOP "Offline geography catalog missing; the existing menu script was preserved." /SD IDOK
+    Abort
+  ${EndIf}
+  ${IfNot} ${FileExists} "$LOCALAPPDATA\CartoRig\App\data\natural-earth-manifest.json"
+    MessageBox MB_OK|MB_ICONSTOP "Natural Earth manifest missing; the existing menu script was preserved." /SD IDOK
+    Abort
+  ${EndIf}
   ${IfNot} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigScene.fuse"
     MessageBox MB_OK|MB_ICONSTOP "Scene Fuse missing; the existing menu script was preserved." /SD IDOK
     Abort
@@ -238,6 +263,10 @@ Section "Install cartorig-dev"
   ${EndIf}
   ${IfNot} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigCamera.fuse"
     MessageBox MB_OK|MB_ICONSTOP "Camera Fuse missing; the existing menu script was preserved." /SD IDOK
+    Abort
+  ${EndIf}
+  ${IfNot} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigRegion.fuse"
+    MessageBox MB_OK|MB_ICONSTOP "Region Fuse missing; the existing menu script was preserved." /SD IDOK
     Abort
   ${EndIf}
 
@@ -379,6 +408,12 @@ Section "Uninstall"
         Delete "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigCamera.fuse"
       ${EndIf}
     ${EndIf}
+    ${If} ${FileExists} "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigRegion.fuse"
+      ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$LOCALAPPDATA\CartoRig\App\verify-managed-shared.ps1" -Path "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigRegion.fuse" -Kind region-fuse' $0
+      ${If} $0 == 0
+        Delete "$APPDATA\Blackmagic Design\DaVinci Resolve\Support\Fusion\Fuses\CartoRigRegion.fuse"
+      ${EndIf}
+    ${EndIf}
   ${EndIf}
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\domain.lua"
   Delete "$LOCALAPPDATA\CartoRig\App\lua\CartoRig\geo.lua"
@@ -390,6 +425,9 @@ Section "Uninstall"
   RMDir "$LOCALAPPDATA\CartoRig\App\lua\CartoRig"
   RMDir "$LOCALAPPDATA\CartoRig\App\lua"
   Delete "$LOCALAPPDATA\CartoRig\App\data\ne_50m_land.lua"
+  Delete "$LOCALAPPDATA\CartoRig\App\data\ne_catalog.tsv"
+  Delete "$LOCALAPPDATA\CartoRig\App\data\natural-earth-manifest.json"
+  RMDir /r "$LOCALAPPDATA\CartoRig\App\data\regions"
   RMDir "$LOCALAPPDATA\CartoRig\App\data"
   Delete "$LOCALAPPDATA\CartoRig\App\THIRD_PARTY_NOTICES.txt"
   Delete "$LOCALAPPDATA\CartoRig\App\graph_test.lua"
