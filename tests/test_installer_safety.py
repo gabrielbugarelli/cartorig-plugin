@@ -21,6 +21,19 @@ class InstallerSafetyTests(unittest.TestCase):
         cls.shared=(ROOT/"support/verify-managed-shared.ps1").read_text(encoding="utf-8")
         cls.diagnostic=(ROOT/"support/cartorig-dev-diagnose.ps1").read_text(encoding="utf-8")
 
+    def test_current_fuse_sources_are_recognized_by_strict_ownership(self):
+        # Installer must recognize its own current Fuse bytes without
+        # accepting arbitrary foreign or user-modified Resolve files.
+        for filename in (
+            "CartoRigWorldMap.fuse",
+            "CartoRigCamera.fuse",
+            "CartoRigRegion.fuse",
+        ):
+            source=ROOT/"fuses"/filename
+            digest=normalized_sha256(source)
+            self.assertIn(digest,self.shared,
+                f"installer ownership verifier does not recognize {filename}: {digest}")
+
     def test_github_actions_is_build_only_and_manual(self):
         workflows=sorted((ROOT/".github/workflows").glob("*.y*ml"))
         self.assertEqual(workflows,[self.workflow_path],
