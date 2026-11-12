@@ -30,7 +30,7 @@ Bundled runtime datasets generated from that checkout:
 
 The generated natural-earth-manifest.json records source commit, dataset version,
 scale, coverage, source-file SHA-256 hashes, generated geometry counts and
-generated runtime hashes. Geometry is generated in GitHub Actions; the end user
+generated runtime hashes. Geometry is generated in the CartoRig installer build; the end user
 does not download or prepare geodata manually.
 
 Natural Earth terms:
@@ -38,7 +38,7 @@ https://www.naturalearthdata.com/about/terms-of-use/
 
 NSIS INSTALLER
 - Build-time tool: NSIS 3.x from Chocolatey community packages on a standard
-  free Windows GitHub Actions runner.
+  free Windows the CartoRig installer build runner.
 - The installed executable carries the NSIS zlib/libpng-licensed installer
   and uninstaller runtime. See https://nsis.sourceforge.io/Docs/AppendixI.html
 - Runtime Fusion Fuses and scripts are Lua source; no proprietary Resolve SDK
@@ -46,7 +46,7 @@ NSIS INSTALLER
 
 PYSH (PYSHAPEFILE)
 - Build-time only dependency: pyshp 2.3.1.
-- Used by GitHub Actions to read the pinned Natural Earth shapefiles and generate
+- Used by the CartoRig installer build to read the pinned Natural Earth shapefiles and generate
   CartoRig's offline runtime representation.
 - It is not installed on the end user's machine by CartoRig.
 - Project: https://github.com/GeospatialPython/pyshp
