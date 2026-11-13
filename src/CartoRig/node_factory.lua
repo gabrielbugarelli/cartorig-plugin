@@ -316,7 +316,7 @@ function factory.create_scene(comp,title,opts)
   local existing,inspectErr=factory.inspect(comp)
   if not existing then return nil,inspectErr end
   if existing.has_scene then
-    return nil,"SCENE_EXISTS: this Fusion Composition already contains a CartoRig Scene; Create Scene must target a new timeline item"
+    return nil,"SCENE_EXISTS: active Fusion composition already contains a CartoRig Scene; use Open Scene"
   end
 
   local dataset,dataErr=library_ready(opts.localappdata)
@@ -428,6 +428,18 @@ function factory.create_scene(comp,title,opts)
     if not remaining then
       cleanup[#cleanup+1]="post-rollback inventory unavailable: "..tostring(inventoryErr)
     else
+      -- Check ALL additions, not only Tools returned by AddTool. A Fusion
+      -- proxy may return nil after creating one or more Tool side effects.
+      -- Such an addition must never be reported as fully rolled back.
+      local original={}
+      for _,previous in ipairs(existing.existing_tools) do original[previous]=true end
+      for _,currentTool in ipairs(remaining) do
+        if not original[currentTool] then
+          local attributes=fusion.attrs(currentTool,"untracked added tool")
+          cleanup[#cleanup+1]="unexpected Tool remained after rollback: "..
+            tostring(attributes and attributes.TOOLS_Name or "unknown")
+        end
+      end
       for _,createdTool in ipairs(created) do
         for _,currentTool in ipairs(remaining) do
           if currentTool==createdTool then
