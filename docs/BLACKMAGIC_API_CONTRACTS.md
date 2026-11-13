@@ -22,6 +22,25 @@ A public mirror of the Blackmagic README snapshot dated 18 Aug 2025 (Resolve
 licensed Resolve installation. Before any release claim, the README shipped
 with the target Resolve Studio 20 installation remains authoritative.
 
+## Native Fuse Input temporal contract
+
+Blackmagic's **Fusion Fuse SDK** distinguishes two signatures that must not be
+interchanged:
+
+- `Input:GetValue(request)` requires the **Request object** supplied to
+  `Process(req)`.
+- `Input:GetSource(number frame)` reads a control's **Parameter** at a
+  numeric frame, including the `time` argument to `NotifyChanged(inp,param,time)`.
+- `Input:SetSource(Parameter, number frame)` changes the value at the specified
+  frame; if that input is already animated, it affects the appropriate
+  keyframe. A static camera action does not add a preset or animator itself,
+  but it must not promise to preserve an existing animated channel unchanged.
+
+`CartoRigCamera.fuse` uses `GetSource(time)` for Focus/Fit buttons and
+`GetValue(req)` only in the render function. The local regression test
+`tests/lua/test_camera_fuse.lua` rejects a numeric event frame being passed
+to `GetValue`. Real Resolve Studio 20 acceptance remains mandatory.
+
 ## Collection shapes
 
 | API | Blackmagic contract | CartoRig handling |
