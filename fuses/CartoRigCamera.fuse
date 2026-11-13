@@ -27,6 +27,52 @@ function Create()
     INP_Default=0,INP_MinScale=-180,INP_MaxScale=180,
     INP_MinAllowed=-180,INP_MaxAllowed=180
   })
+  -- Explicit target coordinates are edited only in Camera Control. No
+  -- automatic geographic search or camera movement occurs when Regions are added.
+  InTargetLat=self:AddInput("Focus Target Latitude (deg)","TargetLatitude",{
+    LINKID_DataType="Number",INPID_InputControl="SliderControl",
+    INP_Default=0,INP_MinScale=-90,INP_MaxScale=90,
+    INP_MinAllowed=-90,INP_MaxAllowed=90,
+  })
+  InTargetLon=self:AddInput("Focus Target Longitude (deg)","TargetLongitude",{
+    LINKID_DataType="Number",INPID_InputControl="SliderControl",
+    INP_Default=0,INP_MinScale=-180,INP_MaxScale=180,
+    INP_MinAllowed=-180,INP_MaxAllowed=180,
+  })
+  InFocusTarget=self:AddInput("Focus Target (Static)","FocusTarget",{
+    LINKID_DataType="Number",INPID_InputControl="ButtonControl",
+    INP_DoNotifyChanged=true,INP_InitialNotify=false,INP_External=false,
+  })
+  -- Location bounds are explicit WGS84 coordinates supplied by the user.
+  -- Fitting does not add Region, Label, Route or a Motion preset.
+  local function bound(title,id,value,min,max,hidden)
+    return self:AddInput(title,id,{
+      LINKID_DataType="Number",INPID_InputControl="SliderControl",
+      INP_Default=value,INP_MinScale=min,INP_MaxScale=max,
+      INP_MinAllowed=min,INP_MaxAllowed=max,
+      IC_Visible=not hidden,INP_External=true,
+    })
+  end
+  InLocWest=bound("Location West (deg)","LocationWest",-180,-180,180)
+  InLocSouth=bound("Location South (deg)","LocationSouth",-90,-90,90)
+  InLocEast=bound("Location East (deg)","LocationEast",180,-180,180)
+  InLocNorth=bound("Location North (deg)","LocationNorth",90,-90,90)
+  InAspect=bound("Fit Output Aspect Ratio","FitAspect",16/9,0.25,8)
+  InFitLocation=self:AddInput("Fit to Location Bounds (Static)","FitToLocation",{
+    LINKID_DataType="Number",INPID_InputControl="ButtonControl",
+    INP_DoNotifyChanged=true,INP_InitialNotify=false,INP_External=false,
+  })
+  -- Populated transactionally by NodeFactory from the exact managed Region
+  -- bounding boxes. These are not editable editorial geography controls.
+  InObjectsPresent=bound("Regions Available","ObjectsPresent",0,0,1,true)
+  InObjectsWest=bound("Objects West","ObjectsWest",-180,-180,180,true)
+  InObjectsSouth=bound("Objects South","ObjectsSouth",-90,-90,90,true)
+  InObjectsEast=bound("Objects East","ObjectsEast",180,-180,180,true)
+  InObjectsNorth=bound("Objects North","ObjectsNorth",90,-90,90,true)
+  InFitObjects=self:AddInput("Fit to Added Objects (Static)","FitToObjects",{
+    LINKID_DataType="Number",INPID_InputControl="ButtonControl",
+    INP_DoNotifyChanged=true,INP_InitialNotify=false,INP_External=false,
+  })
   InResetPose=self:AddInput("Reset Pose / Fit World","ResetPose",{
     LINKID_DataType="Number",INPID_InputControl="ButtonControl",
     INP_DoNotifyChanged=true,INP_InitialNotify=false,INP_External=false,
@@ -43,12 +89,64 @@ function Create()
 end
 -- Reset affects only this Camera, never the upstream geographic nodes.
 -- SetSource uses the current host time, preserving normal Fusion keyframing.
+-- Button actions are explicit edits at the Fusion event time. They do not
+-- construct animation or alter any upstream Region/WorldMap.
+local function control_number(input,time,label)
+  local raw=input:GetValue(time)
+  local n=raw and raw.Value
+  if type(n)~="number" or n~=n or n==math.huge or n==-math.huge then
+    error("CAMERA_TARGET_INVALID: "..tostring(label))
+  end
+  return n
+end
+local function write_pose(lat,lon,zoom,time)
+  if lat<-90 or lat>90 or lon<-180 or lon>180 or
+     zoom<0.25 or zoom>64 then
+    error("CAMERA_TARGET_INVALID: target pose is outside WGS84 or Zoom bounds")
+  end
+  InLatitude:SetSource(Number(lat),time)
+  InLongitude:SetSource(Number(lon),time)
+  InZoom:SetSource(Number(zoom),time)
+end
+local function fit_bounds(w,s,e,n,aspect,time)
+  if w<-180 or e>180 or s<-90 or n>90 or
+     e<=w or n<=s or aspect<0.25 or aspect>8 then
+    error("CAMERA_FIT_INVALID: specify nonempty WGS84 bounds without longitude wrapping")
+  end
+  -- Fit World at Zoom=1 uses min(width/360,height/180) pixels per degree.
+  -- The output aspect is explicit because render resolution is not available
+  -- in this native Inspector event; no renderer state is inspected.
+  local visibleLon=math.max(360,180*aspect)
+  local visibleLat=math.max(180,360/aspect)
+  local z=math.min(64,math.max(0.25,0.9*math.min(
+    visibleLon/(e-w),visibleLat/(n-s))))
+  write_pose((s+n)/2,(w+e)/2,z,time)
+end
 function NotifyChanged(inp,param,time)
   if inp==InResetPose then
     InLatitude:SetSource(Number(0),time)
     InLongitude:SetSource(Number(0),time)
     InZoom:SetSource(Number(1),time)
     InBearing:SetSource(Number(0),time)
+  elseif inp==InFocusTarget then
+    local lat=control_number(InTargetLat,time,"TargetLatitude")
+    local lon=control_number(InTargetLon,time,"TargetLongitude")
+    local z=control_number(InZoom,time,"Zoom")
+    write_pose(lat,lon,z,time)
+  elseif inp==InFitLocation or inp==InFitObjects then
+    if inp==InFitObjects and control_number(InObjectsPresent,time,"ObjectsPresent")<0.5 then
+      error("CAMERA_FIT_UNAVAILABLE: no managed Country/State bounds to fit")
+    end
+    local prefix=inp==InFitObjects and "Objects" or "Location"
+    local controls=inp==InFitObjects and
+      {InObjectsWest,InObjectsSouth,InObjectsEast,InObjectsNorth} or
+      {InLocWest,InLocSouth,InLocEast,InLocNorth}
+    local b={}
+    for i,key in ipairs({"West","South","East","North"}) do
+      b[i]=control_number(controls[i],time,prefix..key)
+    end
+    local aspect=control_number(InAspect,time,"FitAspect")
+    fit_bounds(b[1],b[2],b[3],b[4],aspect,time)
   end
 end
 
