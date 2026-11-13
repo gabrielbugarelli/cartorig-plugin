@@ -489,6 +489,25 @@ for _,tool in pairs(incomplete.tools) do
 end
 assert(leakedCamera,"fixture must actually leave a created tool behind")
 
+-- A host proxy can return nil after adding two Tools. Such a failure
+-- cannot be recorded as a complete rollback, even when the Tools were never
+-- returned to NodeFactory and therefore could not be safely deleted.
+local orphan,orphanMedia=fake()
+local realOrphanAdd=orphan.AddTool
+function orphan:AddTool(regid,x,y)
+ if regid=="Fuse.CartoRigWorldMap" then
+  realOrphanAdd(self,regid,-7,2)
+  realOrphanAdd(self,regid,-6,2)
+  return nil
+ end
+ return realOrphanAdd(self,regid,x,y)
+end
+local orphanResult,orphanErr=factory.create_scene(orphan,"Ambiguous AddTool",{localappdata=ROOT})
+assert(orphanResult==nil and orphanErr:find("FUSION_ADD_TOOL_AMBIGUOUS_SIDE_EFFECTS",1,true))
+assert(orphanErr:find("ROLLBACK_INCOMPLETE",1,true),
+  "the untracked Fuse side effects must not be reported as rolled back")
+assert(#orphan.tools==3 and orphan.tools[1]==orphanMedia)
+
 local failed,c=fake()
 failed.fail="Fuse.CartoRigCamera"
 local result,error=factory.create_scene(failed,"Failure",{localappdata=ROOT})
