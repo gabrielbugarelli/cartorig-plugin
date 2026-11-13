@@ -25,7 +25,7 @@ $known=@{
   'camera-fuse'=@(
     '617eaf8578fce3ac21f150eff6124c71070149995e3753cad082b2bde04f4cb3',
     '2bc256cc152881d5a58f588d67f00879cc72c4c3c8bd60b24e72e29792e0a2fd', # prior 0.7.0
-    'd6f2b57b870bd32c8d2f15dc2a6d85e8e8b068a3da9a2ce25a96be20b31d3daa' # Camera Focus/Fit native controls
+    '2ea30091338cfd3162b589e9df41561da3302201eb73fce451d999d4a4181d57' # Camera Focus/Fit with documented Fuse GetSource(frame)
   )
   'region-fuse'=@(
     '4fd67310e2dce94b36e47ad710b7bc8e82865b73dcc90ebb732f04c3d40951ed',
