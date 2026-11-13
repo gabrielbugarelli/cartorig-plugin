@@ -897,6 +897,34 @@ function factory.repair_region_palette(comp)
   return {regions=#chain.regions,expressions_repaired=#candidates}
 end
 
+-- Cache only bounds of UUID-owned Regions in Camera's hidden numeric inputs.
+-- These do not alter the Camera pose, create keyframes or inspect the graph
+-- during rendering. The caller owns the Fusion transaction and its rollback.
+local CAMERA_BOUND_PORTS={
+  "ObjectsWest","ObjectsSouth","ObjectsEast","ObjectsNorth","ObjectsPresent"
+}
+local function camera_object_bounds(regions,proposal)
+  local west,south,east,north=nil,nil,nil,nil
+  local function include(b)
+    if not b or type(b.west)~="number" or type(b.south)~="number" or
+       type(b.east)~="number" or type(b.north)~="number" or
+       b.west<-180 or b.east>180 or b.south<-90 or b.north>90 or
+       b.west>b.east or b.south>b.north then
+      error("CAMERA_BOUNDS_INVALID: managed Region source bounds are unavailable")
+    end
+    west=west and math.min(west,b.west) or b.west
+    south=south and math.min(south,b.south) or b.south
+    east=east and math.max(east,b.east) or b.east
+    north=north and math.max(north,b.north) or b.north
+  end
+  for _,obj in ipairs(regions) do include(obj.source and obj.source.bounds) end
+  include(proposal.source and proposal.source.bounds)
+  return {
+    ObjectsWest=west,ObjectsSouth=south,
+    ObjectsEast=east,ObjectsNorth=north,ObjectsPresent=1
+  }
+end
+
 function factory.add_region(comp,feature,opts)
   opts=opts or {}
   if type(feature)~="table" or (feature.geo_type~="Country" and feature.geo_type~="State") then
@@ -937,11 +965,33 @@ function factory.add_region(comp,feature,opts)
 
   local created={}
   local region=nil
+  local cameraPrior,cameraTouched={},{}
   local succeeded,why=pcall(function()
     region=create_region_node(comp,proposal,-2+regionCount*2,4,created)
     link_region_palette(region,chain.world)
     connect(region,"Background",predecessor)
     connect(successor,successorPort,region)
+
+    local fitBounds=camera_object_bounds(chain.regions,proposal)
+    -- Snapshot every channel before the first write, so a failing setter
+    -- never leaves a partially updated Camera target.
+    for _,port in ipairs(CAMERA_BOUND_PORTS) do
+      local handle,handleErr=fusion.find_input(chain.camera,port)
+      if not handle then
+        error("CAMERA_FIT_BIND_FAILED: "..port.." unavailable: "..tostring(handleErr))
+      end
+      local value,valueErr=fusion.get_input(chain.camera,port)
+      if valueErr then
+        error("CAMERA_FIT_BIND_FAILED: cannot read "..port..": "..tostring(valueErr))
+      end
+      cameraPrior[port]=value
+    end
+    for _,port in ipairs(CAMERA_BOUND_PORTS) do
+      cameraTouched[#cameraTouched+1]=port
+      local updated,updateErr=fusion.set_input(chain.camera,port,fitBounds[port],
+        "Camera "..port)
+      if not updated then error("CAMERA_FIT_BIND_FAILED: "..tostring(updateErr)) end
+    end
 
     local observed,observedErr=factory.inspect(comp)
     if not observed then error(observedErr) end
@@ -961,6 +1011,15 @@ function factory.add_region(comp,feature,opts)
 
   local function rollback_region()
     local cleanup={}
+    for i=#cameraTouched,1,-1 do
+      local port=cameraTouched[i]
+      local previous=cameraPrior[port]
+      local restoredValue,valueErr=fusion.set_input(chain.camera,port,previous,
+        "rollback Camera "..port)
+      if not restoredValue then
+        cleanup[#cleanup+1]="Camera "..port.." restore: "..tostring(valueErr)
+      end
+    end
     local restored,restoreErr=fusion.connect(successor,successorPort,predecessor)
     if not restored then
       cleanup[#cleanup+1]="managed successor restore: "..tostring(restoreErr)
