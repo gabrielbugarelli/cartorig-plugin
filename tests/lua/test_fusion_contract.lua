@@ -105,6 +105,26 @@ end
 local adopted=assert(fusion.add_tool(silent,"Fuse.CartoRigWorldMap",0,0))
 assert(adopted==silent.tools[1] and #silent.tools==1 and silent.calls==1)
 
+-- Fusion proxies may wrap the same existing Tools as fresh Lua objects
+-- every time GetToolList() is called. Stable TOOLS_Name prevents treating
+-- these wrappers as new Tools and blocking the documented fallback.
+local wrappers={calls=0}
+function wrappers:GetToolList()
+  local priorTool={GetAttrs=function() return {
+    TOOLS_RegID="MediaIn",TOOLS_Name="MediaIn1"} end}
+  return {MediaIn1=priorTool,__flags=1}
+end
+function wrappers:AddTool(regid,defaults,x,y)
+  self.calls=self.calls+1
+  if defaults==false then
+    return {GetAttrs=function() return {
+      TOOLS_RegID=regid,TOOLS_Name="CartoRigWorldMap1"} end}
+  end
+  return nil
+end
+local wrapperResult=assert(fusion.add_tool(wrappers,"Fuse.CartoRigWorldMap",0,0))
+assert(wrappers.calls==2 and wrapperResult:GetAttrs().TOOLS_Name=="CartoRigWorldMap1")
+
 local refused={tools={},calls=0,GetToolList=explicit.GetToolList}
 function refused:AddTool(id,...)
   self.calls=self.calls+1
