@@ -16,7 +16,14 @@ function self:AddControlPage(page) assert(page=="Control" or page=="Motion") end
 function self:AddInput(title,id,attrs)
   local input={value=attrs.INP_Default or 0}
   function input:GetValue(req)
+    assert(type(req)=="table" and req.Time~=nil,
+      "Fuse GetValue must receive a render Request, never a numeric event frame")
     if id=="Input" then return image end
+    return {Value=self.value}
+  end
+  function input:GetSource(frame)
+    assert(type(frame)=="number",
+      "Fuse GetSource must receive the numeric NotifyChanged frame")
     return {Value=self.value}
   end
   function input:SetSource(v,time)
