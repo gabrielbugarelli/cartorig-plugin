@@ -92,7 +92,9 @@ end
 -- Button actions are explicit edits at the Fusion event time. They do not
 -- construct animation or alter any upstream Region/WorldMap.
 local function control_number(input,time,label)
-  local raw=input:GetValue(time)
+  -- Fuse SDK: GetValue requires a Render Request, while NotifyChanged
+  -- supplies a numeric frame. GetSource(frame) is the documented event API.
+  local raw=input:GetSource(time)
   local n=raw and raw.Value
   if type(n)~="number" or n~=n or n==math.huge or n==-math.huge then
     error("CAMERA_TARGET_INVALID: "..tostring(label))
