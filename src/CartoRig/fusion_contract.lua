@@ -70,17 +70,71 @@ function fusion.set_attrs(tool,values,label)
 end
 
 function fusion.add_tool(comp,regid,x,y)
-  -- Resolve/Fusion host validation for CartoRig 0.4 established the Lua
-  -- three-argument overload AddTool(id,x,y). The historical Fusion manual also
-  -- documents AddTool and its coordinate parameters, but overload details differ
-  -- across generations; therefore success is always verified from returned Tool.
-  local tool,err=api.call(comp,"AddTool",regid,x,y)
-  if not tool then
-    return nil,"FUSION_ADD_TOOL_FAILED: "..tostring(regid)..": "..tostring(err)
+  -- Fusion's documented signatures vary by host:
+  --   AddTool(id,x,y)           (observed in Resolve Studio 20)
+  --   AddTool(id,false,x,y)     (documented with defsettings)
+  -- A rejected proxy call can return nil without an error. Snapshot the
+  -- tool inventory so a retry cannot silently create duplicate/foreign nodes.
+  local before,beforeErr=fusion.tool_list(comp)
+  if not before then
+    return nil,"FUSION_ADD_TOOL_PREFLIGHT_FAILED: "..tostring(beforeErr)
   end
-  local checked,handleErr=api.require_object(tool,"Composition.AddTool","GetAttrs")
-  if not checked then return nil,handleErr end
-  return tool
+  local prior={}
+  for _,tool in ipairs(before) do prior[tool]=true end
+  local function new_tools()
+    local after,listErr=fusion.tool_list(comp)
+    if not after then return nil,listErr end
+    local added={}
+    for _,tool in ipairs(after) do
+      if not prior[tool] then added[#added+1]=tool end
+    end
+    return added
+  end
+  local function attempt(explicit_defaults)
+    local tool,callErr
+    if explicit_defaults then
+      tool,callErr=api.call(comp,"AddTool",regid,false,x,y)
+    else
+      tool,callErr=api.call(comp,"AddTool",regid,x,y)
+    end
+    if tool then
+      local checked,handleErr=api.require_object(tool,"Composition.AddTool","GetAttrs")
+      if not checked then
+        return nil,"FUSION_ADD_TOOL_INVALID_HANDLE: "..tostring(handleErr),false
+      end
+      return checked,nil,false
+    end
+    local added,listErr=new_tools()
+    if not added then
+      return nil,"FUSION_ADD_TOOL_POSTCHECK_FAILED: "..tostring(listErr),false
+    end
+    if #added>1 then
+      return nil,"FUSION_ADD_TOOL_AMBIGUOUS_SIDE_EFFECTS: "..tostring(regid)..
+        " created "..tostring(#added).." unexpected tools",false
+    end
+    if #added==1 then
+      -- Even if the proxy returned nil, one new Tool was actually added.
+      -- Return that Tool so the NodeFactory can type-check, track and roll it
+      -- back if necessary. Do NOT execute a second AddTool.
+      local checked,handleErr=api.require_object(added[1],
+        "Composition.AddTool observed side effect","GetAttrs")
+      if not checked then
+        return nil,"FUSION_ADD_TOOL_UNVERIFIED_SIDE_EFFECT: "..tostring(handleErr),false
+      end
+      return checked,nil,false
+    end
+    return nil,callErr or "AddTool returned nil without creating a Tool",true
+  end
+
+  local tool,firstErr,mayRetry=attempt(false)
+  if tool then return tool end
+  if not mayRetry then return nil,firstErr end
+  local fallback,secondErr=attempt(true)
+  if fallback then return fallback end
+  return nil,"FUSION_ADD_TOOL_FAILED: "..tostring(regid)..
+    "; AddTool(id,x,y): "..tostring(firstErr)..
+    "; AddTool(id,false,x,y): "..tostring(secondErr)..
+    "; check Fusion Fuse registration and whether the current composition is editable"
 end
 
 function fusion.find_input(tool,name)
