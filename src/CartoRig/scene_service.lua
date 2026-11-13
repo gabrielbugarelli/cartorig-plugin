@@ -95,6 +95,33 @@ function M.open_scene(resolve)
   return active
 end
 
+-- Read-only host diagnostics for a Fuse that AddTool refused to create.
+-- An absent GetRegAttrs result may mean a missing registration OR a proxy
+-- that does not expose registry inspection; report both rather than guessing.
+function M.fuse_registry_diagnostics(resolve)
+  local fusionHandle,err=api.call(resolve,"Fusion")
+  if not fusionHandle then
+    return "Fusion registry unavailable: "..tostring(err)
+  end
+  local results={}
+  for _,name in ipairs({
+    "Fuse.CartoRigWorldMap","Fuse.CartoRigCamera",
+    "Fuse.CartoRigScene","Fuse.CartoRigRegion"
+  }) do
+    local attrs,lookupErr=api.call(fusionHandle,"GetRegAttrs",name)
+    local status
+    if type(attrs)=="table" then
+      status="present"
+    elseif lookupErr then
+      status="unavailable ("..tostring(lookupErr)..")"
+    else
+      status="not returned by host registry"
+    end
+    results[#results+1]=name.."="..status
+  end
+  return table.concat(results,"; ")
+end
+
 function M.create_scene(resolve,title,binding,opts)
   if type(title)~="string" or title:match("^%s*$") then
     return nil,"INVALID_TITLE: Scene title is required"
@@ -105,7 +132,13 @@ function M.create_scene(resolve,title,binding,opts)
     return nil,"SCENE_EXISTS: current composition already contains a Scene; use Open Scene"
   end
   local created,createErr=factory.create_scene(active.composition,title,opts or {})
-  if not created then return nil,createErr end
+  if not created then
+    if tostring(createErr):find("FUSION_ADD_TOOL_FAILED",1,true) then
+      return nil,tostring(createErr).."; Fuse registry: "..
+        M.fuse_registry_diagnostics(resolve)
+    end
+    return nil,createErr
+  end
   local observed,observeErr=M.inspect_active(resolve)
   if not observed then return nil,"SCENE_POST_CREATE_UNREADABLE: "..tostring(observeErr) end
   if not observed.has_scene or observed.scene_id~=created.scene_id or
