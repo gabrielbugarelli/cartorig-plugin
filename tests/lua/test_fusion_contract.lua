@@ -75,6 +75,59 @@ assert(comp.undo==0 and comp.last_keep==false)
 assert(fusion.delete_tool(background))
 assert(background.deleted==true)
 
+-- Resolve may accept the explicit default-settings AddTool overload only.
+local explicit={tools={},calls=0}
+function explicit:GetToolList()
+  local out={__flags=1}
+  for i,t in ipairs(self.tools) do out["Tool"..i]=t end
+  return out
+end
+function explicit:AddTool(id,defaultSettings,x,y)
+  self.calls=self.calls+1
+  if type(defaultSettings)~="boolean" or defaultSettings~=false or
+     type(x)~="number" or type(y)~="number" then return nil end
+  local node={GetAttrs=function() return {TOOLS_RegID=id} end}
+  self.tools[#self.tools+1]=node
+  return node
+end
+local typed=assert(fusion.add_tool(explicit,"Fuse.CartoRigWorldMap",-6,2))
+assert(typed==explicit.tools[1] and explicit.calls==2 and #explicit.tools==1,
+  "must safely retry explicit AddTool defaults exactly once")
+
+-- A nil proxy return may still have created one tool. Adopt and track it;
+-- never retry and create a second node for that side effect.
+local silent={tools={},calls=0,GetToolList=explicit.GetToolList}
+function silent:AddTool(id,x,y)
+  self.calls=self.calls+1
+  self.tools[#self.tools+1]={GetAttrs=function() return {TOOLS_RegID=id} end}
+  return nil
+end
+local adopted=assert(fusion.add_tool(silent,"Fuse.CartoRigWorldMap",0,0))
+assert(adopted==silent.tools[1] and #silent.tools==1 and silent.calls==1)
+
+local refused={tools={},calls=0,GetToolList=explicit.GetToolList}
+function refused:AddTool(id,...)
+  self.calls=self.calls+1
+  return nil
+end
+local rejected,rejectErr=fusion.add_tool(refused,"Fuse.CartoRigWorldMap",0,0)
+assert(rejected==nil and rejectErr:find("FUSION_ADD_TOOL_FAILED",1,true)
+  and rejectErr:find("AddTool(id,false,x,y)",1,true)
+  and refused.calls==2 and #refused.tools==0)
+
+-- A misleading nil response that created multiple nodes cannot be retried.
+local ambiguous={tools={},calls=0,GetToolList=explicit.GetToolList}
+function ambiguous:AddTool(id,x,y)
+  self.calls=self.calls+1
+  for _=1,2 do
+    self.tools[#self.tools+1]={GetAttrs=function() return {TOOLS_RegID=id} end}
+  end
+  return nil
+end
+local bad,badErr=fusion.add_tool(ambiguous,"Fuse.CartoRigWorldMap",0,0)
+assert(bad==nil and badErr:find("FUSION_ADD_TOOL_AMBIGUOUS_SIDE_EFFECTS",1,true)
+  and ambiguous.calls==1 and #ambiguous.tools==2)
+
 local throwing=setmetatable({},{
   __index=function() error("proxy lookup exploded") end
 })
