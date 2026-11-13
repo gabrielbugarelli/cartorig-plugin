@@ -105,6 +105,31 @@ assert(mutations.add==2)
 assert(service.repair_palette(resolve,boundB).expressions_repaired==6)
 assert(mutations.repair==1)
 
+-- The host can refuse AddTool and return nil with no error. Enrich the
+-- failure with read-only Fuse registration diagnostics without guessing the
+-- cause or mutating either composition.
+local missing={GetToolList=function() return {} end}
+local oldCreate=fakeFactory.create_scene
+function fakeFactory.create_scene(comp,title,opts)
+  if comp==missing then
+    return nil,"SCENE_CREATE_FAILED: FUSION_ADD_TOOL_FAILED: Fuse.CartoRigWorldMap: nil; transaction rolled back"
+  end
+  return oldCreate(comp,title,opts)
+end
+fusion.GetRegAttrs=function(_,regid)
+  if regid=="Fuse.CartoRigCamera" then return {REGS_Name="CartoRig Camera"} end
+  return nil
+end
+fusion.CurrentComp=missing
+local beforeMissing=assert(service.inspect_active(resolve))
+local missingScene,missingErr=service.create_scene(resolve,"Missing registry",beforeMissing)
+assert(missingScene==nil and missingErr:find("FUSION_ADD_TOOL_FAILED",1,true))
+assert(missingErr:find("Fuse.CartoRigWorldMap=not returned by host registry",1,true))
+assert(missingErr:find("Fuse.CartoRigCamera=present",1,true))
+assert(mutations.create==1 and mutations.add==2,
+  "diagnosis must not create any graph nodes")
+fusion.CurrentComp=b
+
 -- GET method fallback when CurrentComp property is unavailable.
 fusion.CurrentComp=nil
 fusion.GetCurrentComp=function() return b end
