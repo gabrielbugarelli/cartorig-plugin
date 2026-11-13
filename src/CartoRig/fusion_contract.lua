@@ -79,14 +79,30 @@ function fusion.add_tool(comp,regid,x,y)
   if not before then
     return nil,"FUSION_ADD_TOOL_PREFLIGHT_FAILED: "..tostring(beforeErr)
   end
-  local prior={}
-  for _,tool in ipairs(before) do prior[tool]=true end
+  local prior,priorNames={},{}
+  for _,tool in ipairs(before) do
+    prior[tool]=true
+    local attrs=fusion.attrs(tool,"AddTool baseline")
+    if attrs and type(attrs.TOOLS_Name)=="string" and attrs.TOOLS_Name~="" then
+      priorNames[attrs.TOOLS_Name]=true
+    end
+  end
   local function new_tools()
     local after,listErr=fusion.tool_list(comp)
     if not after then return nil,listErr end
     local added={}
     for _,tool in ipairs(after) do
-      if not prior[tool] then added[#added+1]=tool end
+      if not prior[tool] then
+        -- Some host proxies produce a new userdata wrapper for the same
+        -- existing Tool on each GetToolList(). Fusion Tool names are stable
+        -- within this AddTool operation; do not mistake wrapper churn for
+        -- new nodes and attempt a dangerous duplicate creation.
+        local attrs=fusion.attrs(tool,"AddTool current inventory")
+        local name=attrs and attrs.TOOLS_Name
+        if type(name)~="string" or not priorNames[name] then
+          added[#added+1]=tool
+        end
+      end
     end
     return added
   end
