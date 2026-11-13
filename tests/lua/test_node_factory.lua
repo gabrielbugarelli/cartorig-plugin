@@ -37,7 +37,13 @@ local function fake()
   function tool:SetAttrs(dict) if dict.TOOLS_Name then self.name=dict.TOOLS_Name end end
   function tool:SetData(k,v) self.data[k]=v end
   function tool:GetData(k) return self.data[k] end
-  function tool:SetInput(k,v) self.inputs[k]=v end
+  function tool:SetInput(k,v)
+   if self.regid=="Fuse.CartoRigCamera" and
+      comp.fail_camera_fit_port==k and v~=nil then
+     error("synthetic Camera fit target SetInput failure")
+   end
+   self.inputs[k]=v
+  end
   function tool:GetInput(k) return self.inputs[k] end
   function tool:FindInput(port)
    local parent=self
@@ -206,6 +212,12 @@ brazilTool:SetInput("FillOpacity",0.73)
 brazilTool:SetInput("StrokeWidth",3.5)
 brazilTool:SetInput("StrokeOpacity",0.62)
 
+assert(camera:GetInput("ObjectsPresent")==1 and
+       camera:GetInput("ObjectsWest")==-74 and camera:GetInput("ObjectsEast")==-34 and
+       camera:GetInput("ObjectsSouth")==-34 and camera:GetInput("ObjectsNorth")==5,
+  "a Country should populate static Camera Fit to Objects without changing the pose")
+assert(camera:GetInput("CenterLatitude")==nil and camera:GetInput("Zoom")==nil,
+  "Region creation must not move Camera or add keyframes")
 local country2=assert(factory.add_region(comp,brazilFeature,{localappdata=ROOT}))
 local argentina=assert(factory.add_region(comp,argentinaFeature,{localappdata=ROOT}))
 local state1=assert(factory.add_region(comp,matoFeature,{localappdata=ROOT}))
@@ -214,6 +226,10 @@ assert(brazilTool:GetInput("FillR")==0.12 and brazilTool:GetInput("FillG")==0.34
   "structural Region operations must not overwrite Brazil Fill channels")
 assert(brazilTool:GetInput("StrokeWidth")==3.5 and brazilTool:GetInput("StrokeOpacity")==0.62,
   "structural Region operations must not overwrite Brazil Stroke channels")
+assert(camera:GetInput("ObjectsPresent")==1 and
+       camera:GetInput("ObjectsWest")==-74 and camera:GetInput("ObjectsEast")==-34 and
+       camera:GetInput("ObjectsSouth")==-55 and camera:GetInput("ObjectsNorth")==5,
+  "Fit to Objects target should contain Brazil, Argentina and Mato Grosso")
 assert(country1.node_name=="CR_Country_Brazil_001")
 assert(country2.node_name=="CR_Country_Brazil_002")
 assert(argentina.node_name=="CR_Country_Argentina_001")
@@ -384,6 +400,29 @@ for _,tool in ipairs(renamedWorldComp.tools) do
 end
 assert(linked and linked.expressions.WorldLandR=="MyMap.LandR",
   "owned WorldMap must remain a valid palette source after a visible-name change")
+
+-- Failed Camera bound update cannot leave a half-inserted State or
+-- silently change the Camera target for previously linked Regions.
+local fitFailComp=select(1,fake())
+assert(factory.create_scene(fitFailComp,"Camera bounds rollback",{localappdata=ROOT}))
+assert(factory.add_region(fitFailComp,brazilFeature,{localappdata=ROOT}))
+local fitCamera
+for _,tool in ipairs(fitFailComp.tools) do
+ if tool:GetData("CartoRig.V1.ObjectType")=="Camera" then fitCamera=tool end
+end
+assert(fitCamera and fitCamera:GetInput("ObjectsNorth")==5)
+fitFailComp.fail_camera_fit_port="ObjectsNorth"
+local failedFit,fitErr=factory.add_region(fitFailComp,argentinaFeature,{localappdata=ROOT})
+assert(failedFit==nil and fitErr:find("CAMERA_FIT_BIND_FAILED",1,true),
+  "Camera target write failure must block Region addition")
+assert(not fitErr:find("ROLLBACK_INCOMPLETE",1,true),fitErr)
+assert(fitCamera:GetInput("ObjectsNorth")==5 and
+       fitCamera:GetInput("ObjectsSouth")==-34 and
+       fitCamera:GetInput("ObjectsWest")==-74 and
+       fitCamera:GetInput("ObjectsPresent")==1,
+  "Camera Fit object bounds must be restored on failed Region addition")
+assert(#assert(factory.inspect(fitFailComp)).objects==4,
+  "failed Region insertion must not leave an object")
 
 -- Class ordering is independent of click order: State added before Country must
 -- still render after Country and before the shared Camera.
