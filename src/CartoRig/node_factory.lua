@@ -431,13 +431,22 @@ function factory.create_scene(comp,title,opts)
       -- Check ALL additions, not only Tools returned by AddTool. A Fusion
       -- proxy may return nil after creating one or more Tool side effects.
       -- Such an addition must never be reported as fully rolled back.
-      local original={}
-      for _,previous in ipairs(existing.existing_tools) do original[previous]=true end
+      local original,originalNames={},{}
+      for _,previous in ipairs(existing.existing_tools) do
+        original[previous]=true
+        local attrs=fusion.attrs(previous,"pre-transaction Tool")
+        if attrs and type(attrs.TOOLS_Name)=="string" then
+          originalNames[attrs.TOOLS_Name]=true
+        end
+      end
       for _,currentTool in ipairs(remaining) do
         if not original[currentTool] then
-          local attributes=fusion.attrs(currentTool,"untracked added tool")
-          cleanup[#cleanup+1]="unexpected Tool remained after rollback: "..
-            tostring(attributes and attributes.TOOLS_Name or "unknown")
+          local attributes=fusion.attrs(currentTool,"post-rollback Tool")
+          local name=attributes and attributes.TOOLS_Name
+          if type(name)~="string" or not originalNames[name] then
+            cleanup[#cleanup+1]="unexpected Tool remained after rollback: "..
+              tostring(name or "unknown")
+          end
         end
       end
       for _,createdTool in ipairs(created) do
