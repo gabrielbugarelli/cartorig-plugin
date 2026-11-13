@@ -40,6 +40,7 @@ local function fake()
   function tool:SetInput(k,v)
    if self.regid=="Fuse.CartoRigCamera" and
       comp.fail_camera_fit_port==k and v~=nil then
+     comp.fail_camera_fit_port=nil
      error("synthetic Camera fit target SetInput failure")
    end
    self.inputs[k]=v
