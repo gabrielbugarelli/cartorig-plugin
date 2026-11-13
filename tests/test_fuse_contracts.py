@@ -133,6 +133,19 @@ class FuseContractTests(unittest.TestCase):
         self.assertIn("function NotifyChanged(inp,param,time)", camera)
         self.assertIn("InLatitude:SetSource(Number(0),time)", camera)
         self.assertIn("InZoom:SetSource(Number(1),time)", camera)
+        for input_id in (
+            "TargetLatitude", "TargetLongitude", "FocusTarget",
+            "LocationWest", "LocationSouth", "LocationEast", "LocationNorth",
+            "FitAspect", "FitToLocation", "ObjectsPresent", "ObjectsWest",
+            "ObjectsSouth", "ObjectsEast", "ObjectsNorth", "FitToObjects"
+        ):
+            self.assertIn('"'+input_id+'"', camera)
+        self.assertIn('fit_bounds(b[1],b[2],b[3],b[4],aspect,time)', camera)
+        self.assertIn('CAMERA_FIT_UNAVAILABLE', camera)
+        self.assertNotIn("GetToolList(",camera[camera.index("function Process(req)"):])
+        factory=(ROOT/"src/CartoRig/node_factory.lua").read_text(encoding="utf-8")
+        self.assertIn("local function camera_object_bounds(regions,proposal)",factory)
+        self.assertIn("for i=#cameraTouched,1,-1 do",factory)
 
     def test_native_buttons_do_not_fire_on_node_initialization(self):
         for name in ("CartoRigWorldMap", "CartoRigRegion", "CartoRigCamera"):
