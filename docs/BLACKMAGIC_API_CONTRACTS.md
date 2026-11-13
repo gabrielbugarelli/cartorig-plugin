@@ -130,11 +130,21 @@ placement rule.
 | Operator | `ConnectInput(input,target)` | connect/disconnect; target may be Operator/Output/nil. |
 | Operator | `Delete()` | removes Tool from composition. |
 
-The official historical Fusion manual and current Resolve host differ in
-overload details around `AddTool`. CartoRig's three-argument Lua form
-`AddTool(id,x,y)` is retained because it was directly verified in Resolve
-Studio 20 host probing. The returned object and RegID are always verified;
-failure is never inferred as success.
+The official Fusion Scripting Guide documents `AddTool(id[,defsettings][,x][,y])`,
+and an earlier Resolve Studio 20 probe accepted `AddTool(id,x,y)`. The active
+editor reported `AddTool("Fuse.CartoRigWorldMap",x,y) = nil` on
+2026-11-13, so source-level acceptance of one signature cannot be generalized
+to every composition.
+
+CartoRig attempts the observed three-argument call first. Only if the
+composition's inventory confirms it created **no** new Tool does it retry the
+documented four-argument `AddTool(id,false,x,y)`. A one-Tool side effect is
+adopted and validated without retry; multiple ambiguous side effects are
+rejected. Existing Tool names protect this check from unstable Lua proxy
+identities. Read-only `Fusion:GetRegAttrs` diagnostics are appended when
+both overloads reject the WorldMap Fuse. The exact host cause is unknown until
+the next Resolve session is observed. See
+[host incident report](HOST_INCIDENT_20261113_ADDTOOL.md).
 
 ## Fuse SDK audit for the structural nodes
 
