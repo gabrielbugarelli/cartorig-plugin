@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   # Allow a build-only run when this packaging workflow itself changes.
   # Only installer packaging is run here. This workflow revision packages the
-  # V1 FINAL active-Fusion Scene, static Camera Focus/Fit, and local gate snapshot.
+  # V1 FINAL active Scene, Camera Focus/Fit with official Fuse frame API, and local gate snapshot.
   # No tests here: preserve build-only workflow and free GitHub resources.
   # GitHub Actions only packages the reviewed Windows installer; it runs no tests.
   # No tests run in GitHub Actions; other source pushes do not trigger builds.
