@@ -684,7 +684,7 @@ function factory.rename_scene(comp,new_title)
       "Title: "..new_title,
       "Scene UUID: "..existing.scene_id,
       "Schema: "..tostring(existing.schema_version or "1.0.0")
-    },"\\n")
+    },"\n")
     written,err=fusion.set_input(node,"SceneIdentity",identity,"Scene Identity")
     if not written then error(err) end
     local observed,inspectFailure=factory.inspect(comp)
