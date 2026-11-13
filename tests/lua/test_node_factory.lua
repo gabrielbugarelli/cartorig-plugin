@@ -133,6 +133,18 @@ for _,o in ipairs(persisted.objects) do
  if o.type=="Scene" then sceneDisplay=o.display_name end
 end
 assert(sceneDisplay=="Brazil Map","Scene display name must persist independently of timeline clip name")
+-- Rename Scene modifies metadata and Inspector text, not UUIDs or graph.
+local beforeSceneId=made.scene_id
+local renameResult=assert(factory.rename_scene(comp,"Brazil Atlas"))
+assert(renameResult.scene_id==beforeSceneId and renameResult.title=="Brazil Atlas")
+assert(assert(factory.inspect(comp)).title=="Brazil Atlas")
+assert(sceneTool:GetInput("SceneIdentity"):find("Title: Brazil Atlas\nScene UUID: "..beforeSceneId,1,true),
+  "Rename Scene must preserve multiline Inspector diagnostics and Scene UUID")
+local emptyRename,emptyRenameErr=factory.rename_scene(comp,"  ")
+assert(emptyRename==nil and emptyRenameErr:find("INVALID_TITLE",1,true))
+assert(assert(factory.inspect(comp)).title=="Brazil Atlas")
+assert(factory.rename_scene(comp,"Brazil Map"))
+assert(assert(factory.inspect(comp)).title=="Brazil Map")
 comp:SetData("CartoRig.V1.Title",nil)
 local legacyReadable=assert(factory.inspect(comp))
 assert(legacyReadable.has_scene and legacyReadable.legacy_title_missing==true and legacyReadable.title==nil,
